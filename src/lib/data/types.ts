@@ -5,6 +5,11 @@ export type Role = "admin" | "staff";
 export type PunchType = "in" | "out";
 export type CounselingStatus = "pending" | "confirmed"; // 未確認 / 確認済み
 
+// ---- シフト管理 ----
+export type ShiftPreference = "early" | "late" | "off"; // 早番 / 遅番 / 休み希望
+export type ShiftType = "early" | "late";
+export type AssignmentStatus = "draft" | "confirmed"; // 下書き / 確定
+
 export interface Store {
   id: string;
   name: string;
@@ -89,6 +94,50 @@ export interface Broadcast {
   recipientCount: number;
 }
 
+/** シフトルール（管理者が変更可能） */
+export interface ShiftRules {
+  maxConsecutiveDays: number; // 連勤上限（既定5）
+  minStaffPerStoreDay: number; // 各店舗・各日の最低人数（日単位・既定2）
+  requestDeadlineDay: number; // 希望提出の締切日＝対象月の前月◯日（既定25）
+}
+
+/** シフト希望（月単位の提出情報：備考・勤務可能店舗・提出日時） */
+export interface ShiftRequestMonth {
+  id: string;
+  staffId: string;
+  targetMonth: string; // "YYYY-MM"
+  note: string;
+  submittedAt: Date;
+  updatedAt: Date;
+}
+
+/** シフト希望（日単位）。行が無い日は「指定なし（どちらでも可）」 */
+export interface ShiftRequest {
+  id: string;
+  staffId: string;
+  targetMonth: string;
+  date: string; // "YYYY-MM-DD"
+  preference: ShiftPreference;
+}
+
+/** シフト割当（1スタッフ1日1件） */
+export interface ShiftAssignment {
+  id: string;
+  targetMonth: string;
+  date: string;
+  staffId: string;
+  storeId: string;
+  shiftType: ShiftType;
+  status: AssignmentStatus;
+}
+
+export interface NewShiftAssignment {
+  date: string;
+  staffId: string;
+  storeId: string;
+  shiftType: ShiftType;
+}
+
 // ---- 入力用 ----
 
 export interface DailyReportInput {
@@ -126,9 +175,11 @@ export interface StaffInput {
 // ---- データストア共通インターフェース ----
 
 export interface DataStore {
-  // 店舗（1店舗運用を前提に「最初の店舗」を返す。複数店舗化はテーブル設計上は可能）
+  // 店舗（getStore は「最初の店舗＝本店」を返す。リマインド文面などで使用）
   getStore(): Promise<Store>;
-  updateStore(patch: Partial<Omit<Store, "id">>): Promise<Store>;
+  listStores(): Promise<Store[]>;
+  createStore(input: { name: string; address: string }): Promise<Store>;
+  updateStoreById(id: string, patch: Partial<Omit<Store, "id">>): Promise<Store>;
 
   // スタッフ
   listStaff(): Promise<Staff[]>;
@@ -199,4 +250,35 @@ export interface DataStore {
   listBroadcasts(): Promise<Broadcast[]>;
   /** 期間内の一斉配信の送信通数合計（Push通数カウント用） */
   countBroadcastMessages(from: Date, to: Date): Promise<number>;
+
+  // ---- シフト管理 ----
+  getShiftRules(): Promise<ShiftRules>;
+  updateShiftRules(patch: Partial<ShiftRules>): Promise<ShiftRules>;
+
+  /** 希望の提出（同月の再提出は上書き）。days は日付→希望（指定なしの日は含めない） */
+  saveShiftRequest(input: {
+    staffId: string;
+    targetMonth: string;
+    note: string;
+    days: Record<string, ShiftPreference>;
+    storeIds: string[];
+  }): Promise<void>;
+  getShiftRequestMonth(staffId: string, targetMonth: string): Promise<ShiftRequestMonth | null>;
+  listShiftRequestMonths(targetMonth: string): Promise<ShiftRequestMonth[]>;
+  listShiftRequests(targetMonth: string, staffId?: string): Promise<ShiftRequest[]>;
+  listAvailableStores(
+    targetMonth: string,
+    staffId?: string
+  ): Promise<{ staffId: string; storeId: string }[]>;
+
+  listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
+  /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */
+  replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void>;
+  /** 手動追加（同スタッフ・同日の重複はエラー） */
+  createShiftAssignment(
+    input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
+  ): Promise<ShiftAssignment>;
+  deleteShiftAssignment(id: string): Promise<void>;
+  /** 対象月の全割当を確定（confirmed）にする。確定した件数を返す */
+  confirmMonthAssignments(targetMonth: string): Promise<number>;
 }

@@ -12,6 +12,7 @@ import {
 import { formatPercent, formatYen, summarize } from "@/lib/kpi";
 import { aggregateAttendance, formatMinutes, overtimeStatus } from "@/lib/attendance";
 import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
+import { currentTargetMonth } from "@/lib/shift/period";
 import { BigMenuLink, StatCard } from "@/components/ui";
 
 // 管理者ダッシュボード：本日・当月の数字と注意事項を一目で確認し、各機能へ移動する
@@ -23,23 +24,31 @@ export default async function AdminHomePage() {
   const { from, to } = monthRange(month);
 
   const tomorrowBounds = jstDayBoundsUtc(addDays(today, 1));
-  const [todayReports, monthReports, pending, store, staffList, pushCount, tomorrowAppointments] =
+  const [todayReports, monthReports, pending, stores, staffList, pushCount, tomorrowAppointments] =
     await Promise.all([
       db.listDailyReports({ from: today, to: today }),
       db.listDailyReports({ from, to }),
       db.listCounselingResponses({ status: "pending" }),
-      db.getStore(),
+      db.listStores(),
       db.listStaff(),
       getMonthlyPushCount(db),
       db.listNextAppointments({ from: tomorrowBounds.start, to: tomorrowBounds.end }),
     ]);
+  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   const todayKpi = summarize(todayReports);
   const monthKpi = summarize(monthReports);
 
+  // シフト：募集中の月の提出状況
+  const shiftRules = await db.getShiftRules();
+  const shiftTargetMonth = currentTargetMonth(shiftRules);
+  const shiftSubmissions = await db.listShiftRequestMonths(shiftTargetMonth);
+  const activeStaffCount = staffList.filter((s) => s.isActive).length;
+  const shiftUnsubmitted = Math.max(0, activeStaffCount - shiftSubmissions.length);
+
   // 残業アラート（勤怠運用がONのときのみ）
   const overtimeAlerts: { name: string; minutes: number; status: "warning" | "over" }[] = [];
-  if (store.attendanceEnabled) {
+  if (attendanceAvailable) {
     const monthStart = jstDayBoundsUtc(from).start;
     const monthEnd = jstDayBoundsUtc(to).end;
     const punches = await db.listAttendances({ from: monthStart, to: monthEnd });
@@ -93,6 +102,9 @@ export default async function AdminHomePage() {
       <div className="space-y-3">
         <BigMenuLink href="/admin/reports" icon="📊" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
+        <BigMenuLink href="/admin/shift" icon="📅" title="シフト管理"
+          description={`希望の集計・自動割当・確定（未提出 ${shiftUnsubmitted}名）`}
+          badge={shiftUnsubmitted} />
         <BigMenuLink href="/admin/counseling" icon="📋" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
         <BigMenuLink href="/admin/customers" icon="👤" title="顧客一覧"
@@ -103,7 +115,7 @@ export default async function AdminHomePage() {
           description="全顧客へのお知らせ送信" />
         <BigMenuLink href="/admin/csv" icon="📄" title="売上CSV出力"
           description="税理士提出用（期間指定）" />
-        {store.attendanceEnabled && (
+        {attendanceAvailable && (
           <BigMenuLink href="/admin/attendance" icon="⏱" title="勤怠管理"
             description="労働時間・残業の月次集計" />
         )}

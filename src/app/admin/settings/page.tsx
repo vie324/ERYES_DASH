@@ -1,7 +1,12 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { PageHeader, StatusBadge } from "@/components/ui";
-import { createStaffAction, updateStaffAction, updateStoreAction } from "../actions";
+import {
+  createStaffAction,
+  createStoreAction,
+  updateStaffAction,
+  updateStoreAction,
+} from "../actions";
 
 const FLASH_MESSAGES: Record<string, { type: "ok" | "error"; text: string }> = {
   "saved=store": { type: "ok", text: "店舗情報を保存しました" },
@@ -24,7 +29,7 @@ export default async function AdminSettingsPage({
   const flash = FLASH_MESSAGES[flashKey];
 
   const db = getDataStore();
-  const [store, staffList] = await Promise.all([db.getStore(), db.listStaff()]);
+  const [stores, staffList] = await Promise.all([db.listStores(), db.listStaff()]);
 
   return (
     <div>
@@ -40,54 +45,95 @@ export default async function AdminSettingsPage({
         </p>
       )}
 
-      <section className="card mb-5">
-        <h2 className="font-bold text-base mb-3">店舗情報</h2>
-        <form action={updateStoreAction} className="space-y-3">
-          <div>
-            <label className="label" htmlFor="store_name">店舗名</label>
-            <input id="store_name" name="name" defaultValue={store.name} className="input" required />
-          </div>
-          <div>
-            <label className="label" htmlFor="store_address">住所</label>
-            <input id="store_address" name="address" defaultValue={store.address} className="input" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+      <section className="mb-5">
+        <h2 className="font-bold text-base mb-3">店舗一覧</h2>
+        <p className="text-xs text-stone-500 mb-3">
+          シフト管理は全店舗が対象です。GPS打刻は「最寄りの店舗」の座標・許容半径で判定されます。
+        </p>
+        <div className="space-y-3">
+          {stores.map((store, index) => (
+            <details key={store.id} className="card" open={stores.length === 1}>
+              <summary className="flex items-center gap-2 cursor-pointer list-none">
+                <span className="font-bold flex-1">
+                  {store.name}
+                  {index === 0 && <span className="text-xs text-stone-400 ml-2">（本店）</span>}
+                </span>
+                {store.attendanceEnabled ? (
+                  <StatusBadge label="勤怠ON" tone="ok" />
+                ) : (
+                  <StatusBadge label="勤怠OFF" tone="muted" />
+                )}
+                <span className="text-stone-300">▼</span>
+              </summary>
+              <form action={updateStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
+                <input type="hidden" name="id" value={store.id} />
+                <div>
+                  <label className="label">店舗名</label>
+                  <input name="name" defaultValue={store.name} className="input" required />
+                </div>
+                <div>
+                  <label className="label">住所</label>
+                  <input name="address" defaultValue={store.address} className="input" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">緯度</label>
+                    <input name="lat" type="number" step="any" defaultValue={store.lat} className="input" required />
+                  </div>
+                  <div>
+                    <label className="label">経度</label>
+                    <input name="lng" type="number" step="any" defaultValue={store.lng} className="input" required />
+                  </div>
+                </div>
+                <p className="text-xs text-stone-500">
+                  ※ 緯度経度はGoogleマップで店舗を右クリック→表示される数値をコピーして貼り付けてください。
+                </p>
+                <div>
+                  <label className="label">GPS許容半径（m）</label>
+                  <input
+                    name="gps_radius_m"
+                    type="number"
+                    min={10}
+                    step={10}
+                    defaultValue={store.gpsRadiusM}
+                    className="input"
+                    required
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                  <input
+                    type="checkbox"
+                    name="attendance_enabled"
+                    defaultChecked={store.attendanceEnabled}
+                    className="h-5 w-5 accent-rose-500"
+                  />
+                  この店舗で勤怠（GPS打刻）を運用する
+                </label>
+                <button type="submit" className="btn-secondary w-full">この内容で更新</button>
+              </form>
+            </details>
+          ))}
+        </div>
+
+        <details className="card mt-3">
+          <summary className="font-bold cursor-pointer list-none text-rose-600">
+            ＋ 店舗を追加
+          </summary>
+          <form action={createStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
             <div>
-              <label className="label" htmlFor="store_lat">緯度</label>
-              <input id="store_lat" name="lat" type="number" step="any" defaultValue={store.lat} className="input" required />
+              <label className="label" htmlFor="new_store_name">店舗名</label>
+              <input id="new_store_name" name="name" className="input" placeholder="例）ERYES 新宿店" required />
             </div>
             <div>
-              <label className="label" htmlFor="store_lng">経度</label>
-              <input id="store_lng" name="lng" type="number" step="any" defaultValue={store.lng} className="input" required />
+              <label className="label" htmlFor="new_store_address">住所（任意）</label>
+              <input id="new_store_address" name="address" className="input" />
             </div>
-          </div>
-          <p className="text-xs text-stone-500">
-            ※ 緯度経度はGoogleマップで店舗を右クリック→表示される数値をコピーして貼り付けてください。
-          </p>
-          <div>
-            <label className="label" htmlFor="store_radius">GPS許容半径（m）</label>
-            <input
-              id="store_radius"
-              name="gps_radius_m"
-              type="number"
-              min={10}
-              step={10}
-              defaultValue={store.gpsRadiusM}
-              className="input"
-              required
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
-            <input
-              type="checkbox"
-              name="attendance_enabled"
-              defaultChecked={store.attendanceEnabled}
-              className="h-5 w-5 accent-rose-500"
-            />
-            勤怠（GPS打刻）を運用する
-          </label>
-          <button type="submit" className="btn-primary w-full">店舗情報を保存</button>
-        </form>
+            <p className="text-xs text-stone-500">
+              ※ 緯度経度は本店と同じ値で作成されます。追加後にこの画面で正しい座標へ変更してください。
+            </p>
+            <button type="submit" className="btn-primary w-full">店舗を追加</button>
+          </form>
+        </details>
       </section>
 
       <section className="mb-5">

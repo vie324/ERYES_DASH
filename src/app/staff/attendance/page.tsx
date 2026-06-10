@@ -9,7 +9,8 @@ import { PunchPanel } from "./punch-panel";
 export default async function AttendancePage() {
   const session = await requireSession();
   const db = getDataStore();
-  const store = await db.getStore();
+  const stores = await db.listStores();
+  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
   const today = todayJst();
 
   const { start, end } = jstDayBoundsUtc(today);
@@ -29,7 +30,7 @@ export default async function AttendancePage() {
     <div>
       <PageHeader title="出勤・退勤の打刻" backHref="/staff" />
 
-      {!store.attendanceEnabled ? (
+      {!attendanceAvailable ? (
         <EmptyState message="勤怠機能は現在オフに設定されています（管理者画面のマスタ設定で変更できます）" />
       ) : (
         <div className="space-y-5">

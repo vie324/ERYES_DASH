@@ -22,14 +22,15 @@ export default async function AdminAttendancePage({
   const { from, to } = monthRange(month);
 
   const db = getDataStore();
-  const [store, staffList, punches] = await Promise.all([
-    db.getStore(),
+  const [stores, staffList, punches] = await Promise.all([
+    db.listStores(),
     db.listStaff(),
     db.listAttendances({
       from: jstDayBoundsUtc(from).start,
       to: jstDayBoundsUtc(to).end,
     }),
   ]);
+  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   const activeStaff = staffList.filter((s) => s.isActive);
   const summaries = activeStaff.map((s) => {
@@ -53,7 +54,7 @@ export default async function AdminAttendancePage({
     <div>
       <PageHeader title="勤怠管理" backHref="/admin" />
 
-      {!store.attendanceEnabled && (
+      {!attendanceAvailable && (
         <p className="rounded-xl bg-amber-50 text-amber-800 text-xs font-bold px-4 py-3 mb-4">
           勤怠運用は現在オフです（マスタ設定で変更できます）。過去の記録は閲覧できます。
         </p>

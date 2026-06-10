@@ -2,19 +2,29 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, todayJst } from "@/lib/date";
+import { currentTargetMonth, isRequestEditable } from "@/lib/shift/period";
 import { BigMenuLink } from "@/components/ui";
+import { ShiftNoticeBanner } from "@/components/shift-banner";
 
-// スタッフのホーム：迷わないよう「やること」を大きなボタン4つだけにする
+// スタッフのホーム：迷わないよう「やること」を大きなボタンだけにする
 export default async function StaffHomePage() {
   const session = await requireSession();
   const db = getDataStore();
   const today = todayJst();
 
-  const [pendingCounseling, todayReport, store] = await Promise.all([
+  const [pendingCounseling, todayReport, stores, shiftRules] = await Promise.all([
     db.listCounselingResponses({ status: "pending" }),
     db.getDailyReport(session.staffId, today),
-    db.getStore(),
+    db.listStores(),
+    db.getShiftRules(),
   ]);
+  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
+
+  // シフト希望が未提出ならバッジを出す
+  const targetMonth = currentTargetMonth(shiftRules);
+  const shiftSubmitted = await db.getShiftRequestMonth(session.staffId, targetMonth);
+  const shiftBadge =
+    !shiftSubmitted && isRequestEditable(targetMonth, shiftRules) ? "！" : null;
 
   return (
     <div>
@@ -22,6 +32,8 @@ export default async function StaffHomePage() {
       <h1 className="text-xl font-bold mb-5">
         {session.name}さん、おつかれさまです
       </h1>
+
+      <ShiftNoticeBanner staffId={session.staffId} />
 
       <div className="space-y-3">
         <BigMenuLink
@@ -42,7 +54,14 @@ export default async function StaffHomePage() {
           description={todayReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です"}
           badge={todayReport ? null : "！"}
         />
-        {store.attendanceEnabled && (
+        <BigMenuLink
+          href="/staff/shift"
+          icon="📅"
+          title="シフト"
+          description="自分のシフト確認・希望の提出"
+          badge={shiftBadge}
+        />
+        {attendanceAvailable && (
           <BigMenuLink
             href="/staff/attendance"
             icon="📍"

@@ -97,6 +97,60 @@ create table if not exists broadcasts (
   recipient_count integer not null default 0
 );
 
+-- ============================================================
+-- シフト管理（3店舗の勤務を一元管理）
+-- ============================================================
+
+-- シフトルール（1行のみ。管理者画面から変更）
+create table if not exists shift_rules (
+  id integer primary key default 1 check (id = 1),
+  max_consecutive_days integer not null default 5,          -- 連勤上限
+  min_staff_per_store_per_day integer not null default 2,   -- 各店舗・各日の最低人数（日単位）
+  request_deadline_day integer not null default 25          -- 希望締切＝対象月の前月◯日
+);
+
+-- シフト希望（月単位：備考・提出日時）
+create table if not exists shift_request_months (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id),
+  target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
+  note text not null default '',
+  submitted_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (staff_id, target_month)
+);
+
+-- シフト希望（日単位）。行が無い日は「指定なし＝早遅どちらでも可」
+create table if not exists shift_requests (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id),
+  target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
+  date date not null,
+  preference text not null check (preference in ('early', 'late', 'off')),
+  unique (staff_id, date)
+);
+
+-- その月に勤務可能な店舗（複数選択）
+create table if not exists staff_available_stores (
+  staff_id uuid not null references staff(id),
+  target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
+  store_id uuid not null references stores(id),
+  primary key (staff_id, target_month, store_id)
+);
+
+-- シフト割当（1スタッフ1日1件。draft=下書き/confirmed=確定・公開）
+create table if not exists shift_assignments (
+  id uuid primary key default gen_random_uuid(),
+  target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
+  date date not null,
+  staff_id uuid not null references staff(id),
+  store_id uuid not null references stores(id),
+  shift_type text not null check (shift_type in ('early', 'late')),
+  status text not null default 'draft' check (status in ('draft', 'confirmed')),
+  created_at timestamptz not null default now(),
+  unique (staff_id, date)
+);
+
 -- ---- インデックス ----
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
@@ -106,6 +160,9 @@ create index if not exists idx_attendances_punched on attendances (punched_at);
 create index if not exists idx_attendances_staff on attendances (staff_id, punched_at);
 create index if not exists idx_appointments_scheduled on next_appointments (scheduled_at);
 create index if not exists idx_appointments_reminder on next_appointments (reminder_sent_at, scheduled_at);
+create index if not exists idx_shift_requests_month on shift_requests (target_month);
+create index if not exists idx_shift_available_month on staff_available_stores (target_month);
+create index if not exists idx_shift_assignments_month on shift_assignments (target_month, date);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、
@@ -118,11 +175,22 @@ alter table daily_reports enable row level security;
 alter table attendances enable row level security;
 alter table next_appointments enable row level security;
 alter table broadcasts enable row level security;
+alter table shift_rules enable row level security;
+alter table shift_request_months enable row level security;
+alter table shift_requests enable row level security;
+alter table staff_available_stores enable row level security;
+alter table shift_assignments enable row level security;
 
 -- ---- 初期データ ----
--- TODO: 店舗名・住所・緯度経度は仮値。正式な値に書き換えてから実行する
-insert into stores (name, address, lat, lng, gps_radius_m, attendance_enabled)
-values ('ERYES', '東京都渋谷区道玄坂1-2-3（仮）', 35.658034, 139.701636, 100, true);
+-- TODO: 店舗名・住所・緯度経度は仮値（3店舗）。正式な値に書き換えてから実行する。
+--       最初の1行目が「本店」となり、LINEリマインドの店名などに使われる。
+insert into stores (name, address, lat, lng, gps_radius_m, attendance_enabled) values
+  ('ERYES 渋谷本店', '東京都渋谷区道玄坂1-2-3（仮）', 35.658034, 139.701636, 100, true),
+  ('ERYES 表参道店', '東京都港区北青山3-4-5（仮）', 35.665498, 139.712135, 100, true),
+  ('ERYES 恵比寿店', '東京都渋谷区恵比寿1-6-7（仮）', 35.646691, 139.710106, 100, true);
+
+-- シフトルールの初期値（連勤上限5日・各店舗2名・締切は前月25日）
+insert into shift_rules (id) values (1);
 
 -- 初期管理者アカウント
 --   ログインID: admin ／ パスワード: admin1234
@@ -137,4 +205,5 @@ select
   'admin',
   20
 from stores
+where name = 'ERYES 渋谷本店'
 limit 1;

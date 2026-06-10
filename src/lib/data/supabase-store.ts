@@ -5,6 +5,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import type {
+  AssignmentStatus,
   Attendance,
   AttendanceInput,
   Broadcast,
@@ -14,7 +15,13 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  NewShiftAssignment,
   NextAppointment,
+  ShiftAssignment,
+  ShiftPreference,
+  ShiftRequest,
+  ShiftRequestMonth,
+  ShiftRules,
   Staff,
   StaffInput,
   StaffWithSecret,
@@ -103,6 +110,39 @@ const mapBroadcast = (r: Row): Broadcast => ({
   recipientCount: r.recipient_count,
 });
 
+const mapShiftRules = (r: Row): ShiftRules => ({
+  maxConsecutiveDays: r.max_consecutive_days,
+  minStaffPerStoreDay: r.min_staff_per_store_per_day,
+  requestDeadlineDay: r.request_deadline_day,
+});
+
+const mapShiftRequestMonth = (r: Row): ShiftRequestMonth => ({
+  id: r.id,
+  staffId: r.staff_id,
+  targetMonth: r.target_month,
+  note: r.note ?? "",
+  submittedAt: new Date(r.submitted_at),
+  updatedAt: new Date(r.updated_at),
+});
+
+const mapShiftRequest = (r: Row): ShiftRequest => ({
+  id: r.id,
+  staffId: r.staff_id,
+  targetMonth: r.target_month,
+  date: r.date,
+  preference: r.preference,
+});
+
+const mapShiftAssignment = (r: Row): ShiftAssignment => ({
+  id: r.id,
+  targetMonth: r.target_month,
+  date: r.date,
+  staffId: r.staff_id,
+  storeId: r.store_id,
+  shiftType: r.shift_type,
+  status: r.status,
+});
+
 function must<T>(data: T | null, error: { message: string } | null, context: string): T {
   if (error) throw new Error(`[supabase] ${context}: ${error.message}`);
   if (data === null) throw new Error(`[supabase] ${context}: データが見つかりません`);
@@ -128,8 +168,30 @@ class SupabaseStore implements DataStore {
     return mapStore(must(data, error, "店舗取得"));
   }
 
-  async updateStore(patch: Partial<Omit<Store, "id">>): Promise<Store> {
-    const current = await this.getStore();
+  async listStores(): Promise<Store[]> {
+    const { data, error } = await this.sb.from("stores").select("*").order("created_at");
+    return must(data, error, "店舗一覧").map(mapStore);
+  }
+
+  async createStore(input: { name: string; address: string }): Promise<Store> {
+    const base = await this.getStore();
+    const { data, error } = await this.sb
+      .from("stores")
+      .insert({
+        name: input.name,
+        address: input.address,
+        // TODO: 新店舗の緯度経度は本店の値を仮置き。マスタ設定から正しい座標に変更する
+        lat: base.lat,
+        lng: base.lng,
+        gps_radius_m: 100,
+        attendance_enabled: true,
+      })
+      .select()
+      .single();
+    return mapStore(must(data, error, "店舗作成"));
+  }
+
+  async updateStoreById(id: string, patch: Partial<Omit<Store, "id">>): Promise<Store> {
     const row: Row = {};
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.address !== undefined) row.address = patch.address;
@@ -140,7 +202,7 @@ class SupabaseStore implements DataStore {
     const { data, error } = await this.sb
       .from("stores")
       .update(row)
-      .eq("id", current.id)
+      .eq("id", id)
       .select()
       .single();
     return mapStore(must(data, error, "店舗更新"));
@@ -472,6 +534,203 @@ class SupabaseStore implements DataStore {
       (sum: number, r: Row) => sum + (r.recipient_count ?? 0),
       0
     );
+  }
+
+  // ---- シフト管理 ----
+
+  async getShiftRules(): Promise<ShiftRules> {
+    const { data, error } = await this.sb.from("shift_rules").select("*").eq("id", 1).single();
+    return mapShiftRules(must(data, error, "シフトルール取得"));
+  }
+
+  async updateShiftRules(patch: Partial<ShiftRules>): Promise<ShiftRules> {
+    const row: Row = {};
+    if (patch.maxConsecutiveDays !== undefined) row.max_consecutive_days = patch.maxConsecutiveDays;
+    if (patch.minStaffPerStoreDay !== undefined)
+      row.min_staff_per_store_per_day = patch.minStaffPerStoreDay;
+    if (patch.requestDeadlineDay !== undefined) row.request_deadline_day = patch.requestDeadlineDay;
+    const { data, error } = await this.sb
+      .from("shift_rules")
+      .update(row)
+      .eq("id", 1)
+      .select()
+      .single();
+    return mapShiftRules(must(data, error, "シフトルール更新"));
+  }
+
+  async saveShiftRequest(input: {
+    staffId: string;
+    targetMonth: string;
+    note: string;
+    days: Record<string, ShiftPreference>;
+    storeIds: string[];
+  }): Promise<void> {
+    // 月単位の提出情報をupsert（submitted_atは初回のみ、updated_atは毎回更新）
+    const { data: existing, error: e0 } = await this.sb
+      .from("shift_request_months")
+      .select("id")
+      .eq("staff_id", input.staffId)
+      .eq("target_month", input.targetMonth)
+      .maybeSingle();
+    if (e0) throw new Error(`[supabase] 希望提出確認: ${e0.message}`);
+    if (existing) {
+      const { error } = await this.sb
+        .from("shift_request_months")
+        .update({ note: input.note, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) throw new Error(`[supabase] 希望更新: ${error.message}`);
+    } else {
+      const { error } = await this.sb.from("shift_request_months").insert({
+        staff_id: input.staffId,
+        target_month: input.targetMonth,
+        note: input.note,
+      });
+      if (error) throw new Error(`[supabase] 希望作成: ${error.message}`);
+    }
+
+    // 日別希望・勤務可能店舗は総入れ替え（トランザクションは使わず順次実行。実害は小さい）
+    const del1 = await this.sb
+      .from("shift_requests")
+      .delete()
+      .eq("staff_id", input.staffId)
+      .eq("target_month", input.targetMonth);
+    if (del1.error) throw new Error(`[supabase] 希望削除: ${del1.error.message}`);
+    const dayRows = Object.entries(input.days).map(([date, preference]) => ({
+      staff_id: input.staffId,
+      target_month: input.targetMonth,
+      date,
+      preference,
+    }));
+    if (dayRows.length > 0) {
+      const ins1 = await this.sb.from("shift_requests").insert(dayRows);
+      if (ins1.error) throw new Error(`[supabase] 希望保存: ${ins1.error.message}`);
+    }
+
+    const del2 = await this.sb
+      .from("staff_available_stores")
+      .delete()
+      .eq("staff_id", input.staffId)
+      .eq("target_month", input.targetMonth);
+    if (del2.error) throw new Error(`[supabase] 可能店舗削除: ${del2.error.message}`);
+    if (input.storeIds.length > 0) {
+      const ins2 = await this.sb.from("staff_available_stores").insert(
+        input.storeIds.map((storeId) => ({
+          staff_id: input.staffId,
+          target_month: input.targetMonth,
+          store_id: storeId,
+        }))
+      );
+      if (ins2.error) throw new Error(`[supabase] 可能店舗保存: ${ins2.error.message}`);
+    }
+  }
+
+  async getShiftRequestMonth(
+    staffId: string,
+    targetMonth: string
+  ): Promise<ShiftRequestMonth | null> {
+    const { data, error } = await this.sb
+      .from("shift_request_months")
+      .select("*")
+      .eq("staff_id", staffId)
+      .eq("target_month", targetMonth)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 希望取得: ${error.message}`);
+    return data ? mapShiftRequestMonth(data) : null;
+  }
+
+  async listShiftRequestMonths(targetMonth: string): Promise<ShiftRequestMonth[]> {
+    const { data, error } = await this.sb
+      .from("shift_request_months")
+      .select("*")
+      .eq("target_month", targetMonth);
+    return must(data, error, "希望一覧").map(mapShiftRequestMonth);
+  }
+
+  async listShiftRequests(targetMonth: string, staffId?: string): Promise<ShiftRequest[]> {
+    let query = this.sb.from("shift_requests").select("*").eq("target_month", targetMonth);
+    if (staffId) query = query.eq("staff_id", staffId);
+    const { data, error } = await query;
+    return must(data, error, "日別希望一覧").map(mapShiftRequest);
+  }
+
+  async listAvailableStores(
+    targetMonth: string,
+    staffId?: string
+  ): Promise<{ staffId: string; storeId: string }[]> {
+    let query = this.sb
+      .from("staff_available_stores")
+      .select("staff_id, store_id")
+      .eq("target_month", targetMonth);
+    if (staffId) query = query.eq("staff_id", staffId);
+    const { data, error } = await query;
+    return must(data, error, "可能店舗一覧").map((r: Row) => ({
+      staffId: r.staff_id,
+      storeId: r.store_id,
+    }));
+  }
+
+  async listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]> {
+    let query = this.sb
+      .from("shift_assignments")
+      .select("*")
+      .eq("target_month", targetMonth)
+      .order("date");
+    if (staffId) query = query.eq("staff_id", staffId);
+    const { data, error } = await query;
+    return must(data, error, "割当一覧").map(mapShiftAssignment);
+  }
+
+  async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
+    const del = await this.sb.from("shift_assignments").delete().eq("target_month", targetMonth);
+    if (del.error) throw new Error(`[supabase] 割当削除: ${del.error.message}`);
+    if (rows.length > 0) {
+      const ins = await this.sb.from("shift_assignments").insert(
+        rows.map((r) => ({
+          target_month: targetMonth,
+          date: r.date,
+          staff_id: r.staffId,
+          store_id: r.storeId,
+          shift_type: r.shiftType,
+          status: "draft",
+        }))
+      );
+      if (ins.error) throw new Error(`[supabase] 割当保存: ${ins.error.message}`);
+    }
+  }
+
+  async createShiftAssignment(
+    input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
+  ): Promise<ShiftAssignment> {
+    const { data, error } = await this.sb
+      .from("shift_assignments")
+      .insert({
+        target_month: input.targetMonth,
+        date: input.date,
+        staff_id: input.staffId,
+        store_id: input.storeId,
+        shift_type: input.shiftType,
+        status: input.status,
+      })
+      .select()
+      .single();
+    if (error?.code === "23505") {
+      throw new Error("このスタッフはこの日すでに割り当てられています");
+    }
+    return mapShiftAssignment(must(data, error, "割当作成"));
+  }
+
+  async deleteShiftAssignment(id: string): Promise<void> {
+    const { error } = await this.sb.from("shift_assignments").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 割当削除: ${error.message}`);
+  }
+
+  async confirmMonthAssignments(targetMonth: string): Promise<number> {
+    const { data, error } = await this.sb
+      .from("shift_assignments")
+      .update({ status: "confirmed" })
+      .eq("target_month", targetMonth)
+      .select("id");
+    return must(data, error, "シフト確定").length;
   }
 }
 

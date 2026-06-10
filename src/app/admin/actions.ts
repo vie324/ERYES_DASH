@@ -98,6 +98,7 @@ export async function sendBroadcastAction(formData: FormData): Promise<void> {
 
 export async function updateStoreAction(formData: FormData): Promise<void> {
   await requireAdmin();
+  const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
   const lat = Number(formData.get("lat"));
@@ -105,11 +106,11 @@ export async function updateStoreAction(formData: FormData): Promise<void> {
   const gpsRadiusM = Number(formData.get("gps_radius_m"));
   const attendanceEnabled = formData.get("attendance_enabled") === "on";
 
-  if (!name || !Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(gpsRadiusM) || gpsRadiusM <= 0) {
+  if (!id || !name || !Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(gpsRadiusM) || gpsRadiusM <= 0) {
     redirect("/admin/settings?error=store");
   }
 
-  await getDataStore().updateStore({
+  await getDataStore().updateStoreById(id, {
     name,
     address,
     lat,
@@ -117,6 +118,16 @@ export async function updateStoreAction(formData: FormData): Promise<void> {
     gpsRadiusM: Math.round(gpsRadiusM),
     attendanceEnabled,
   });
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?saved=store");
+}
+
+export async function createStoreAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  if (!name) redirect("/admin/settings?error=store");
+  await getDataStore().createStore({ name, address });
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=store");
 }

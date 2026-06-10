@@ -4,8 +4,10 @@
 
 import { randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
-import { addDays, addMonths, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
+import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
+import { generateAssignments } from "@/lib/shift/assign";
 import type {
+  AssignmentStatus,
   Attendance,
   AttendanceInput,
   Broadcast,
@@ -15,7 +17,13 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  NewShiftAssignment,
   NextAppointment,
+  ShiftAssignment,
+  ShiftPreference,
+  ShiftRequest,
+  ShiftRequestMonth,
+  ShiftRules,
   Staff,
   StaffInput,
   StaffWithSecret,
@@ -23,7 +31,7 @@ import type {
 } from "@/lib/data/types";
 
 interface MockDb {
-  store: Store;
+  stores: Store[];
   staff: (StaffWithSecret & { passwordHash: string })[];
   customers: Customer[];
   counseling: CounselingResponse[];
@@ -31,6 +39,11 @@ interface MockDb {
   attendances: Attendance[];
   appointments: NextAppointment[];
   broadcasts: Broadcast[];
+  shiftRules: ShiftRules;
+  shiftRequestMonths: ShiftRequestMonth[];
+  shiftRequests: ShiftRequest[];
+  shiftAvailableStores: { staffId: string; targetMonth: string; storeId: string }[];
+  shiftAssignments: ShiftAssignment[];
 }
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -44,16 +57,37 @@ function seed(): MockDb {
   const month = thisMonthJst();
   const prevMonth = addMonths(month, -1);
 
-  // TODO: 店舗情報は仮値（渋谷駅周辺）。正式な住所・緯度経度に差し替える
-  const store: Store = {
-    id: "store-1",
-    name: "ERYES",
-    address: "東京都渋谷区道玄坂1-2-3（仮）",
-    lat: 35.658034,
-    lng: 139.701636,
-    gpsRadiusM: 100,
-    attendanceEnabled: true,
-  };
+  // TODO: 店舗情報は仮値（店名・住所・緯度経度とも）。正式な値に差し替える
+  const stores: Store[] = [
+    {
+      id: "store-1",
+      name: "ERYES 渋谷本店",
+      address: "東京都渋谷区道玄坂1-2-3（仮）",
+      lat: 35.658034,
+      lng: 139.701636,
+      gpsRadiusM: 100,
+      attendanceEnabled: true,
+    },
+    {
+      id: "store-2",
+      name: "ERYES 表参道店",
+      address: "東京都港区北青山3-4-5（仮）",
+      lat: 35.665498,
+      lng: 139.712135,
+      gpsRadiusM: 100,
+      attendanceEnabled: true,
+    },
+    {
+      id: "store-3",
+      name: "ERYES 恵比寿店",
+      address: "東京都渋谷区恵比寿1-6-7（仮）",
+      lat: 35.646691,
+      lng: 139.710106,
+      gpsRadiusM: 100,
+      attendanceEnabled: true,
+    },
+  ];
+  const store = stores[0]; // 本店（勤怠・リマインドの既定店舗）
 
   const staff: StaffWithSecret[] = [
     {
@@ -87,6 +121,24 @@ function seed(): MockDb {
       isActive: true,
       passwordHash: hashPassword("staff1234"),
     },
+    // シフト管理（3店舗）デモ用の追加スタッフ
+    ...[
+      ["staff-3", "山本 大輝", "daiki"],
+      ["staff-4", "中島 結菜", "yuina"],
+      ["staff-5", "小林 蒼", "aoi"],
+      ["staff-6", "藤田 ひかり", "hikari"],
+    ].map(
+      ([id, name, loginId]): StaffWithSecret => ({
+        id,
+        storeId: store.id,
+        name,
+        loginId,
+        role: "staff",
+        fixedOvertimeHours: 20,
+        isActive: true,
+        passwordHash: hashPassword("staff1234"),
+      })
+    ),
   ];
 
   const customers: Customer[] = [
@@ -232,8 +284,117 @@ function seed(): MockDb {
     },
   ];
 
+  // ---- シフト管理のデモデータ ----
+  const shiftRules: ShiftRules = {
+    maxConsecutiveDays: 5,
+    minStaffPerStoreDay: 2,
+    requestDeadlineDay: 25,
+  };
+  const shiftStaffIds = staff.map((s) => s.id); // 管理者も施術に入る想定で全員を対象にする
+  const storeIds = stores.map((s) => s.id);
+
+  // 当月：全員提出済みの想定で自動割当を実行し、確定済みとして公開しておく
+  const monthDates = datesOfMonth(month);
+  const currentPrefs = new Map<string, Map<string, ShiftPreference>>();
+  const currentAvailable = new Map<string, Set<string>>();
+  shiftStaffIds.forEach((staffId, idx) => {
+    const prefMap = new Map<string, ShiftPreference>();
+    monthDates.forEach((d, i) => {
+      if (i % 7 === idx % 7) prefMap.set(d, "off"); // 週1の休み希望をずらして入れる
+    });
+    currentPrefs.set(staffId, prefMap);
+    currentAvailable.set(staffId, new Set(storeIds));
+  });
+  const generated = generateAssignments({
+    targetMonth: month,
+    storeIds,
+    staffIds: shiftStaffIds,
+    prefs: currentPrefs,
+    availableStores: currentAvailable,
+    rules: shiftRules,
+    prevMonthAssignedDates: new Map(),
+  });
+  const shiftAssignments: ShiftAssignment[] = generated.assignments.map((a) => ({
+    id: randomUUID(),
+    targetMonth: month,
+    status: "confirmed",
+    ...a,
+  }));
+
+  // 当月の希望データも保存しておく（管理者画面の希望一覧で見えるように）
+  const shiftRequestMonths: ShiftRequestMonth[] = [];
+  const shiftRequests: ShiftRequest[] = [];
+  const shiftAvailableStores: { staffId: string; targetMonth: string; storeId: string }[] = [];
+  shiftStaffIds.forEach((staffId) => {
+    shiftRequestMonths.push({
+      id: randomUUID(),
+      staffId,
+      targetMonth: month,
+      note: "",
+      submittedAt: jstAt(addDays(`${month}-01`, -10), 12),
+      updatedAt: jstAt(addDays(`${month}-01`, -10), 12),
+    });
+    for (const [date, preference] of currentPrefs.get(staffId)!) {
+      shiftRequests.push({ id: randomUUID(), staffId, targetMonth: month, date, preference });
+    }
+    for (const storeId of storeIds) {
+      shiftAvailableStores.push({ staffId, targetMonth: month, storeId });
+    }
+  });
+
+  // 翌月：募集中の状態（3名が提出済み・残りは未提出）
+  const nextMonth = addMonths(month, 1);
+  const nm = (day: number) => `${nextMonth}-${String(day).padStart(2, "0")}`;
+  const nextSubmissions: {
+    staffId: string;
+    days: Record<string, ShiftPreference>;
+    storeIds: string[];
+    note: string;
+  }[] = [
+    {
+      staffId: "staff-1",
+      days: { [nm(3)]: "off", [nm(12)]: "off", [nm(20)]: "off", [nm(21)]: "off" },
+      storeIds: ["store-1", "store-2"],
+      note: "20日・21日は通院のため休み希望です",
+    },
+    {
+      staffId: "staff-2",
+      days: { [nm(7)]: "off", [nm(15)]: "early", [nm(16)]: "early" },
+      storeIds: ["store-1", "store-2", "store-3"],
+      note: "",
+    },
+    {
+      staffId: "staff-3",
+      days: { [nm(5)]: "off", [nm(6)]: "off", [nm(10)]: "late", [nm(24)]: "late" },
+      storeIds: ["store-2", "store-3"],
+      note: "午前は学校送迎があるため遅番が助かります",
+    },
+  ];
+  for (const sub of nextSubmissions) {
+    shiftRequestMonths.push({
+      id: randomUUID(),
+      staffId: sub.staffId,
+      targetMonth: nextMonth,
+      note: sub.note,
+      submittedAt: jstAt(today, 8),
+      updatedAt: jstAt(today, 8),
+    });
+    for (const [date, preference] of Object.entries(sub.days)) {
+      shiftRequests.push({
+        id: randomUUID(),
+        staffId: sub.staffId,
+        targetMonth: nextMonth,
+        date,
+        preference,
+      });
+    }
+    for (const storeId of sub.storeIds) {
+      shiftAvailableStores.push({ staffId: sub.staffId, targetMonth: nextMonth, storeId });
+    }
+  }
+
   return {
-    store,
+    stores,
     staff,
     customers,
     counseling,
@@ -241,6 +402,11 @@ function seed(): MockDb {
     attendances,
     appointments,
     broadcasts: [],
+    shiftRules,
+    shiftRequestMonths,
+    shiftRequests,
+    shiftAvailableStores,
+    shiftAssignments,
   };
 }
 
@@ -253,12 +419,34 @@ class MockStore implements DataStore {
   }
 
   async getStore(): Promise<Store> {
-    return { ...this.db.store };
+    return { ...this.db.stores[0] };
   }
 
-  async updateStore(patch: Partial<Omit<Store, "id">>): Promise<Store> {
-    this.db.store = { ...this.db.store, ...patch };
-    return { ...this.db.store };
+  async listStores(): Promise<Store[]> {
+    return this.db.stores.map((s) => ({ ...s }));
+  }
+
+  async createStore(input: { name: string; address: string }): Promise<Store> {
+    const base = this.db.stores[0];
+    const created: Store = {
+      id: randomUUID(),
+      name: input.name,
+      address: input.address,
+      // TODO: 新店舗の緯度経度は本店の値を仮置き。マスタ設定から正しい座標に変更する
+      lat: base?.lat ?? 35.681236,
+      lng: base?.lng ?? 139.767125,
+      gpsRadiusM: 100,
+      attendanceEnabled: true,
+    };
+    this.db.stores.push(created);
+    return { ...created };
+  }
+
+  async updateStoreById(id: string, patch: Partial<Omit<Store, "id">>): Promise<Store> {
+    const found = this.db.stores.find((s) => s.id === id);
+    if (!found) throw new Error("店舗が見つかりません");
+    Object.assign(found, patch);
+    return { ...found };
   }
 
   async listStaff(): Promise<Staff[]> {
@@ -516,6 +704,143 @@ class MockStore implements DataStore {
     return this.db.broadcasts
       .filter((b) => b.sentAt >= from && b.sentAt < to)
       .reduce((sum, b) => sum + b.recipientCount, 0);
+  }
+
+  // ---- シフト管理 ----
+
+  async getShiftRules(): Promise<ShiftRules> {
+    return { ...this.db.shiftRules };
+  }
+
+  async updateShiftRules(patch: Partial<ShiftRules>): Promise<ShiftRules> {
+    this.db.shiftRules = { ...this.db.shiftRules, ...patch };
+    return { ...this.db.shiftRules };
+  }
+
+  async saveShiftRequest(input: {
+    staffId: string;
+    targetMonth: string;
+    note: string;
+    days: Record<string, ShiftPreference>;
+    storeIds: string[];
+  }): Promise<void> {
+    const now = new Date();
+    const existing = this.db.shiftRequestMonths.find(
+      (m) => m.staffId === input.staffId && m.targetMonth === input.targetMonth
+    );
+    if (existing) {
+      existing.note = input.note;
+      existing.updatedAt = now;
+    } else {
+      this.db.shiftRequestMonths.push({
+        id: randomUUID(),
+        staffId: input.staffId,
+        targetMonth: input.targetMonth,
+        note: input.note,
+        submittedAt: now,
+        updatedAt: now,
+      });
+    }
+    // 日別希望と勤務可能店舗は総入れ替え
+    this.db.shiftRequests = this.db.shiftRequests.filter(
+      (r) => !(r.staffId === input.staffId && r.targetMonth === input.targetMonth)
+    );
+    for (const [date, preference] of Object.entries(input.days)) {
+      this.db.shiftRequests.push({
+        id: randomUUID(),
+        staffId: input.staffId,
+        targetMonth: input.targetMonth,
+        date,
+        preference,
+      });
+    }
+    this.db.shiftAvailableStores = this.db.shiftAvailableStores.filter(
+      (a) => !(a.staffId === input.staffId && a.targetMonth === input.targetMonth)
+    );
+    for (const storeId of input.storeIds) {
+      this.db.shiftAvailableStores.push({
+        staffId: input.staffId,
+        targetMonth: input.targetMonth,
+        storeId,
+      });
+    }
+  }
+
+  async getShiftRequestMonth(
+    staffId: string,
+    targetMonth: string
+  ): Promise<ShiftRequestMonth | null> {
+    return (
+      this.db.shiftRequestMonths.find(
+        (m) => m.staffId === staffId && m.targetMonth === targetMonth
+      ) ?? null
+    );
+  }
+
+  async listShiftRequestMonths(targetMonth: string): Promise<ShiftRequestMonth[]> {
+    return this.db.shiftRequestMonths.filter((m) => m.targetMonth === targetMonth);
+  }
+
+  async listShiftRequests(targetMonth: string, staffId?: string): Promise<ShiftRequest[]> {
+    return this.db.shiftRequests.filter(
+      (r) => r.targetMonth === targetMonth && (!staffId || r.staffId === staffId)
+    );
+  }
+
+  async listAvailableStores(
+    targetMonth: string,
+    staffId?: string
+  ): Promise<{ staffId: string; storeId: string }[]> {
+    return this.db.shiftAvailableStores
+      .filter((a) => a.targetMonth === targetMonth && (!staffId || a.staffId === staffId))
+      .map(({ staffId: s, storeId }) => ({ staffId: s, storeId }));
+  }
+
+  async listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]> {
+    return this.db.shiftAssignments
+      .filter((a) => a.targetMonth === targetMonth && (!staffId || a.staffId === staffId))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
+    this.db.shiftAssignments = this.db.shiftAssignments.filter(
+      (a) => a.targetMonth !== targetMonth
+    );
+    for (const row of rows) {
+      this.db.shiftAssignments.push({
+        id: randomUUID(),
+        targetMonth,
+        status: "draft",
+        ...row,
+      });
+    }
+  }
+
+  async createShiftAssignment(
+    input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
+  ): Promise<ShiftAssignment> {
+    const dup = this.db.shiftAssignments.find(
+      (a) => a.staffId === input.staffId && a.date === input.date
+    );
+    if (dup) throw new Error("このスタッフはこの日すでに割り当てられています");
+    const created: ShiftAssignment = { id: randomUUID(), ...input };
+    this.db.shiftAssignments.push(created);
+    return { ...created };
+  }
+
+  async deleteShiftAssignment(id: string): Promise<void> {
+    this.db.shiftAssignments = this.db.shiftAssignments.filter((a) => a.id !== id);
+  }
+
+  async confirmMonthAssignments(targetMonth: string): Promise<number> {
+    let count = 0;
+    for (const a of this.db.shiftAssignments) {
+      if (a.targetMonth === targetMonth) {
+        a.status = "confirmed";
+        count++;
+      }
+    }
+    return count;
   }
 }
 

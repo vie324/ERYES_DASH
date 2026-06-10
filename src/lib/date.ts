@@ -65,7 +65,25 @@ export function utcToJstLocal(d: Date): string {
   return new Date(d.getTime() + JST_OFFSET_MS).toISOString().slice(0, 16);
 }
 
+/** "YYYY-MM" の全日付（"YYYY-MM-DD"）リスト */
+export function datesOfMonth(monthStr: string): string[] {
+  const { from, to } = monthRange(monthStr);
+  const dates: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+  return dates;
+}
+
+/** "YYYY-MM-DD" の曜日（0=日〜6=土） */
+export function weekdayOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"];
+
+/** 曜日の日本語1文字（0=日〜6=土） */
+export function weekdayJa(weekday: number): string {
+  return WEEKDAYS_JA[weekday];
+}
 
 /** "YYYY-MM-DD" → "6月10日(水)" のような日本語表記 */
 export function formatDateJa(dateStr: string, withYear = false): string {
