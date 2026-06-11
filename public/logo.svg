@@ -1,12 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="220" height="56" viewBox="0 0 220 56">
-  <!-- 仮ロゴ：正式なロゴ画像を受領したらこのファイル（public/logo.svg）を差し替える -->
-  <g fill="none" stroke="#e11d48" stroke-width="3" stroke-linecap="round">
-    <path d="M14 30 Q 40 10 66 30" />
-    <path d="M22 24 L 18 16" />
-    <path d="M32 19.5 L 30 11" />
-    <path d="M42 18 L 42 9" />
-    <path d="M52 19.5 L 54 11" />
-    <path d="M62 24 L 66 16" />
+<svg xmlns="http://www.w3.org/2000/svg" width="232" height="48" viewBox="0 0 232 48">
+  <!-- EREYS ロゴ（ヘッダー用・横長版）。クライアント支給ロゴをSVGで再現 -->
+  <text x="0" y="34" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
+        font-size="30" font-weight="600" letter-spacing="5" fill="#A99668">EREYS</text>
+  <g fill="none" stroke="#A99668" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="204" cy="24" r="19"/>
+    <line x1="184" y1="45" x2="216" y2="21"/>
   </g>
-  <text x="80" y="38" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="bold" letter-spacing="6" fill="#1c1917">ERYES</text>
+  <circle cx="216" cy="21" r="2.6" fill="#A99668"/>
 </svg>

@@ -105,7 +105,7 @@ export default async function AdminReportsPage({
             <div className="flex gap-1.5 flex-wrap">
               <Link
                 href={`/admin/reports?month=${month}`}
-                className={`text-xs font-bold rounded-full px-3 py-1.5 border ${!selectedStaff ? "bg-rose-500 text-white border-rose-500" : "border-stone-300 text-stone-600"}`}
+                className={`text-xs font-bold rounded-full px-3 py-1.5 border ${!selectedStaff ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"}`}
               >
                 全員
               </Link>
@@ -113,7 +113,7 @@ export default async function AdminReportsPage({
                 <Link
                   key={s.id}
                   href={`/admin/reports?month=${month}&staff=${s.id}`}
-                  className={`text-xs font-bold rounded-full px-3 py-1.5 border ${selectedStaff === s.id ? "bg-rose-500 text-white border-rose-500" : "border-stone-300 text-stone-600"}`}
+                  className={`text-xs font-bold rounded-full px-3 py-1.5 border ${selectedStaff === s.id ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"}`}
                 >
                   {s.name}
                 </Link>

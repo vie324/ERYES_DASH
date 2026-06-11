@@ -1,4 +1,4 @@
-# ERYES DASH — サロン業務システム
+# EREYS DASH — サロン業務システム
 
 ホットペッパービューティーの予約はそのままに、サロン運営に必要な機能だけに絞った業務システムです。
 
@@ -111,7 +111,7 @@ npm run hash-password -- '新しいパスワード'
 
 ### 4-1. チャネル作成
 
-1. https://developers.line.biz/console/ にログインし、プロバイダーを作成（例：ERYES）
+1. https://developers.line.biz/console/ にログインし、プロバイダーを作成（例：EREYS）
 2. **Messaging APIチャネル**を作成
    - LINE公式アカウントが既にある場合は、[LINE公式アカウントマネージャー](https://manager.line.biz/) → 設定 → Messaging API から連携
 3. チャネル基本設定から以下を取得して環境変数へ

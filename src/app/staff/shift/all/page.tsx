@@ -51,14 +51,14 @@ export default async function StaffShiftAllPage({
               <tr>
                 <th className="sticky left-0 bg-white">日付</th>
                 {stores.map((s) => (
-                  <th key={s.id}>{s.name.replace(/^ERYES\s*/, "")}</th>
+                  <th key={s.id}>{s.name.replace(/^EREYS\s*/, "")}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {datesOfMonth(month).map((date) => {
                 const wd = weekdayOf(date);
-                const dayClass = wd === 0 ? "text-rose-500" : wd === 6 ? "text-sky-500" : "";
+                const dayClass = wd === 0 ? "text-red-400" : wd === 6 ? "text-sky-500" : "";
                 return (
                   <tr key={date} className={wd === 0 || wd === 6 ? "bg-stone-50" : ""}>
                     <td className={`sticky left-0 bg-inherit font-bold whitespace-nowrap ${dayClass}`}>
@@ -77,7 +77,7 @@ export default async function StaffShiftAllPage({
                                   key={a.id}
                                   className={`text-xs whitespace-nowrap ${
                                     a.staffId === session.staffId
-                                      ? "font-bold text-rose-600"
+                                      ? "font-bold text-brand-700"
                                       : "text-stone-600"
                                   }`}
                                 >
@@ -98,7 +98,7 @@ export default async function StaffShiftAllPage({
             </tbody>
           </table>
           <p className="text-xs text-stone-400 px-2 py-2">
-            (早)=早番 (遅)=遅番 ／ 自分の名前は<span className="text-rose-600 font-bold">赤色</span>で表示されます
+            (早)=早番 (遅)=遅番 ／ 自分の名前は<span className="text-brand-700 font-bold">赤色</span>で表示されます
           </p>
         </div>
       )}

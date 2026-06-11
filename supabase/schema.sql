@@ -1,5 +1,5 @@
 -- ============================================================
--- ERYES DASH データベーススキーマ（Supabase / PostgreSQL）
+-- EREYS DASH データベーススキーマ（Supabase / PostgreSQL）
 -- 適用方法：Supabaseダッシュボード → SQL Editor → このファイルの内容を貼り付けて実行
 -- ============================================================
 
@@ -185,9 +185,9 @@ alter table shift_assignments enable row level security;
 -- TODO: 店舗名・住所・緯度経度は仮値（3店舗）。正式な値に書き換えてから実行する。
 --       最初の1行目が「本店」となり、LINEリマインドの店名などに使われる。
 insert into stores (name, address, lat, lng, gps_radius_m, attendance_enabled) values
-  ('ERYES 渋谷本店', '東京都渋谷区道玄坂1-2-3（仮）', 35.658034, 139.701636, 100, true),
-  ('ERYES 表参道店', '東京都港区北青山3-4-5（仮）', 35.665498, 139.712135, 100, true),
-  ('ERYES 恵比寿店', '東京都渋谷区恵比寿1-6-7（仮）', 35.646691, 139.710106, 100, true);
+  ('EREYS 渋谷本店', '東京都渋谷区道玄坂1-2-3（仮）', 35.658034, 139.701636, 100, true),
+  ('EREYS 表参道店', '東京都港区北青山3-4-5（仮）', 35.665498, 139.712135, 100, true),
+  ('EREYS 恵比寿店', '東京都渋谷区恵比寿1-6-7（仮）', 35.646691, 139.710106, 100, true);
 
 -- シフトルールの初期値（連勤上限5日・各店舗2名・締切は前月25日）
 insert into shift_rules (id) values (1);
@@ -205,5 +205,5 @@ select
   'admin',
   20
 from stores
-where name = 'ERYES 渋谷本店'
+where name = 'EREYS 渋谷本店'
 limit 1;

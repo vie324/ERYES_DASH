@@ -5,6 +5,7 @@ import { addMonths, formatDateJa, formatMonthJa, thisMonthJst } from "@/lib/date
 import { SHIFT_TYPE_CLASS, SHIFT_TYPE_LABEL } from "@/lib/shift/labels";
 import { currentTargetMonth, deadlineLabel, isRequestEditable } from "@/lib/shift/period";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 // 自分のシフト：確定したシフトの確認と、希望提出への入口
 export default async function StaffShiftPage({
@@ -39,9 +40,11 @@ export default async function StaffShiftPage({
       {editable && (
         <Link
           href={`/staff/shift/request?month=${targetMonth}`}
-          className={`card flex items-center gap-3 mb-4 active:bg-rose-50 ${submitted ? "" : "border-rose-300 bg-rose-50"}`}
+          className={`card flex items-center gap-3 mb-4 active:bg-brand-50 ${submitted ? "" : "border-brand-300 bg-brand-50"}`}
         >
-          <span className="text-2xl">📝</span>
+          <span className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 bg-white border border-brand-200 text-brand-600">
+            <Icon name="pencil" className="w-5 h-5" />
+          </span>
           <span className="flex-1">
             <span className="block font-bold">
               {formatMonthJa(targetMonth)}の希望を{submitted ? "修正する" : "提出する"}
@@ -76,7 +79,7 @@ export default async function StaffShiftPage({
           <section className="card mb-4">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-bold text-sm text-stone-500">あなたのシフト</h2>
-              <span className="text-sm font-bold text-rose-600">出勤 {own.length}日</span>
+              <span className="text-sm font-bold text-brand-700">出勤 {own.length}日</span>
             </div>
             {own.length === 0 ? (
               <p className="text-sm text-stone-400">この月の出勤はありません</p>

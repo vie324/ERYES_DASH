@@ -22,13 +22,15 @@ export default async function LoginPage({
     <div className="min-h-dvh flex flex-col">
       <DemoBanner show={demo} />
       <main className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-sm animate-fade-up">
           <div className="text-center mb-8">
-            <img src="/logo.svg" alt="ERYES" className="h-12 w-auto mx-auto" />
-            <p className="text-sm text-stone-500 mt-2 font-bold">サロン業務システム</p>
+            <img src="/logo-full.svg" alt="EREYS" className="w-56 h-auto mx-auto" />
+            <p className="text-[11px] font-bold tracking-[0.35em] text-brand-500 -mt-3">
+              SALON MANAGEMENT
+            </p>
           </div>
 
-          <form action={loginAction} className="card space-y-4 !p-6">
+          <form action={loginAction} className="card space-y-4 !p-6 !shadow-[0_8px_30px_rgba(93,80,58,0.12)]">
             {error && (
               <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3">
                 {error === "empty"
@@ -68,15 +70,15 @@ export default async function LoginPage({
           </form>
 
           {demo && (
-            <div className="card mt-4 text-xs text-stone-600 space-y-1">
-              <p className="font-bold text-stone-700">デモ用アカウント</p>
+            <div className="card mt-4 text-xs text-ink-500 space-y-1">
+              <p className="font-bold text-ink-700">デモ用アカウント</p>
               <p>
-                管理者：ID <code className="font-bold">admin</code> ／ パスワード{" "}
-                <code className="font-bold">admin1234</code>
+                管理者：ID <code className="font-bold text-brand-700">admin</code> ／ パスワード{" "}
+                <code className="font-bold text-brand-700">admin1234</code>
               </p>
               <p>
-                スタッフ：ID <code className="font-bold">misaki</code> ／ パスワード{" "}
-                <code className="font-bold">staff1234</code>
+                スタッフ：ID <code className="font-bold text-brand-700">misaki</code> ／ パスワード{" "}
+                <code className="font-bold text-brand-700">staff1234</code>
               </p>
             </div>
           )}

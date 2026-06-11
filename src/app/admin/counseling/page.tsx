@@ -48,7 +48,7 @@ export default async function AdminCounselingPage({
             href={`/admin/counseling${f.key === "all" ? "" : `?status=${f.key}`}`}
             className={`text-sm font-bold rounded-full px-4 py-2 border ${
               filter === f.key
-                ? "bg-rose-500 text-white border-rose-500"
+                ? "bg-brand-600 text-white border-brand-600"
                 : "border-stone-300 text-stone-600"
             }`}
           >
@@ -67,7 +67,7 @@ export default async function AdminCounselingPage({
               <Link
                 key={r.id}
                 href={`/admin/counseling/${r.id}`}
-                className="card flex items-center gap-3 active:bg-rose-50"
+                className="card flex items-center gap-3 active:bg-brand-50"
               >
                 <div className="flex-1 min-w-0">
                   <p className="font-bold truncate">
@@ -77,7 +77,7 @@ export default async function AdminCounselingPage({
                     {formatDateTimeJa(r.submittedAt, true)}
                   </p>
                   {flags.length > 0 && (
-                    <p className="text-xs font-bold text-red-600 mt-1">⚠ {flags.join("・")}</p>
+                    <p className="text-xs font-bold text-red-600 mt-1">要確認：{flags.join("・")}</p>
                   )}
                 </div>
                 <CounselingStatusBadge status={r.status} />

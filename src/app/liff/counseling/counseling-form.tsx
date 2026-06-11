@@ -7,6 +7,7 @@
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { COUNSELING_ITEMS, type CounselingItem } from "@/lib/counseling/items";
+import { Icon } from "@/components/icons";
 
 // LIFF SDK（CDN読み込み）の最小型定義
 interface LiffSdk {
@@ -118,7 +119,7 @@ export function CounselingForm({ liffId }: { liffId: string }) {
   };
 
   return (
-    <div className="min-h-dvh bg-rose-50/50">
+    <div className="min-h-dvh bg-brand-50">
       {!isMock && (
         <Script
           src="https://static.line-scdn.net/liff/edge/2/sdk.js"
@@ -127,9 +128,11 @@ export function CounselingForm({ liffId }: { liffId: string }) {
         />
       )}
 
-      <header className="bg-white border-b border-stone-200 py-4 text-center">
-        <img src="/logo.svg" alt="ERYES" className="h-9 w-auto mx-auto" />
-        <p className="text-sm font-bold text-stone-600 mt-1">ご来店前カウンセリング</p>
+      <header className="bg-white/90 backdrop-blur border-b border-brand-200 py-5 text-center">
+        <img src="/logo.svg" alt="EREYS" className="h-8 w-auto mx-auto" />
+        <p className="text-xs font-bold tracking-[0.25em] text-brand-600 mt-1.5">
+          ご来店前カウンセリング
+        </p>
       </header>
 
       <main className="mx-auto max-w-md px-4 py-6 pb-16">
@@ -159,9 +162,9 @@ export function CounselingForm({ liffId }: { liffId: string }) {
         )}
 
         {phase === "done" && (
-          <div className="card text-center py-10 space-y-3">
-            <p className="text-4xl">🌸</p>
-            <p className="text-lg font-bold">送信ありがとうございました</p>
+          <div className="card text-center py-10 space-y-3 animate-fade-up">
+            <Icon name="checkCircle" className="w-12 h-12 mx-auto text-brand-500" />
+            <p className="font-display text-xl font-bold">送信ありがとうございました</p>
             <p className="text-sm text-stone-500">
               スタッフが内容を確認のうえ、ご来店時にお伺いします。
               <br />
@@ -214,18 +217,18 @@ function FormField({
   onFullNameChange: (v: string) => void;
 }) {
   const requiredMark = item.required && (
-    <span className="text-rose-500 text-xs font-bold ml-1">必須</span>
+    <span className="text-red-500 text-xs font-bold ml-1">必須</span>
   );
 
   if (item.type === "agree") {
     return (
-      <div className="card !bg-rose-50 border-rose-200">
+      <div className="card !bg-brand-50 border-brand-200">
         <label className="flex items-start gap-3 text-sm font-bold text-stone-700">
           <input
             type="checkbox"
             name={item.key}
             required={item.required}
-            className="mt-0.5 h-6 w-6 accent-rose-500 shrink-0"
+            className="mt-0.5 h-6 w-6 accent-brand-500 shrink-0"
           />
           <span>
             {item.note ?? item.label}
@@ -248,14 +251,14 @@ function FormField({
           {item.options?.map((opt) => (
             <label
               key={opt}
-              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-rose-400 has-checked:bg-rose-50"
+              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
             >
               <input
                 type="radio"
                 name={item.key}
                 value={opt}
                 required={item.required}
-                className="h-5 w-5 accent-rose-500 shrink-0"
+                className="h-5 w-5 accent-brand-500 shrink-0"
               />
               {opt}
             </label>
@@ -268,13 +271,13 @@ function FormField({
           {item.options?.map((opt) => (
             <label
               key={opt}
-              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-rose-400 has-checked:bg-rose-50"
+              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
             >
               <input
                 type="checkbox"
                 name={item.key}
                 value={opt}
-                className="h-5 w-5 accent-rose-500 shrink-0"
+                className="h-5 w-5 accent-brand-500 shrink-0"
               />
               {opt}
             </label>

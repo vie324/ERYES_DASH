@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-dvh flex flex-col">
       <DemoBanner show={isDemoMode()} />
       <AppHeader session={session} homeHref="/admin" />
-      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-5 pb-12">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-5 pb-12 animate-fade-up">{children}</main>
     </div>
   );
 }

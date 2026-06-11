@@ -46,7 +46,7 @@ export function SalesBreakdownCard({ kpi }: { kpi: KpiSummary }) {
         </div>
         <div className="flex justify-between border-t border-stone-200 pt-1.5">
           <dt className="font-bold">合計</dt>
-          <dd className="font-bold text-rose-600">{formatYen(kpi.totalSales)}</dd>
+          <dd className="font-bold text-brand-700">{formatYen(kpi.totalSales)}</dd>
         </div>
       </dl>
     </div>

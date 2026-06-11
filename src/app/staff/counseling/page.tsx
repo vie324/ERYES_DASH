@@ -17,13 +17,13 @@ function CounselingListItem({
   return (
     <Link
       href={`/staff/counseling/${response.id}`}
-      className="card flex items-center gap-3 active:bg-rose-50"
+      className="card flex items-center gap-3 active:bg-brand-50"
     >
       <div className="flex-1 min-w-0">
         <p className="font-bold text-base truncate">{customer?.fullName ?? "（不明）"} 様</p>
         <p className="text-xs text-stone-500 mt-0.5">{formatDateTimeJa(response.submittedAt)}</p>
         {flags.length > 0 && (
-          <p className="text-xs font-bold text-red-600 mt-1">⚠ {flags.join("・")}</p>
+          <p className="text-xs font-bold text-red-600 mt-1">要確認：{flags.join("・")}</p>
         )}
       </div>
       <CounselingStatusBadge status={response.status} />

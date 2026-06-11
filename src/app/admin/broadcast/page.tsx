@@ -71,12 +71,12 @@ export default async function AdminBroadcastPage({
             name="body"
             rows={5}
             maxLength={1000}
-            placeholder={"例）【ERYES】\n台風接近のため、本日17時以降のご予約のお客様はご来店にお気をつけください。"}
+            placeholder={"例）【EREYS】\n台風接近のため、本日17時以降のご予約のお客様はご来店にお気をつけください。"}
             className="input min-h-32"
             required
           />
           <label className="flex items-start gap-2 text-sm font-bold text-stone-600">
-            <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-rose-500" />
+            <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-brand-500" />
             <span>
               {recipientCount}名のお客様に送信されることを確認しました（取り消しはできません）
             </span>

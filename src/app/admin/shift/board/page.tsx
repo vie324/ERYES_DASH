@@ -13,6 +13,7 @@ import { computeBoardWarnings } from "@/lib/shift/assign";
 import { SHIFT_TYPE_LABEL } from "@/lib/shift/labels";
 import { currentTargetMonth } from "@/lib/shift/period";
 import { MonthNav, PageHeader, StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import type { ShiftPreference } from "@/lib/data/types";
 import {
   addAssignmentAction,
@@ -162,7 +163,7 @@ export default async function AdminShiftBoardPage({
           <form action={runAutoAssignAction}>
             <input type="hidden" name="target_month" value={month} />
             <button type="submit" className="btn-secondary w-full">
-              🪄 自動割当を実行（下書きを作り直す）
+              自動割当を実行（下書きを作り直す）
             </button>
             <p className="text-xs text-stone-400 mt-1.5">
               ※ 希望（休み・店舗・早遅）と連勤上限{rules.maxConsecutiveDays}日・各店舗{rules.minStaffPerStoreDay}名を考慮します。
@@ -175,7 +176,7 @@ export default async function AdminShiftBoardPage({
           <form action={confirmMonthAction} className="border-t border-stone-100 pt-3 space-y-2">
             <input type="hidden" name="target_month" value={month} />
             <label className="flex items-start gap-2 text-sm font-bold text-stone-600">
-              <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-rose-500" />
+              <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-brand-500" />
               内容を確認しました。確定すると全スタッフに公開されます。
             </label>
             <button type="submit" className="btn-primary w-full">この月のシフトを確定する</button>
@@ -193,7 +194,7 @@ export default async function AdminShiftBoardPage({
         warnings.storeConflicts.length > 0 ||
         warnings.consecutive.length > 0) && (
         <div className="rounded-2xl bg-red-50 border border-red-200 p-4 mb-4 text-sm space-y-1.5">
-          <p className="font-bold text-red-700">⚠ 警告（手動調整で解消してください）</p>
+          <p className="font-bold text-red-700 flex items-center gap-1.5"><Icon name="alertTriangle" className="w-4 h-4" />警告（手動調整で解消してください）</p>
           {warnings.coverage.length > 0 && (
             <p className="text-red-600">
               ・人数不足（{rules.minStaffPerStoreDay}名未満）：{warnings.coverage.length}枠
@@ -225,7 +226,7 @@ export default async function AdminShiftBoardPage({
             <tr>
               <th className="sticky left-0 bg-white z-10">日付</th>
               {stores.map((s) => (
-                <th key={s.id} className="min-w-28">{s.name.replace(/^ERYES\s*/, "")}</th>
+                <th key={s.id} className="min-w-28">{s.name.replace(/^EREYS\s*/, "")}</th>
               ))}
             </tr>
           </thead>
@@ -236,7 +237,7 @@ export default async function AdminShiftBoardPage({
                 <tr key={date} className={wd === 0 || wd === 6 ? "bg-stone-50" : ""}>
                   <td
                     className={`sticky left-0 bg-inherit font-bold whitespace-nowrap z-10 ${
-                      wd === 0 ? "text-rose-500" : wd === 6 ? "text-sky-500" : ""
+                      wd === 0 ? "text-red-400" : wd === 6 ? "text-sky-500" : ""
                     }`}
                   >
                     {Number(date.slice(8))}({weekdayJa(wd)})
@@ -293,7 +294,7 @@ export default async function AdminShiftBoardPage({
                             {cell.length}/{rules.minStaffPerStoreDay}名
                             <Link
                               href={`/admin/shift/board?month=${month}&date=${date}&store=${store.id}#add-form`}
-                              className="ml-1 text-rose-500 underline"
+                              className="ml-1 text-brand-600 underline"
                             >
                               ＋追加
                             </Link>
