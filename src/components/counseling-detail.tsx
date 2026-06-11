@@ -4,6 +4,7 @@ import { COUNSELING_ITEMS, formatAnswer } from "@/lib/counseling/items";
 import { formatDateTimeJa } from "@/lib/date";
 import type { CounselingResponse, Customer } from "@/lib/data/types";
 import { StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 /** 施術前に必ず確認すべき回答（アレルギーあり・妊娠中など）を抽出 */
 export function riskFlags(answers: Record<string, unknown>): string[] {
@@ -60,7 +61,10 @@ export function CounselingDetail({
 
       {flags.length > 0 && (
         <div className="rounded-2xl bg-red-50 border border-red-200 p-4">
-          <p className="text-sm font-bold text-red-700 mb-1">⚠ 施術前に必ず確認</p>
+          <p className="text-sm font-bold text-red-700 mb-1 flex items-center gap-1.5">
+            <Icon name="alertTriangle" className="w-4 h-4" />
+            施術前に必ず確認
+          </p>
           <ul className="text-sm font-bold text-red-600 list-disc list-inside">
             {flags.map((f) => (
               <li key={f}>{f}</li>

@@ -50,7 +50,7 @@ export default async function AdminCustomersPage({
             <Link
               key={c.id}
               href={`/admin/customers/${c.id}`}
-              className="card flex items-center gap-3 active:bg-rose-50"
+              className="card flex items-center gap-3 active:bg-brand-50"
             >
               <div className="flex-1 min-w-0">
                 <p className="font-bold truncate">{c.fullName} 様</p>

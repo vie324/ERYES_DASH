@@ -61,7 +61,7 @@ function seed(): MockDb {
   const stores: Store[] = [
     {
       id: "store-1",
-      name: "ERYES 渋谷本店",
+      name: "EREYS 渋谷本店",
       address: "東京都渋谷区道玄坂1-2-3（仮）",
       lat: 35.658034,
       lng: 139.701636,
@@ -70,7 +70,7 @@ function seed(): MockDb {
     },
     {
       id: "store-2",
-      name: "ERYES 表参道店",
+      name: "EREYS 表参道店",
       address: "東京都港区北青山3-4-5（仮）",
       lat: 35.665498,
       lng: 139.712135,
@@ -79,7 +79,7 @@ function seed(): MockDb {
     },
     {
       id: "store-3",
-      name: "ERYES 恵比寿店",
+      name: "EREYS 恵比寿店",
       address: "東京都渋谷区恵比寿1-6-7（仮）",
       lat: 35.646691,
       lng: 139.710106,

@@ -29,7 +29,7 @@ export default async function StaffHomePage() {
   return (
     <div>
       <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
-      <h1 className="text-xl font-bold mb-5">
+      <h1 className="font-display text-2xl font-bold mb-5">
         {session.name}さん、おつかれさまです
       </h1>
 
@@ -38,7 +38,7 @@ export default async function StaffHomePage() {
       <div className="space-y-3">
         <BigMenuLink
           href="/staff/counseling"
-          icon="📋"
+          icon="clipboard"
           title="本日のカウンセリング"
           description={
             pendingCounseling.length > 0
@@ -49,14 +49,14 @@ export default async function StaffHomePage() {
         />
         <BigMenuLink
           href="/staff/report"
-          icon="✏️"
+          icon="pencil"
           title="日報を入力"
           description={todayReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です"}
           badge={todayReport ? null : "！"}
         />
         <BigMenuLink
           href="/staff/shift"
-          icon="📅"
+          icon="calendar"
           title="シフト"
           description="自分のシフト確認・希望の提出"
           badge={shiftBadge}
@@ -64,14 +64,14 @@ export default async function StaffHomePage() {
         {attendanceAvailable && (
           <BigMenuLink
             href="/staff/attendance"
-            icon="📍"
+            icon="mapPin"
             title="出勤・退勤の打刻"
             description="お店に着いたら／帰るときに"
           />
         )}
         <BigMenuLink
           href="/staff/stats"
-          icon="📈"
+          icon="trendingUp"
           title="自分の成績"
           description="売上・次回予約率・月次推移"
         />
@@ -79,7 +79,7 @@ export default async function StaffHomePage() {
 
       {session.role === "admin" && (
         <p className="mt-6 text-center">
-          <Link href="/admin" className="text-sm font-bold text-rose-600 underline">
+          <Link href="/admin" className="text-sm font-bold text-brand-700 underline">
             管理者画面へ
           </Link>
         </p>

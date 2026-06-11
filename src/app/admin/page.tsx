@@ -14,6 +14,7 @@ import { aggregateAttendance, formatMinutes, overtimeStatus } from "@/lib/attend
 import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
 import { currentTargetMonth } from "@/lib/shift/period";
 import { BigMenuLink, StatCard } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 // 管理者ダッシュボード：本日・当月の数字と注意事項を一目で確認し、各機能へ移動する
 export default async function AdminHomePage() {
@@ -64,21 +65,28 @@ export default async function AdminHomePage() {
   return (
     <div>
       <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
-      <h1 className="text-xl font-bold mb-4">管理者メニュー</h1>
+      <h1 className="font-display text-2xl font-bold mb-4">管理者メニュー</h1>
 
       {(overtimeAlerts.length > 0 || pushCount >= LINE_FREE_QUOTA * 0.8) && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-4 space-y-1">
-          <p className="text-sm font-bold text-amber-800">お知らせ・アラート</p>
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-4 space-y-1.5">
+          <p className="text-sm font-bold text-amber-800 flex items-center gap-1.5">
+            <Icon name="alertTriangle" className="w-4 h-4" />
+            お知らせ・アラート
+          </p>
           {overtimeAlerts.map((a) => (
-            <p key={a.name} className={`text-sm font-bold ${a.status === "over" ? "text-red-600" : "text-amber-700"}`}>
-              {a.status === "over" ? "🔴" : "🟡"} {a.name}：残業 {formatMinutes(a.minutes)}（固定残業を
-              {a.status === "over" ? "超過しています" : "超過しそうです"}）
-              <Link href="/admin/attendance" className="underline ml-1">詳細</Link>
+            <p key={a.name} className={`text-sm font-bold flex items-start gap-2 ${a.status === "over" ? "text-red-600" : "text-amber-700"}`}>
+              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${a.status === "over" ? "bg-red-500" : "bg-amber-400"}`} />
+              <span>
+                {a.name}：残業 {formatMinutes(a.minutes)}（固定残業を
+                {a.status === "over" ? "超過しています" : "超過しそうです"}）
+                <Link href="/admin/attendance" className="underline ml-1">詳細</Link>
+              </span>
             </p>
           ))}
           {pushCount >= LINE_FREE_QUOTA * 0.8 && (
-            <p className="text-sm font-bold text-amber-700">
-              🟡 当月のLINE送信数が {pushCount}通 です（無料枠 {LINE_FREE_QUOTA}通）
+            <p className="text-sm font-bold text-amber-700 flex items-start gap-2">
+              <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-amber-400" />
+              <span>当月のLINE送信数が {pushCount}通 です（無料枠 {LINE_FREE_QUOTA}通）</span>
             </p>
           )}
         </div>
@@ -100,31 +108,31 @@ export default async function AdminHomePage() {
       </div>
 
       <div className="space-y-3">
-        <BigMenuLink href="/admin/reports" icon="📊" title="成績・日報"
+        <BigMenuLink href="/admin/reports" icon="barChart" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
-        <BigMenuLink href="/admin/shift" icon="📅" title="シフト管理"
+        <BigMenuLink href="/admin/shift" icon="calendar" title="シフト管理"
           description={`希望の集計・自動割当・確定（未提出 ${shiftUnsubmitted}名）`}
           badge={shiftUnsubmitted} />
-        <BigMenuLink href="/admin/counseling" icon="📋" title="カウンセリング"
+        <BigMenuLink href="/admin/counseling" icon="clipboard" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
-        <BigMenuLink href="/admin/customers" icon="👤" title="顧客一覧"
+        <BigMenuLink href="/admin/customers" icon="user" title="顧客一覧"
           description="LINE登録済みのお客様" />
-        <BigMenuLink href="/admin/appointments" icon="🔔" title="次回予約・リマインド"
+        <BigMenuLink href="/admin/appointments" icon="bell" title="次回予約・リマインド"
           description="予約登録と前日リマインドの状況" />
-        <BigMenuLink href="/admin/broadcast" icon="📣" title="一斉配信"
+        <BigMenuLink href="/admin/broadcast" icon="megaphone" title="一斉配信"
           description="全顧客へのお知らせ送信" />
-        <BigMenuLink href="/admin/csv" icon="📄" title="売上CSV出力"
+        <BigMenuLink href="/admin/csv" icon="fileText" title="売上CSV出力"
           description="税理士提出用（期間指定）" />
         {attendanceAvailable && (
-          <BigMenuLink href="/admin/attendance" icon="⏱" title="勤怠管理"
+          <BigMenuLink href="/admin/attendance" icon="clock" title="勤怠管理"
             description="労働時間・残業の月次集計" />
         )}
-        <BigMenuLink href="/admin/settings" icon="⚙️" title="マスタ設定"
+        <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
           description="店舗・スタッフ・勤怠運用の設定" />
       </div>
 
       <p className="mt-6 text-center">
-        <Link href="/staff" className="text-sm font-bold text-rose-600 underline">
+        <Link href="/staff" className="text-sm font-bold text-brand-700 underline">
           スタッフ画面へ（日報入力・打刻はこちら）
         </Link>
       </p>

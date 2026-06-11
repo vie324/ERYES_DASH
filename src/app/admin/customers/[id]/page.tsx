@@ -178,7 +178,7 @@ export default async function AdminCustomerDetailPage({
                 <Link
                   key={r.id}
                   href={`/admin/counseling/${r.id}`}
-                  className="card flex items-center gap-3 active:bg-rose-50"
+                  className="card flex items-center gap-3 active:bg-brand-50"
                 >
                   <div className="flex-1">
                     <p className="text-sm font-bold">{formatDateTimeJa(r.submittedAt, true)}</p>

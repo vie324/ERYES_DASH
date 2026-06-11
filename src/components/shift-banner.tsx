@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { getDataStore } from "@/lib/data";
 import { currentTargetMonth, isNoticePeriod, noticeMessage } from "@/lib/shift/period";
+import { Icon } from "@/components/icons";
 
 export async function ShiftNoticeBanner({ staffId }: { staffId: string }) {
   const db = getDataStore();
@@ -18,14 +19,25 @@ export async function ShiftNoticeBanner({ staffId }: { staffId: string }) {
   return (
     <Link
       href={`/staff/shift/request?month=${targetMonth}`}
-      className={`block rounded-2xl border p-4 mb-4 active:opacity-80 ${
-        emphasized ? "bg-rose-50 border-rose-300" : "bg-amber-50 border-amber-200"
+      className={`flex items-center gap-3 rounded-2xl border p-4 mb-4 transition-all duration-300 hover:shadow-[0_6px_20px_rgba(93,80,58,0.12)] active:scale-[0.99] ${
+        emphasized
+          ? "bg-gradient-to-r from-brand-100 to-brand-50 border-brand-300"
+          : "bg-amber-50 border-amber-200"
       }`}
     >
-      <p className={`text-sm font-bold ${emphasized ? "text-rose-700" : "text-amber-800"}`}>
-        📅 {noticeMessage(targetMonth, rules)}
-      </p>
-      <p className="text-xs text-stone-500 mt-1">タップして希望を入力 ›</p>
+      <span
+        className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 ${
+          emphasized ? "bg-white text-brand-600" : "bg-white text-amber-600"
+        }`}
+      >
+        <Icon name="calendar" className="w-5 h-5" />
+      </span>
+      <span className="min-w-0">
+        <span className={`block text-sm font-bold ${emphasized ? "text-brand-800" : "text-amber-800"}`}>
+          {noticeMessage(targetMonth, rules)}
+        </span>
+        <span className="block text-xs text-stone-500 mt-0.5">タップして希望を入力 ›</span>
+      </span>
     </Link>
   );
 }

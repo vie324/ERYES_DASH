@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
+  <!-- EREYS ロゴ（スプラッシュ・ログイン用）。ワードマーク＋鏡面リフレクション＋サークルマーク -->
+  <g font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
+     font-size="104" font-weight="600" letter-spacing="10">
+    <text x="16" y="160" fill="#A99668">EREYS</text>
+    <text x="16" y="-172" transform="scale(1,-1)" fill="#A99668" opacity="0.28">EREYS</text>
+  </g>
+  <g fill="none" stroke="#A99668" stroke-width="2.4" stroke-linecap="round">
+    <circle cx="468" cy="160" r="62"/>
+    <line x1="402" y1="230" x2="508" y2="149"/>
+  </g>
+  <circle cx="508" cy="149" r="7" fill="#A99668"/>
+</svg>

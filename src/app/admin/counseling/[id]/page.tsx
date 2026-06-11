@@ -46,7 +46,7 @@ export default async function AdminCounselingDetailPage({
         <p className="mt-4 text-center">
           <Link
             href={`/admin/customers/${customer.id}`}
-            className="text-sm font-bold text-rose-600 underline"
+            className="text-sm font-bold text-brand-700 underline"
           >
             この顧客の詳細・次回予約登録へ
           </Link>

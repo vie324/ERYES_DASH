@@ -55,7 +55,7 @@ export function PunchPanel() {
           type="button"
           onClick={() => punch("in")}
           disabled={busy}
-          className="rounded-2xl bg-rose-500 text-white font-bold text-xl py-10 shadow-sm active:bg-rose-600 disabled:opacity-50"
+          className="rounded-2xl bg-gradient-to-b from-brand-400 to-brand-600 text-white font-bold text-xl py-10 shadow-[0_4px_16px_rgba(148,129,90,0.35)] transition-all duration-200 hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
         >
           出勤
         </button>
@@ -63,7 +63,7 @@ export function PunchPanel() {
           type="button"
           onClick={() => punch("out")}
           disabled={busy}
-          className="rounded-2xl bg-stone-700 text-white font-bold text-xl py-10 shadow-sm active:bg-stone-800 disabled:opacity-50"
+          className="rounded-2xl bg-gradient-to-b from-ink-700 to-ink-900 text-white font-bold text-xl py-10 shadow-[0_4px_16px_rgba(41,38,33,0.3)] transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
         >
           退勤
         </button>

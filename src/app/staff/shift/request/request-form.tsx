@@ -76,7 +76,7 @@ export function ShiftRequestForm({
 
         <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-stone-400 mb-1">
           {["日", "月", "火", "水", "木", "金", "土"].map((w) => (
-            <div key={w} className={w === "日" ? "text-rose-400" : w === "土" ? "text-sky-400" : ""}>
+            <div key={w} className={w === "日" ? "text-red-400" : w === "土" ? "text-sky-400" : ""}>
               {w}
             </div>
           ))}
@@ -107,7 +107,7 @@ export function ShiftRequestForm({
         </div>
 
         <p className="text-xs text-stone-500 mt-3">
-          休み希望 <span className="font-bold text-rose-600">{counts.off}日</span>
+          休み希望 <span className="font-bold text-brand-700">{counts.off}日</span>
           ／ 早番希望 <span className="font-bold text-sky-600">{counts.early}日</span>
           ／ 遅番希望 <span className="font-bold text-indigo-600">{counts.late}日</span>
         </p>
@@ -123,7 +123,7 @@ export function ShiftRequestForm({
               <label
                 key={store.id}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-base font-bold ${
-                  checked ? "border-rose-400 bg-rose-50 text-rose-700" : "border-stone-200 text-stone-600"
+                  checked ? "border-brand-400 bg-brand-50 text-brand-800" : "border-stone-200 text-stone-600"
                 }`}
               >
                 <input
@@ -133,7 +133,7 @@ export function ShiftRequestForm({
                   checked={checked}
                   onChange={() => toggleStore(store.id)}
                   disabled={!editable}
-                  className="h-5 w-5 accent-rose-500 shrink-0"
+                  className="h-5 w-5 accent-brand-500 shrink-0"
                 />
                 {store.name}
               </label>

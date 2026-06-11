@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import {
   createStaffAction,
   createStoreAction,
@@ -52,7 +53,7 @@ export default async function AdminSettingsPage({
         </p>
         <div className="space-y-3">
           {stores.map((store, index) => (
-            <details key={store.id} className="card" open={stores.length === 1}>
+            <details key={store.id} className="card group" open={stores.length === 1}>
               <summary className="flex items-center gap-2 cursor-pointer list-none">
                 <span className="font-bold flex-1">
                   {store.name}
@@ -63,7 +64,7 @@ export default async function AdminSettingsPage({
                 ) : (
                   <StatusBadge label="勤怠OFF" tone="muted" />
                 )}
-                <span className="text-stone-300">▼</span>
+                <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
               <form action={updateStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
                 <input type="hidden" name="id" value={store.id} />
@@ -105,7 +106,7 @@ export default async function AdminSettingsPage({
                     type="checkbox"
                     name="attendance_enabled"
                     defaultChecked={store.attendanceEnabled}
-                    className="h-5 w-5 accent-rose-500"
+                    className="h-5 w-5 accent-brand-500"
                   />
                   この店舗で勤怠（GPS打刻）を運用する
                 </label>
@@ -116,13 +117,13 @@ export default async function AdminSettingsPage({
         </div>
 
         <details className="card mt-3">
-          <summary className="font-bold cursor-pointer list-none text-rose-600">
+          <summary className="font-bold cursor-pointer list-none text-brand-700">
             ＋ 店舗を追加
           </summary>
           <form action={createStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
             <div>
               <label className="label" htmlFor="new_store_name">店舗名</label>
-              <input id="new_store_name" name="name" className="input" placeholder="例）ERYES 新宿店" required />
+              <input id="new_store_name" name="name" className="input" placeholder="例）EREYS 新宿店" required />
             </div>
             <div>
               <label className="label" htmlFor="new_store_address">住所（任意）</label>
@@ -140,7 +141,7 @@ export default async function AdminSettingsPage({
         <h2 className="font-bold text-base mb-3">スタッフ一覧</h2>
         <div className="space-y-3">
           {staffList.map((s) => (
-            <details key={s.id} className="card">
+            <details key={s.id} className="card group">
               <summary className="flex items-center gap-2 cursor-pointer list-none">
                 <span className="font-bold flex-1">
                   {s.name}
@@ -152,7 +153,7 @@ export default async function AdminSettingsPage({
                   <StatusBadge label="スタッフ" tone="muted" />
                 )}
                 {!s.isActive && <StatusBadge label="無効" tone="danger" />}
-                <span className="text-stone-300">▼</span>
+                <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
               <form action={updateStaffAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
                 <input type="hidden" name="id" value={s.id} />
@@ -194,7 +195,7 @@ export default async function AdminSettingsPage({
                     name="is_active"
                     defaultChecked={s.isActive}
                     disabled={s.id === session.staffId}
-                    className="h-5 w-5 accent-rose-500"
+                    className="h-5 w-5 accent-brand-500"
                   />
                   有効（オフにするとログインできなくなります）
                 </label>
