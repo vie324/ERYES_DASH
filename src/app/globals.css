@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* 日本語フォント（Webフォントは使わず端末標準で軽量に） */
+body {
+  font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+    "Yu Gothic UI", "Noto Sans JP", Meiryo, sans-serif;
+}
+
+/* よく使う部品スタイル。スマホ・iPadでの操作を前提に大きめのタップ領域にする */
+@layer components {
+  .card {
+    @apply rounded-2xl bg-white p-4 shadow-sm border border-stone-100;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl bg-rose-500 px-5 py-3.5 text-base font-bold text-white shadow-sm active:bg-rose-600 disabled:opacity-50 min-h-[3.25rem];
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl bg-white px-5 py-3.5 text-base font-bold text-stone-700 border border-stone-300 shadow-sm active:bg-stone-100 disabled:opacity-50 min-h-[3.25rem];
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-red-600 border border-red-300 active:bg-red-50;
+  }
+  .input {
+    @apply w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-rose-400 min-h-[3.25rem];
+  }
+  .label {
+    @apply block text-sm font-bold text-stone-600 mb-1.5;
+  }
+  .table-base {
+    @apply w-full text-sm;
+  }
+  .table-base th {
+    @apply px-2 py-2 text-left font-bold text-stone-500 border-b border-stone-200 whitespace-nowrap;
+  }
+  .table-base td {
+    @apply px-2 py-2 border-b border-stone-100 whitespace-nowrap;
+  }
+}
