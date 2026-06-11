@@ -98,7 +98,7 @@ export default async function StaffShiftAllPage({
             </tbody>
           </table>
           <p className="text-xs text-stone-400 px-2 py-2">
-            (早)=早番 (遅)=遅番 ／ 自分の名前は<span className="text-brand-700 font-bold">赤色</span>で表示されます
+            (早)=早番 (遅)=遅番 ／ 自分の名前は<span className="text-brand-700 font-bold">ゴールドの太字</span>で表示されます
           </p>
         </div>
       )}

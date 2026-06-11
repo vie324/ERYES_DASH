@@ -130,7 +130,7 @@ export default async function AdminShiftPage({
                       <dd className="font-bold">{storeNames || "（選択なし＝割当不可）"}</dd>
                     </div>
                     <div className="flex gap-2">
-                      <dt className="text-brand-600 shrink-0 w-24">{PREFERENCE_LABEL.off}希望</dt>
+                      <dt className="text-rose-600 shrink-0 w-24">{PREFERENCE_LABEL.off}希望</dt>
                       <dd>{offs ? `${offs}日` : "なし"}</dd>
                     </div>
                     {earls && (
