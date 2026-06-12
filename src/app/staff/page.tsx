@@ -12,11 +12,12 @@ export default async function StaffHomePage() {
   const db = getDataStore();
   const today = todayJst();
 
-  const [pendingCounseling, todayReport, stores, shiftRules] = await Promise.all([
+  const [pendingCounseling, todayReport, stores, shiftRules, todayCash] = await Promise.all([
     db.listCounselingResponses({ status: "pending" }),
     db.getDailyReport(session.staffId, today),
     db.listStores(),
     db.getShiftRules(),
+    db.listCashReports({ from: today, to: today }),
   ]);
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
@@ -53,6 +54,12 @@ export default async function StaffHomePage() {
           title="日報を入力"
           description={todayReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です"}
           badge={todayReport ? null : "！"}
+        />
+        <BigMenuLink
+          href="/staff/cash"
+          icon="banknote"
+          title="レジ締め・現金管理"
+          description={`本日 ${todayCash.length} / ${stores.length}店舗 入力済み`}
         />
         <BigMenuLink
           href="/staff/shift"

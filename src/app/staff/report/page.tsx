@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, todayJst } from "@/lib/date";
@@ -125,6 +126,15 @@ export default async function ReportPage({
           {existing ? "上書き保存する" : "日報を保存する"}
         </button>
       </form>
+
+      <p className="mt-5 text-center">
+        <Link
+          href={`/staff/cash?date=${date}`}
+          className="text-sm font-bold text-brand-700 underline"
+        >
+          レジ締め・現金管理の入力はこちら（店舗ごと）
+        </Link>
+      </p>
     </div>
   );
 }

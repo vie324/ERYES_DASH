@@ -9,7 +9,7 @@ const SEEN_KEY = "eryes_splash_seen";
 const SHOW_MS = 1500;
 const FADE_MS = 600;
 
-export function Splash() {
+export function Splash({ logoSrc = "/logo-full.svg" }: { logoSrc?: string }) {
   const [phase, setPhase] = useState<"show" | "fade" | "done">("show");
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function Splash() {
     >
       <div className="animate-splash-logo flex flex-col items-center px-10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-full.svg" alt="EREYS" className="w-64 max-w-[70vw] h-auto" />
+        <img src={logoSrc} alt="EREYS" className="w-64 max-w-[70vw] h-auto" />
         <p className="mt-2 text-[11px] font-bold tracking-[0.35em] text-brand-500">
           SALON MANAGEMENT
         </p>

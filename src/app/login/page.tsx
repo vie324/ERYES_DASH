@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { loginAction } from "@/lib/auth/actions";
 import { getSession } from "@/lib/auth/session";
 import { isDemoMode } from "@/lib/data";
+import { getLogoFullSrc } from "@/lib/logo";
 import { DemoBanner } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function LoginPage({
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-sm animate-fade-up">
           <div className="text-center mb-8">
-            <img src="/logo-full.svg" alt="EREYS" className="w-56 h-auto mx-auto" />
+            <img src={getLogoFullSrc()} alt="EREYS" className="w-56 h-auto mx-auto" />
             <p className="text-[11px] font-bold tracking-[0.35em] text-brand-500 -mt-3">
               SALON MANAGEMENT
             </p>

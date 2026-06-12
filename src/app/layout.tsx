@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Splash } from "@/components/splash";
+import { getLogoFullSrc } from "@/lib/logo";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <body className="min-h-dvh text-ink-900 antialiased">
-        <Splash />
+        <Splash logoSrc={getLogoFullSrc()} />
         {children}
       </body>
     </html>

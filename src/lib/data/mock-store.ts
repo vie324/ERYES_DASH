@@ -11,6 +11,8 @@ import type {
   Attendance,
   AttendanceInput,
   Broadcast,
+  CashReport,
+  CashReportInput,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -36,6 +38,7 @@ interface MockDb {
   customers: Customer[];
   counseling: CounselingResponse[];
   reports: DailyReport[];
+  cashReports: CashReport[];
   attendances: Attendance[];
   appointments: NextAppointment[];
   broadcasts: Broadcast[];
@@ -229,6 +232,29 @@ function seed(): MockDb {
     }
   }
 
+  // レジ締め（現金管理）のデモデータ：本店の直近1週間分
+  const cashReports: CashReport[] = [];
+  for (let i = 7; i >= 1; i--) {
+    const d = addDays(today, -i);
+    if (d.slice(0, 7) !== month && d.slice(0, 7) !== prevMonth) continue;
+    const cashSales = 18000 + (i % 3) * 4500;
+    const changeFund = 30000; // おつり準備金は3万円で固定運用の想定
+    cashReports.push({
+      id: randomUUID(),
+      storeId: "store-1",
+      reportDate: d,
+      cashSales,
+      registerBalance: changeFund + cashSales,
+      movedToSafe: cashSales,
+      changeFund,
+      safeBalance: 50000 + cashSales * (8 - i),
+      bankDeposit: i === 3 ? 120000 : 0, // 週1回まとめて銀行へ預入の想定
+      memo: i === 3 ? "銀行預入（週次）" : "",
+      createdBy: "staff-admin",
+      updatedAt: jstAt(d, 20, 30),
+    });
+  }
+
   // 勤怠のデモデータ：当月の営業日（今日まで）に出退勤
   const attendances: Attendance[] = [];
   for (const s of ["staff-1", "staff-2"]) {
@@ -399,6 +425,7 @@ function seed(): MockDb {
     customers,
     counseling,
     reports,
+    cashReports,
     attendances,
     appointments,
     broadcasts: [],
@@ -602,6 +629,42 @@ class MockStore implements DataStore {
           r.reportDate >= filter.from &&
           r.reportDate <= filter.to &&
           (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => a.reportDate.localeCompare(b.reportDate));
+  }
+
+  async upsertCashReport(input: CashReportInput): Promise<CashReport> {
+    const existing = this.db.cashReports.find(
+      (r) => r.storeId === input.storeId && r.reportDate === input.reportDate
+    );
+    if (existing) {
+      Object.assign(existing, input, { updatedAt: new Date() });
+      return { ...existing };
+    }
+    const created: CashReport = { id: randomUUID(), ...input, updatedAt: new Date() };
+    this.db.cashReports.push(created);
+    return created;
+  }
+
+  async getCashReport(storeId: string, reportDate: string): Promise<CashReport | null> {
+    return (
+      this.db.cashReports.find(
+        (r) => r.storeId === storeId && r.reportDate === reportDate
+      ) ?? null
+    );
+  }
+
+  async listCashReports(filter: {
+    storeId?: string;
+    from: string;
+    to: string;
+  }): Promise<CashReport[]> {
+    return this.db.cashReports
+      .filter(
+        (r) =>
+          r.reportDate >= filter.from &&
+          r.reportDate <= filter.to &&
+          (!filter.storeId || r.storeId === filter.storeId)
       )
       .sort((a, b) => a.reportDate.localeCompare(b.reportDate));
   }

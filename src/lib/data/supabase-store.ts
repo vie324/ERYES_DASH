@@ -9,6 +9,8 @@ import type {
   Attendance,
   AttendanceInput,
   Broadcast,
+  CashReport,
+  CashReportInput,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -79,6 +81,21 @@ const mapReport = (r: Row): DailyReport => ({
   optionSales: r.option_sales,
   retailSales: r.retail_sales,
   memo: r.memo ?? "",
+});
+
+const mapCashReport = (r: Row): CashReport => ({
+  id: r.id,
+  storeId: r.store_id,
+  reportDate: r.report_date,
+  cashSales: r.cash_sales,
+  registerBalance: r.register_balance,
+  movedToSafe: r.moved_to_safe,
+  changeFund: r.change_fund,
+  safeBalance: r.safe_balance,
+  bankDeposit: r.bank_deposit,
+  memo: r.memo ?? "",
+  createdBy: r.created_by,
+  updatedAt: new Date(r.updated_at),
 });
 
 const mapAttendance = (r: Row): Attendance => ({
@@ -404,6 +421,57 @@ class SupabaseStore implements DataStore {
     if (filter.staffId) query = query.eq("staff_id", filter.staffId);
     const { data, error } = await query;
     return must(data, error, "日報一覧").map(mapReport);
+  }
+
+  async upsertCashReport(input: CashReportInput): Promise<CashReport> {
+    const { data, error } = await this.sb
+      .from("cash_reports")
+      .upsert(
+        {
+          store_id: input.storeId,
+          report_date: input.reportDate,
+          cash_sales: input.cashSales,
+          register_balance: input.registerBalance,
+          moved_to_safe: input.movedToSafe,
+          change_fund: input.changeFund,
+          safe_balance: input.safeBalance,
+          bank_deposit: input.bankDeposit,
+          memo: input.memo,
+          created_by: input.createdBy,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "store_id,report_date" }
+      )
+      .select()
+      .single();
+    return mapCashReport(must(data, error, "レジ締め保存"));
+  }
+
+  async getCashReport(storeId: string, reportDate: string): Promise<CashReport | null> {
+    const { data, error } = await this.sb
+      .from("cash_reports")
+      .select("*")
+      .eq("store_id", storeId)
+      .eq("report_date", reportDate)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] レジ締め取得: ${error.message}`);
+    return data ? mapCashReport(data) : null;
+  }
+
+  async listCashReports(filter: {
+    storeId?: string;
+    from: string;
+    to: string;
+  }): Promise<CashReport[]> {
+    let query = this.sb
+      .from("cash_reports")
+      .select("*")
+      .gte("report_date", filter.from)
+      .lte("report_date", filter.to)
+      .order("report_date");
+    if (filter.storeId) query = query.eq("store_id", filter.storeId);
+    const { data, error } = await query;
+    return must(data, error, "レジ締め一覧").map(mapCashReport);
   }
 
   async createAttendance(input: AttendanceInput): Promise<Attendance> {

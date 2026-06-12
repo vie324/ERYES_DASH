@@ -19,13 +19,20 @@ export default async function AdminReportsPage({
   const { from, to } = monthRange(month);
 
   const db = getDataStore();
-  const [monthReports, staffList, trendReports] = await Promise.all([
+  const [monthReports, staffList, trendReports, cashReports, stores] = await Promise.all([
     db.listDailyReports({ from, to }),
     db.listStaff(),
     db.listDailyReports({ from: monthRange(addMonths(month, -5)).from, to }),
+    db.listCashReports({ from, to }),
+    db.listStores(),
   ]);
 
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
+  const storeMap = new Map(stores.map((s) => [s.id, s]));
+  const cashTotals = cashReports.reduce(
+    (acc, r) => ({ cashSales: acc.cashSales + r.cashSales, bankDeposit: acc.bankDeposit + r.bankDeposit }),
+    { cashSales: 0, bankDeposit: 0 }
+  );
   const totalKpi = summarize(monthReports);
   const byStaff = summarizeByStaff(monthReports);
   const trend = summarizeByMonth(trendReports);
@@ -92,6 +99,67 @@ export default async function AdminReportsPage({
               </table>
             </div>
           )}
+        </section>
+
+        <section className="card">
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <h2 className="font-bold text-sm text-stone-500">レジ締め・現金管理（{formatMonthJa(month)}）</h2>
+            <span className="text-xs font-bold text-stone-500">
+              現金売上計 {formatYen(cashTotals.cashSales)} ／ 銀行預入計 {formatYen(cashTotals.bankDeposit)}
+            </span>
+          </div>
+          {cashReports.length === 0 ? (
+            <p className="text-sm text-stone-400">
+              この月のレジ締め入力はまだありません（スタッフ画面の「レジ締め・現金管理」から入力できます）
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>日付</th>
+                    <th>店舗</th>
+                    <th className="!text-right">現金売上</th>
+                    <th className="!text-right">レジ残高</th>
+                    <th className="!text-right">おつり準備金</th>
+                    <th className="!text-right">金庫へ移動</th>
+                    <th className="!text-right">金庫残高</th>
+                    <th className="!text-right">銀行預入</th>
+                    <th>メモ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashReports.map((r) => {
+                    // 検算：レジ残高 ＝ おつり準備金 ＋ 金庫へ移動 とズレている行に印を付ける
+                    const diff = r.registerBalance - (r.changeFund + r.movedToSafe);
+                    return (
+                      <tr key={r.id}>
+                        <td className="font-bold">{r.reportDate.slice(5).replace("-", "/")}</td>
+                        <td>{storeMap.get(r.storeId)?.name.replace(/^EREYS\s*/, "") ?? "？"}</td>
+                        <td className="text-right font-bold">{formatYen(r.cashSales)}</td>
+                        <td className="text-right">
+                          {formatYen(r.registerBalance)}
+                          {diff !== 0 && (
+                            <span className="block text-[10px] font-bold text-red-600">
+                              差額{formatYen(Math.abs(diff))}
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-right">{formatYen(r.changeFund)}</td>
+                        <td className="text-right">{formatYen(r.movedToSafe)}</td>
+                        <td className="text-right">{formatYen(r.safeBalance)}</td>
+                        <td className="text-right">{r.bankDeposit > 0 ? formatYen(r.bankDeposit) : "−"}</td>
+                        <td className="max-w-32 truncate text-stone-500">{r.memo}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-stone-400 mt-2">
+            ※「差額」＝レジ残高が「おつり準備金＋金庫へ移動額」と合わない場合の表示です。
+          </p>
         </section>
 
         <section className="card">

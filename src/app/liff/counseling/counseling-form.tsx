@@ -26,7 +26,13 @@ declare global {
 
 type Phase = "init" | "ready" | "submitting" | "done" | "fatal";
 
-export function CounselingForm({ liffId }: { liffId: string }) {
+export function CounselingForm({
+  liffId,
+  logoSrc = "/logo.svg",
+}: {
+  liffId: string;
+  logoSrc?: string;
+}) {
   const isMock = !liffId;
   const [phase, setPhase] = useState<Phase>(isMock ? "ready" : "init");
   const [errors, setErrors] = useState<string[]>([]);
@@ -129,7 +135,7 @@ export function CounselingForm({ liffId }: { liffId: string }) {
       )}
 
       <header className="bg-white/90 backdrop-blur border-b border-brand-200 py-5 text-center">
-        <img src="/logo.svg" alt="EREYS" className="h-8 w-auto mx-auto" />
+        <img src={logoSrc} alt="EREYS" className="h-8 w-auto mx-auto" />
         <p className="text-xs font-bold tracking-[0.25em] text-brand-600 mt-1.5">
           ご来店前カウンセリング
         </p>

@@ -19,6 +19,7 @@ export type IconName =
   | "alertTriangle"
   | "checkCircle"
   | "chevronDown"
+  | "banknote"
   | "brandMark";
 
 const PATHS: Record<IconName, JSX.Element> = {
@@ -101,6 +102,13 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
+  banknote: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </>
+  ),
   brandMark: (
     <>
       <circle cx="12" cy="11.5" r="8" />
