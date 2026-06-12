@@ -12,7 +12,7 @@ export function AppHeader({ session, homeHref }: { session: Session; homeHref: s
       <div className="mx-auto max-w-3xl px-4 h-14 flex items-center justify-between gap-3">
         <Link href={homeHref} className="flex items-center gap-2.5 min-w-0">
           {/* 正式ロゴ（public/logo.png）があれば自動で優先表示される（src/lib/logo.ts） */}
-          <img src={getLogoSrc()} alt="EREYS" className="h-7 w-auto" />
+          <img src={getLogoSrc()} alt="EREYS" className="h-9 w-auto" />
           <span className="text-[10px] font-bold tracking-widest text-brand-600 border border-brand-300 rounded-full px-2 py-0.5 shrink-0">
             {session.role === "admin" ? "管理者" : "スタッフ"}
           </span>
