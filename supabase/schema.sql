@@ -65,6 +65,23 @@ create table if not exists daily_reports (
   unique (staff_id, report_date)
 );
 
+-- レジ締め・現金管理（店舗×日付でユニーク。スタッフ個人の日報とは別レコード）
+create table if not exists cash_reports (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references stores(id),
+  report_date date not null,
+  cash_sales integer not null default 0,       -- 本日の現金売上高
+  register_balance integer not null default 0, -- レジ現金残高（締め時点）
+  moved_to_safe integer not null default 0,    -- 金庫へ移動額
+  change_fund integer not null default 0,      -- レジおつり金の残高（翌日のおつり準備金）
+  safe_balance integer not null default 0,     -- 金庫現金残高
+  bank_deposit integer not null default 0,     -- 銀行への預入額
+  memo text not null default '',
+  created_by uuid references staff(id),
+  updated_at timestamptz not null default now(),
+  unique (store_id, report_date)
+);
+
 -- 勤怠打刻（圏外打刻も監査用に is_valid=false で記録。集計対象は true のみ）
 create table if not exists attendances (
   id uuid primary key default gen_random_uuid(),
@@ -156,6 +173,7 @@ create index if not exists idx_counseling_status on counseling_responses (status
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
 create index if not exists idx_reports_date on daily_reports (report_date);
 create index if not exists idx_reports_staff_date on daily_reports (staff_id, report_date);
+create index if not exists idx_cash_reports_date on cash_reports (report_date);
 create index if not exists idx_attendances_punched on attendances (punched_at);
 create index if not exists idx_attendances_staff on attendances (staff_id, punched_at);
 create index if not exists idx_appointments_scheduled on next_appointments (scheduled_at);
@@ -172,6 +190,7 @@ alter table staff enable row level security;
 alter table customers enable row level security;
 alter table counseling_responses enable row level security;
 alter table daily_reports enable row level security;
+alter table cash_reports enable row level security;
 alter table attendances enable row level security;
 alter table next_appointments enable row level security;
 alter table broadcasts enable row level security;

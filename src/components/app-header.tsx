@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
+import { getLogoSrc } from "@/lib/logo";
 import type { Session } from "@/lib/auth/session";
 
 export function AppHeader({ session, homeHref }: { session: Session; homeHref: string }) {
@@ -10,8 +11,8 @@ export function AppHeader({ session, homeHref }: { session: Session; homeHref: s
     <header className="sticky top-0 z-10 bg-brand-50/85 backdrop-blur border-b border-brand-200/70">
       <div className="mx-auto max-w-3xl px-4 h-14 flex items-center justify-between gap-3">
         <Link href={homeHref} className="flex items-center gap-2.5 min-w-0">
-          {/* ロゴ画像は public/logo.svg を差し替えるだけで反映される */}
-          <img src="/logo.svg" alt="EREYS" className="h-7 w-auto" />
+          {/* 正式ロゴ（public/logo.png）があれば自動で優先表示される（src/lib/logo.ts） */}
+          <img src={getLogoSrc()} alt="EREYS" className="h-9 w-auto" />
           <span className="text-[10px] font-bold tracking-widest text-brand-600 border border-brand-300 rounded-full px-2 py-0.5 shrink-0">
             {session.role === "admin" ? "管理者" : "スタッフ"}
           </span>

@@ -65,6 +65,35 @@ export interface DailyReport {
   memo: string;
 }
 
+/** レジ締め・現金管理（店舗ごと・1日1件。スタッフ個人の日報とは別レコード） */
+export interface CashReport {
+  id: string;
+  storeId: string;
+  reportDate: string; // "YYYY-MM-DD"（JST）
+  cashSales: number; // 本日の現金売上高
+  registerBalance: number; // レジ現金残高（締め時点で数えた額）
+  movedToSafe: number; // 金庫へ移動額
+  changeFund: number; // レジおつり金の残高（翌日のおつり準備金）
+  safeBalance: number; // 金庫現金残高
+  bankDeposit: number; // 銀行への預入額
+  memo: string;
+  createdBy: string; // 入力したスタッフ
+  updatedAt: Date;
+}
+
+export interface CashReportInput {
+  storeId: string;
+  reportDate: string;
+  cashSales: number;
+  registerBalance: number;
+  movedToSafe: number;
+  changeFund: number;
+  safeBalance: number;
+  bankDeposit: number;
+  memo: string;
+  createdBy: string;
+}
+
 export interface Attendance {
   id: string;
   staffId: string;
@@ -217,6 +246,11 @@ export interface DataStore {
   getDailyReport(staffId: string, reportDate: string): Promise<DailyReport | null>;
   /** from〜to（両端含む, "YYYY-MM-DD"）の日報。staffId指定で絞り込み */
   listDailyReports(filter: { staffId?: string; from: string; to: string }): Promise<DailyReport[]>;
+
+  // レジ締め・現金管理（店舗×日付でユニーク。再保存は上書き）
+  upsertCashReport(input: CashReportInput): Promise<CashReport>;
+  getCashReport(storeId: string, reportDate: string): Promise<CashReport | null>;
+  listCashReports(filter: { storeId?: string; from: string; to: string }): Promise<CashReport[]>;
 
   // 勤怠
   createAttendance(input: AttendanceInput): Promise<Attendance>;
