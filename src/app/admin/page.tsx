@@ -131,7 +131,15 @@ export default async function AdminHomePage() {
           description="店舗・スタッフ・勤怠運用の設定" />
       </div>
 
-      <p className="mt-6 text-center">
+      <Link
+        href="/admin/help"
+        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
+      >
+        <Icon name="help" className="w-4 h-4" />
+        使い方ガイド（運用の流れ・各機能の説明）
+      </Link>
+
+      <p className="mt-2 text-center">
         <Link href="/staff" className="text-sm font-bold text-brand-700 underline">
           スタッフ画面へ（日報入力・打刻はこちら）
         </Link>

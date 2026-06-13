@@ -4,6 +4,7 @@ import { getDataStore } from "@/lib/data";
 import { formatDateJa, todayJst } from "@/lib/date";
 import { currentTargetMonth, isRequestEditable } from "@/lib/shift/period";
 import { BigMenuLink } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
 
 // スタッフのホーム：迷わないよう「やること」を大きなボタンだけにする
@@ -84,8 +85,16 @@ export default async function StaffHomePage() {
         />
       </div>
 
+      <Link
+        href="/staff/help"
+        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
+      >
+        <Icon name="help" className="w-4 h-4" />
+        使い方ガイド（困ったときはこちら）
+      </Link>
+
       {session.role === "admin" && (
-        <p className="mt-6 text-center">
+        <p className="mt-2 text-center">
           <Link href="/admin" className="text-sm font-bold text-brand-700 underline">
             管理者画面へ
           </Link>
