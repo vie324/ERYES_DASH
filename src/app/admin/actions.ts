@@ -132,6 +132,23 @@ export async function createStoreAction(formData: FormData): Promise<void> {
   redirect("/admin/settings?saved=store");
 }
 
+export async function deleteStoreAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (formData.get("confirm") !== "on") {
+    redirect(`/admin/settings?msg=${encodeURIComponent("削除するには確認チェックを入れてください")}&t=error`);
+  }
+  let errorMsg = "";
+  try {
+    await getDataStore().deleteStore(id);
+  } catch (e) {
+    errorMsg = e instanceof Error ? e.message : "削除に失敗しました";
+  }
+  revalidatePath("/admin/settings");
+  if (errorMsg) redirect(`/admin/settings?msg=${encodeURIComponent(errorMsg)}&t=error`);
+  redirect(`/admin/settings?msg=${encodeURIComponent("店舗を削除しました")}&t=ok`);
+}
+
 // ---- マスタ設定：スタッフ ----
 
 export async function createStaffAction(formData: FormData): Promise<void> {
@@ -187,4 +204,24 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=staff");
+}
+
+export async function deleteStaffAction(formData: FormData): Promise<void> {
+  const session = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (id === session.staffId) {
+    redirect(`/admin/settings?msg=${encodeURIComponent("自分自身は削除できません")}&t=error`);
+  }
+  if (formData.get("confirm") !== "on") {
+    redirect(`/admin/settings?msg=${encodeURIComponent("削除するには確認チェックを入れてください")}&t=error`);
+  }
+  let errorMsg = "";
+  try {
+    await getDataStore().deleteStaff(id);
+  } catch (e) {
+    errorMsg = e instanceof Error ? e.message : "削除に失敗しました";
+  }
+  revalidatePath("/admin/settings");
+  if (errorMsg) redirect(`/admin/settings?msg=${encodeURIComponent(errorMsg)}&t=error`);
+  redirect(`/admin/settings?msg=${encodeURIComponent("スタッフを削除しました")}&t=ok`);
 }

@@ -200,16 +200,20 @@ alter table shift_requests enable row level security;
 alter table staff_available_stores enable row level security;
 alter table shift_assignments enable row level security;
 
--- ---- 初期データ ----
--- TODO: 店舗名・住所・緯度経度は仮値（3店舗）。正式な値に書き換えてから実行する。
---       最初の1行目が「本店」となり、LINEリマインドの店名などに使われる。
-insert into stores (name, address, lat, lng, gps_radius_m, attendance_enabled) values
-  ('EREYS 渋谷本店', '東京都渋谷区道玄坂1-2-3（仮）', 35.658034, 139.701636, 100, true),
-  ('EREYS 表参道店', '東京都港区北青山3-4-5（仮）', 35.665498, 139.712135, 100, true),
-  ('EREYS 恵比寿店', '東京都渋谷区恵比寿1-6-7（仮）', 35.646691, 139.710106, 100, true);
+-- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
+-- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。
+--       店舗を1件でも登録済みの場合、この insert はスキップされます（重複防止）。
+insert into stores (name, address, lat, lng, gps_radius_m, attendance_enabled)
+select v.name, v.address, v.lat, v.lng, v.gps_radius_m, v.attendance_enabled
+from (values
+  ('EREYS 自由が丘店', '東京都目黒区自由が丘1-14-14', 35.608614, 139.670152, 100, true),
+  ('ENi 自由が丘店',   '東京都目黒区自由が丘1-14-14', 35.608614, 139.670152, 100, true)
+) as v(name, address, lat, lng, gps_radius_m, attendance_enabled)
+where not exists (select 1 from stores);
 
 -- シフトルールの初期値（連勤上限5日・各店舗2名・締切は前月25日）
-insert into shift_rules (id) values (1);
+insert into shift_rules (id) values (1)
+on conflict (id) do nothing;
 
 -- 初期管理者アカウント
 --   ログインID: admin ／ パスワード: admin1234
@@ -224,5 +228,6 @@ select
   'admin',
   20
 from stores
-where name = 'EREYS 渋谷本店'
-limit 1;
+order by created_at, name
+limit 1
+on conflict (login_id) do nothing;

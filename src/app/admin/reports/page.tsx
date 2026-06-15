@@ -11,12 +11,18 @@ import { EmptyState, MonthNav, PageHeader } from "@/components/ui";
 export default async function AdminReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; staff?: string }>;
+  searchParams: Promise<{ month?: string; staff?: string; saved?: string }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
   const { from, to } = monthRange(month);
+  const savedMsg =
+    params.saved === "report"
+      ? "日報を修正しました"
+      : params.saved === "report_deleted"
+        ? "日報を削除しました"
+        : "";
 
   const db = getDataStore();
   const [monthReports, staffList, trendReports, cashReports, stores] = await Promise.all([
@@ -47,6 +53,11 @@ export default async function AdminReportsPage({
   return (
     <div>
       <PageHeader title="成績・日報" backHref="/admin" />
+      {savedMsg && (
+        <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
+          {savedMsg}
+        </p>
+      )}
       <MonthNav
         month={month}
         monthLabel={formatMonthJa(month)}
@@ -205,6 +216,7 @@ export default async function AdminReportsPage({
                     <th className="!text-right">物販</th>
                     <th className="!text-right">合計</th>
                     <th>メモ</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,6 +234,14 @@ export default async function AdminReportsPage({
                         {formatYen(r.serviceSales + r.optionSales + r.retailSales)}
                       </td>
                       <td className="max-w-40 truncate text-stone-500">{r.memo}</td>
+                      <td>
+                        <Link
+                          href={`/admin/reports/${r.id}?month=${month}`}
+                          className="text-xs font-bold text-brand-700 underline whitespace-nowrap"
+                        >
+                          修正
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

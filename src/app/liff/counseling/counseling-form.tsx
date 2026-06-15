@@ -6,7 +6,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { COUNSELING_ITEMS, type CounselingItem } from "@/lib/counseling/items";
+import { COUNSELING_ITEMS, MENU_KEY, visibleItems, type CounselingItem } from "@/lib/counseling/items";
 import { Icon } from "@/components/icons";
 
 // LIFF SDK（CDN読み込み）の最小型定義
@@ -37,6 +37,7 @@ export function CounselingForm({
   const [phase, setPhase] = useState<Phase>(isMock ? "ready" : "init");
   const [errors, setErrors] = useState<string[]>([]);
   const [fullName, setFullName] = useState("");
+  const [menus, setMenus] = useState<string[]>([]); // 選択中のメニュー（セクションの表示切替に使う）
   const [mockUserId, setMockUserId] = useState("mock-user-1");
   const [inLineApp, setInLineApp] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
@@ -194,13 +195,27 @@ export function CounselingForm({
               </div>
             )}
 
-            {COUNSELING_ITEMS.map((item) => (
-              <FormField
-                key={item.key}
-                item={item}
-                fullName={fullName}
-                onFullNameChange={setFullName}
-              />
+            {groupBySection(visibleItems(menus)).map((group) => (
+              <section key={group.section} className="space-y-4">
+                <h2 className="font-display text-base font-bold text-ink-900 flex items-center gap-2 pt-1">
+                  <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
+                  {group.section}
+                </h2>
+                {group.items.map((item) => (
+                  <FormField
+                    key={item.key}
+                    item={item}
+                    fullName={fullName}
+                    onFullNameChange={setFullName}
+                    menus={menus}
+                    onToggleMenu={(opt) =>
+                      setMenus((prev) =>
+                        prev.includes(opt) ? prev.filter((m) => m !== opt) : [...prev, opt]
+                      )
+                    }
+                  />
+                ))}
+              </section>
             ))}
 
             <button type="submit" disabled={phase === "submitting"} className="btn-primary w-full text-lg">
@@ -213,14 +228,32 @@ export function CounselingForm({
   );
 }
 
+/** 表示順を保ったままセクションごとにまとめる */
+function groupBySection(items: CounselingItem[]): { section: string; items: CounselingItem[] }[] {
+  const groups: { section: string; items: CounselingItem[] }[] = [];
+  for (const item of items) {
+    let g = groups.find((x) => x.section === item.section);
+    if (!g) {
+      g = { section: item.section, items: [] };
+      groups.push(g);
+    }
+    g.items.push(item);
+  }
+  return groups;
+}
+
 function FormField({
   item,
   fullName,
   onFullNameChange,
+  menus,
+  onToggleMenu,
 }: {
   item: CounselingItem;
   fullName: string;
   onFullNameChange: (v: string) => void;
+  menus: string[];
+  onToggleMenu: (opt: string) => void;
 }) {
   const requiredMark = item.required && (
     <span className="text-red-500 text-xs font-bold ml-1">必須</span>
@@ -274,20 +307,27 @@ function FormField({
 
       {item.type === "checkbox" && (
         <div className="space-y-2">
-          {item.options?.map((opt) => (
-            <label
-              key={opt}
-              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
-            >
-              <input
-                type="checkbox"
-                name={item.key}
-                value={opt}
-                className="h-5 w-5 accent-brand-500 shrink-0"
-              />
-              {opt}
-            </label>
-          ))}
+          {item.options?.map((opt) => {
+            // 「ご希望メニュー」は表示切替に使うため制御コンポーネントにする
+            const isMenu = item.key === MENU_KEY;
+            return (
+              <label
+                key={opt}
+                className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
+              >
+                <input
+                  type="checkbox"
+                  name={item.key}
+                  value={opt}
+                  {...(isMenu
+                    ? { checked: menus.includes(opt), onChange: () => onToggleMenu(opt) }
+                    : {})}
+                  className="h-5 w-5 accent-brand-500 shrink-0"
+                />
+                {opt}
+              </label>
+            );
+          })}
         </div>
       )}
 

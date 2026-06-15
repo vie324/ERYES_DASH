@@ -155,17 +155,23 @@ function seed(): MockDb {
       id: "cr-1",
       customerId: "cust-1",
       answers: {
+        menu: ["まつげエクステ"],
         full_name: "高橋 ゆい",
         furigana: "タカハシ ユイ",
         birthday: "1995-04-12",
+        gender: "女性",
         phone: "090-1111-2222",
-        visit_reason: "ホットペッパービューティー",
-        concerns: ["まつ毛が下がっている", "左右差が気になる"],
+        know_source: ["ホットペッパービューティー"],
         allergy: "なし",
-        contact_lens: "ソフト",
-        experience: "1年以内にあり",
         pregnant: "いいえ",
-        desired_image: "ナチュラルに長さを出したい",
+        contact_lens: "ソフト",
+        eye_sensitivity: "普通",
+        lash_ext_experience: "はい（3回目以上）",
+        lash_perm_experience: "いいえ",
+        eye_surgery: ["ない"],
+        patch_test: "いいえ",
+        bridal: "いいえ",
+        lash_image_ext: ["ナチュラル", "たれ目"],
         remarks: "",
         agreement: true,
       },
@@ -178,17 +184,21 @@ function seed(): MockDb {
       id: "cr-2",
       customerId: "cust-3",
       answers: {
+        menu: ["眉（アイブロウ）"],
         full_name: "伊藤 まな",
         furigana: "イトウ マナ",
         birthday: "2000-09-01",
+        gender: "女性",
         phone: "080-3333-4444",
-        visit_reason: "Instagram",
-        concerns: ["眉の形が決まらない"],
+        know_source: ["Instagram"],
         allergy: "あり",
-        contact_lens: "使用していない",
-        experience: "初めて",
+        allergy_detail: ["金属"],
         pregnant: "いいえ",
-        desired_image: "平行眉にしたい",
+        skin_type: "敏感",
+        skin_trouble: "なし",
+        wax_experience: "なし",
+        brow_self_care: ["毛抜き", "カット"],
+        brow_image: "平行眉にしたい。左右差が気になる。",
         remarks: "金属アレルギーがあります",
         agreement: true,
       },
@@ -476,6 +486,21 @@ class MockStore implements DataStore {
     return { ...found };
   }
 
+  async deleteStore(id: string): Promise<void> {
+    if (!this.db.stores.some((s) => s.id === id)) throw new Error("店舗が見つかりません");
+    if (this.db.stores.length <= 1) throw new Error("最後の店舗は削除できません");
+    const referenced =
+      this.db.staff.some((s) => s.storeId === id) ||
+      this.db.cashReports.some((c) => c.storeId === id) ||
+      this.db.attendances.some((a) => a.storeId === id) ||
+      this.db.shiftAssignments.some((a) => a.storeId === id) ||
+      this.db.shiftAvailableStores.some((a) => a.storeId === id);
+    if (referenced) {
+      throw new Error("この店舗に紐づくデータ（スタッフ・打刻・現金・シフト等）があるため削除できません");
+    }
+    this.db.stores = this.db.stores.filter((s) => s.id !== id);
+  }
+
   async listStaff(): Promise<Staff[]> {
     return this.db.staff.map(({ passwordHash: _ph, ...s }) => s);
   }
@@ -522,6 +547,27 @@ class MockStore implements DataStore {
     Object.assign(found, patch);
     const { passwordHash: _ph, ...s } = found;
     return s;
+  }
+
+  async deleteStaff(id: string): Promise<void> {
+    if (!this.db.staff.some((s) => s.id === id)) throw new Error("スタッフが見つかりません");
+    const referenced =
+      this.db.reports.some((r) => r.staffId === id) ||
+      this.db.attendances.some((a) => a.staffId === id) ||
+      this.db.counseling.some((c) => c.confirmedBy === id) ||
+      this.db.appointments.some((a) => a.staffId === id) ||
+      this.db.broadcasts.some((b) => b.sentBy === id) ||
+      this.db.cashReports.some((c) => c.createdBy === id) ||
+      this.db.shiftAssignments.some((a) => a.staffId === id) ||
+      this.db.shiftRequestMonths.some((m) => m.staffId === id) ||
+      this.db.shiftRequests.some((r) => r.staffId === id) ||
+      this.db.shiftAvailableStores.some((a) => a.staffId === id);
+    if (referenced) {
+      throw new Error(
+        "このスタッフには日報・打刻・シフト等の記録があるため削除できません。代わりに「無効」にしてください（記録は残ります）"
+      );
+    }
+    this.db.staff = this.db.staff.filter((s) => s.id !== id);
   }
 
   async listCustomers(search?: string): Promise<Customer[]> {
@@ -616,6 +662,14 @@ class MockStore implements DataStore {
     return (
       this.db.reports.find((r) => r.staffId === staffId && r.reportDate === reportDate) ?? null
     );
+  }
+
+  async getDailyReportById(id: string): Promise<DailyReport | null> {
+    return this.db.reports.find((r) => r.id === id) ?? null;
+  }
+
+  async deleteDailyReport(id: string): Promise<void> {
+    this.db.reports = this.db.reports.filter((r) => r.id !== id);
   }
 
   async listDailyReports(filter: {

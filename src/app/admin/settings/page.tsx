@@ -5,6 +5,8 @@ import { Icon } from "@/components/icons";
 import {
   createStaffAction,
   createStoreAction,
+  deleteStaffAction,
+  deleteStoreAction,
   updateStaffAction,
   updateStoreAction,
 } from "../actions";
@@ -22,12 +24,15 @@ const FLASH_MESSAGES: Record<string, { type: "ok" | "error"; text: string }> = {
 export default async function AdminSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; msg?: string; t?: string }>;
 }) {
   const session = await requireAdmin();
   const params = await searchParams;
   const flashKey = params.saved ? `saved=${params.saved}` : params.error ? `error=${params.error}` : "";
-  const flash = FLASH_MESSAGES[flashKey];
+  // 固定メッセージ（FLASH_MESSAGES）と、削除など動的メッセージ（msg/t）の両対応
+  const flash = params.msg
+    ? { type: params.t === "error" ? ("error" as const) : ("ok" as const), text: params.msg }
+    : FLASH_MESSAGES[flashKey];
 
   const db = getDataStore();
   const [stores, staffList] = await Promise.all([db.listStores(), db.listStaff()]);
@@ -111,6 +116,19 @@ export default async function AdminSettingsPage({
                   この店舗で勤怠（GPS打刻）を運用する
                 </label>
                 <button type="submit" className="btn-secondary w-full">この内容で更新</button>
+              </form>
+
+              {/* 店舗の削除（紐づくデータが無い場合のみ成功。最後の1店舗は不可） */}
+              <form action={deleteStoreAction} className="mt-3 pt-3 border-t border-red-100 space-y-2">
+                <input type="hidden" name="id" value={store.id} />
+                <label className="flex items-center gap-2 text-xs font-bold text-red-600">
+                  <input type="checkbox" name="confirm" className="h-4 w-4 accent-red-500" />
+                  この店舗を削除する（元に戻せません）
+                </label>
+                <button type="submit" className="btn-danger w-full">店舗を削除</button>
+                <p className="text-[11px] text-stone-400">
+                  ※ スタッフ・打刻・現金・シフト等の記録が紐づく店舗は削除できません（先に付け替え・無効化が必要）。
+                </p>
               </form>
             </details>
           ))}
@@ -204,6 +222,21 @@ export default async function AdminSettingsPage({
                 )}
                 <button type="submit" className="btn-secondary w-full">この内容で更新</button>
               </form>
+
+              {/* スタッフの削除（記録が無い場合のみ。通常は「無効」を推奨） */}
+              {s.id !== session.staffId && (
+                <form action={deleteStaffAction} className="mt-3 pt-3 border-t border-red-100 space-y-2">
+                  <input type="hidden" name="id" value={s.id} />
+                  <label className="flex items-center gap-2 text-xs font-bold text-red-600">
+                    <input type="checkbox" name="confirm" className="h-4 w-4 accent-red-500" />
+                    このスタッフを削除する（元に戻せません）
+                  </label>
+                  <button type="submit" className="btn-danger w-full">スタッフを削除</button>
+                  <p className="text-[11px] text-stone-400">
+                    ※ 日報・打刻・シフト等の記録があるスタッフは削除できません。退職時は上の「有効」をオフ（記録は残ります）。
+                  </p>
+                </form>
+              )}
             </details>
           ))}
         </div>
