@@ -476,6 +476,21 @@ class MockStore implements DataStore {
     return { ...found };
   }
 
+  async deleteStore(id: string): Promise<void> {
+    if (!this.db.stores.some((s) => s.id === id)) throw new Error("店舗が見つかりません");
+    if (this.db.stores.length <= 1) throw new Error("最後の店舗は削除できません");
+    const referenced =
+      this.db.staff.some((s) => s.storeId === id) ||
+      this.db.cashReports.some((c) => c.storeId === id) ||
+      this.db.attendances.some((a) => a.storeId === id) ||
+      this.db.shiftAssignments.some((a) => a.storeId === id) ||
+      this.db.shiftAvailableStores.some((a) => a.storeId === id);
+    if (referenced) {
+      throw new Error("この店舗に紐づくデータ（スタッフ・打刻・現金・シフト等）があるため削除できません");
+    }
+    this.db.stores = this.db.stores.filter((s) => s.id !== id);
+  }
+
   async listStaff(): Promise<Staff[]> {
     return this.db.staff.map(({ passwordHash: _ph, ...s }) => s);
   }
@@ -522,6 +537,27 @@ class MockStore implements DataStore {
     Object.assign(found, patch);
     const { passwordHash: _ph, ...s } = found;
     return s;
+  }
+
+  async deleteStaff(id: string): Promise<void> {
+    if (!this.db.staff.some((s) => s.id === id)) throw new Error("スタッフが見つかりません");
+    const referenced =
+      this.db.reports.some((r) => r.staffId === id) ||
+      this.db.attendances.some((a) => a.staffId === id) ||
+      this.db.counseling.some((c) => c.confirmedBy === id) ||
+      this.db.appointments.some((a) => a.staffId === id) ||
+      this.db.broadcasts.some((b) => b.sentBy === id) ||
+      this.db.cashReports.some((c) => c.createdBy === id) ||
+      this.db.shiftAssignments.some((a) => a.staffId === id) ||
+      this.db.shiftRequestMonths.some((m) => m.staffId === id) ||
+      this.db.shiftRequests.some((r) => r.staffId === id) ||
+      this.db.shiftAvailableStores.some((a) => a.staffId === id);
+    if (referenced) {
+      throw new Error(
+        "このスタッフには日報・打刻・シフト等の記録があるため削除できません。代わりに「無効」にしてください（記録は残ります）"
+      );
+    }
+    this.db.staff = this.db.staff.filter((s) => s.id !== id);
   }
 
   async listCustomers(search?: string): Promise<Customer[]> {
@@ -616,6 +652,14 @@ class MockStore implements DataStore {
     return (
       this.db.reports.find((r) => r.staffId === staffId && r.reportDate === reportDate) ?? null
     );
+  }
+
+  async getDailyReportById(id: string): Promise<DailyReport | null> {
+    return this.db.reports.find((r) => r.id === id) ?? null;
+  }
+
+  async deleteDailyReport(id: string): Promise<void> {
+    this.db.reports = this.db.reports.filter((r) => r.id !== id);
   }
 
   async listDailyReports(filter: {

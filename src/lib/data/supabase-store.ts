@@ -225,6 +225,16 @@ class SupabaseStore implements DataStore {
     return mapStore(must(data, error, "店舗更新"));
   }
 
+  async deleteStore(id: string): Promise<void> {
+    const { count } = await this.sb.from("stores").select("*", { count: "exact", head: true });
+    if ((count ?? 0) <= 1) throw new Error("最後の店舗は削除できません");
+    const { error } = await this.sb.from("stores").delete().eq("id", id);
+    if (error?.code === "23503") {
+      throw new Error("この店舗に紐づくデータ（スタッフ・打刻・現金・シフト等）があるため削除できません");
+    }
+    if (error) throw new Error(`[supabase] 店舗削除: ${error.message}`);
+  }
+
   async listStaff(): Promise<Staff[]> {
     const { data, error } = await this.sb.from("staff").select("*").order("created_at");
     return must(data, error, "スタッフ一覧").map(mapStaff);
@@ -282,6 +292,16 @@ class SupabaseStore implements DataStore {
       .select()
       .single();
     return mapStaff(must(data, error, "スタッフ更新"));
+  }
+
+  async deleteStaff(id: string): Promise<void> {
+    const { error } = await this.sb.from("staff").delete().eq("id", id);
+    if (error?.code === "23503") {
+      throw new Error(
+        "このスタッフには日報・打刻・シフト等の記録があるため削除できません。代わりに「無効」にしてください（記録は残ります）"
+      );
+    }
+    if (error) throw new Error(`[supabase] スタッフ削除: ${error.message}`);
   }
 
   async listCustomers(search?: string): Promise<Customer[]> {
@@ -405,6 +425,21 @@ class SupabaseStore implements DataStore {
       .maybeSingle();
     if (error) throw new Error(`[supabase] 日報取得: ${error.message}`);
     return data ? mapReport(data) : null;
+  }
+
+  async getDailyReportById(id: string): Promise<DailyReport | null> {
+    const { data, error } = await this.sb
+      .from("daily_reports")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 日報取得: ${error.message}`);
+    return data ? mapReport(data) : null;
+  }
+
+  async deleteDailyReport(id: string): Promise<void> {
+    const { error } = await this.sb.from("daily_reports").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 日報削除: ${error.message}`);
   }
 
   async listDailyReports(filter: {

@@ -209,6 +209,8 @@ export interface DataStore {
   listStores(): Promise<Store[]>;
   createStore(input: { name: string; address: string }): Promise<Store>;
   updateStoreById(id: string, patch: Partial<Omit<Store, "id">>): Promise<Store>;
+  /** 店舗を削除。関連データ（スタッフ・打刻・現金等）がある場合はエラー */
+  deleteStore(id: string): Promise<void>;
 
   // スタッフ
   listStaff(): Promise<Staff[]>;
@@ -221,6 +223,8 @@ export interface DataStore {
       passwordHash?: string;
     }
   ): Promise<Staff>;
+  /** スタッフを削除。関連データ（日報・打刻等）がある場合はエラー */
+  deleteStaff(id: string): Promise<void>;
 
   // 顧客
   listCustomers(search?: string): Promise<Customer[]>;
@@ -244,8 +248,11 @@ export interface DataStore {
   // 日報
   upsertDailyReport(input: DailyReportInput): Promise<DailyReport>;
   getDailyReport(staffId: string, reportDate: string): Promise<DailyReport | null>;
+  getDailyReportById(id: string): Promise<DailyReport | null>;
   /** from〜to（両端含む, "YYYY-MM-DD"）の日報。staffId指定で絞り込み */
   listDailyReports(filter: { staffId?: string; from: string; to: string }): Promise<DailyReport[]>;
+  /** 日報を削除（管理者の修正・削除用） */
+  deleteDailyReport(id: string): Promise<void>;
 
   // レジ締め・現金管理（店舗×日付でユニーク。再保存は上書き）
   upsertCashReport(input: CashReportInput): Promise<CashReport>;
