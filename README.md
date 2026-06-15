@@ -194,6 +194,8 @@ npm run hash-password -- '新しいパスワード'
 
 ## 6. デプロイ手順（Vercel）
 
+> 📋 **デモ表示から実データ運用へ切り替える完全な手順は [`docs/本番移行手順.md`](docs/本番移行手順.md) にまとめています**（GitHubマージ→Supabase→環境変数→初期設定→動作確認チェックリスト）。以下は概要です。
+
 1. このリポジトリをGitHubへpush
 2. https://vercel.com → Add New → Project → リポジトリをインポート（Framework：Next.js が自動検出される）
 3. Settings → Environment Variables に「2. 環境変数一覧」の値をすべて設定
