@@ -20,6 +20,8 @@ export type IconName =
   | "checkCircle"
   | "chevronDown"
   | "banknote"
+  | "help"
+  | "book"
   | "brandMark";
 
 const PATHS: Record<IconName, JSX.Element> = {
@@ -107,6 +109,19 @@ const PATHS: Record<IconName, JSX.Element> = {
       <rect x="2" y="6" width="20" height="12" rx="2" />
       <circle cx="12" cy="12" r="2.5" />
       <path d="M6 12h.01M18 12h.01" />
+    </>
+  ),
+  help: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
     </>
   ),
   brandMark: (
