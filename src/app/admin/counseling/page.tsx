@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateTimeJa } from "@/lib/date";
 import { CounselingStatusBadge, riskFlags } from "@/components/counseling-detail";
+import { CounselingUrlCard } from "@/components/counseling-url-card";
 import { EmptyState, PageHeader } from "@/components/ui";
 
 const FILTERS = [
@@ -34,6 +35,8 @@ export default async function AdminCounselingPage({
   return (
     <div>
       <PageHeader title="カウンセリング" backHref="/admin" />
+
+      <CounselingUrlCard />
 
       {params.confirmed && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
