@@ -114,7 +114,11 @@ export async function getLineUserIdFromAccessToken(accessToken: string): Promise
     );
     if (!verifyRes.ok) return null;
     const verify = (await verifyRes.json()) as { client_id?: string; expires_in?: number };
-    if (env.lineChannelId && verify.client_id !== env.lineChannelId) return null;
+    // LIFFのアクセストークンは「LINEログインチャネル」が発行するため、その client_id は
+    // LIFF ID の先頭（ハイフン前）＝ログインチャネルID。Messaging APIのチャネルIDとは別物。
+    // LIFF ID から期待値を導き、未設定時のみ Messaging API のチャネルIDにフォールバックする。
+    const expectedChannelId = env.liffId ? env.liffId.split("-")[0] : env.lineChannelId;
+    if (expectedChannelId && verify.client_id !== expectedChannelId) return null;
     if ((verify.expires_in ?? 0) <= 0) return null;
 
     // 2. プロフィールからuserIdを取得
