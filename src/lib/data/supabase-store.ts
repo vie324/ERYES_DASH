@@ -81,6 +81,9 @@ const mapReport = (r: Row): DailyReport => ({
   optionSales: r.option_sales,
   retailSales: r.retail_sales,
   memo: r.memo ?? "",
+  goodPoint: r.good_point ?? "",
+  improvement: r.improvement ?? "",
+  message: r.message ?? "",
 });
 
 const mapCashReport = (r: Row): CashReport => ({
@@ -408,6 +411,9 @@ class SupabaseStore implements DataStore {
           option_sales: input.optionSales,
           retail_sales: input.retailSales,
           memo: input.memo,
+          good_point: input.goodPoint,
+          improvement: input.improvement,
+          message: input.message,
         },
         { onConflict: "staff_id,report_date" }
       )

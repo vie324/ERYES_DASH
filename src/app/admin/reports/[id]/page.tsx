@@ -104,6 +104,46 @@ export default async function AdminReportEditPage({
           />
         </div>
 
+        <div className="card space-y-3">
+          <p className="font-bold text-sm text-stone-500">今日のふりかえり</p>
+          <div>
+            <label className="label" htmlFor="good_point">
+              今日お客様やスタッフに喜んでいただけたこと
+            </label>
+            <textarea
+              id="good_point"
+              name="good_point"
+              rows={2}
+              defaultValue={report.goodPoint}
+              className="input min-h-20"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="improvement">
+              今日の気付きや改善できそうな点
+            </label>
+            <textarea
+              id="improvement"
+              name="improvement"
+              rows={2}
+              defaultValue={report.improvement}
+              className="input min-h-20"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="message">
+              ひとことメッセージ
+            </label>
+            <textarea
+              id="message"
+              name="message"
+              rows={2}
+              defaultValue={report.message}
+              className="input min-h-20"
+            />
+          </div>
+        </div>
+
         <button type="submit" className="btn-primary w-full text-lg">
           この内容で修正を保存
         </button>

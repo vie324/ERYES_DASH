@@ -61,9 +61,17 @@ create table if not exists daily_reports (
   option_sales integer not null default 0,
   retail_sales integer not null default 0,
   memo text not null default '',
+  good_point text not null default '',   -- 今日お客様やスタッフに喜んでいただけたこと
+  improvement text not null default '',  -- 今日の気付きや改善できそうな点
+  message text not null default '',      -- ひとことメッセージ（任意）
   created_at timestamptz not null default now(),
   unique (staff_id, report_date)
 );
+
+-- 既存DBに後から列を足す場合（本番に daily_reports が既にある場合）に実行：
+--   alter table daily_reports add column if not exists good_point text not null default '';
+--   alter table daily_reports add column if not exists improvement text not null default '';
+--   alter table daily_reports add column if not exists message text not null default '';
 
 -- レジ締め・現金管理（店舗×日付でユニーク。スタッフ個人の日報とは別レコード）
 create table if not exists cash_reports (
