@@ -63,6 +63,9 @@ export interface DailyReport {
   optionSales: number;
   retailSales: number;
   memo: string;
+  goodPoint: string; // 今日お客様やスタッフに喜んでいただけたこと
+  improvement: string; // 今日の気付きや改善できそうな点
+  message: string; // ひとことメッセージ（任意）
 }
 
 /** レジ締め・現金管理（店舗ごと・1日1件。スタッフ個人の日報とは別レコード） */
@@ -179,6 +182,9 @@ export interface DailyReportInput {
   optionSales: number;
   retailSales: number;
   memo: string;
+  goodPoint: string;
+  improvement: string;
+  message: string;
 }
 
 export interface AttendanceInput {

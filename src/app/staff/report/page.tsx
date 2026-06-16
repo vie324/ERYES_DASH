@@ -122,6 +122,46 @@ export default async function ReportPage({
           />
         </div>
 
+        <div className="card space-y-3">
+          <p className="font-bold text-sm text-stone-500">今日のふりかえり（任意）</p>
+          <div>
+            <label className="label" htmlFor="good_point">
+              今日お客様やスタッフに喜んでいただけたこと
+            </label>
+            <textarea
+              id="good_point"
+              name="good_point"
+              rows={2}
+              defaultValue={existing?.goodPoint ?? ""}
+              className="input min-h-20"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="improvement">
+              今日の気付きや改善できそうな点
+            </label>
+            <textarea
+              id="improvement"
+              name="improvement"
+              rows={2}
+              defaultValue={existing?.improvement ?? ""}
+              className="input min-h-20"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="message">
+              今日も1日お疲れ様でした。ありがとうございました☺️（何か一言あれば）
+            </label>
+            <textarea
+              id="message"
+              name="message"
+              rows={2}
+              defaultValue={existing?.message ?? ""}
+              className="input min-h-20"
+            />
+          </div>
+        </div>
+
         <button type="submit" className="btn-primary w-full text-lg">
           {existing ? "上書き保存する" : "日報を保存する"}
         </button>

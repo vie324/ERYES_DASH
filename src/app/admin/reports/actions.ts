@@ -35,6 +35,9 @@ export async function updateDailyReportAction(formData: FormData): Promise<void>
     optionSales: intField(formData, "option_sales"),
     retailSales: intField(formData, "retail_sales"),
     memo: String(formData.get("memo") ?? "").slice(0, 500),
+    goodPoint: String(formData.get("good_point") ?? "").slice(0, 1000),
+    improvement: String(formData.get("improvement") ?? "").slice(0, 1000),
+    message: String(formData.get("message") ?? "").slice(0, 1000),
   });
 
   revalidatePath("/admin/reports");

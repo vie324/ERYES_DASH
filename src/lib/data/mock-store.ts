@@ -227,6 +227,9 @@ function seed(): MockDb {
       optionSales: (i % 4) * 1100,
       retailSales: i % 5 === 0 ? 3300 : 0,
       memo: i % 9 === 0 ? "リピーター様からご紹介の予約あり" : "",
+      goodPoint: i % 6 === 0 ? "目元の仕上がりをとても喜んでいただけました" : "",
+      improvement: i % 8 === 0 ? "次回は施術前の説明をもう少し丁寧に" : "",
+      message: i % 10 === 0 ? "今日もありがとうございました" : "",
     });
   };
   for (const s of ["staff-1", "staff-2"]) {
