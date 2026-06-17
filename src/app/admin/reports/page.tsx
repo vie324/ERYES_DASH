@@ -249,6 +249,57 @@ export default async function AdminReportsPage({
             </div>
           )}
         </section>
+
+        <section className="card">
+          <h2 className="font-bold text-sm text-stone-500 mb-2">
+            今日のふりかえり（スタッフの日報コメント）
+          </h2>
+          {(() => {
+            const withComments = dailyReports
+              .filter((r) => r.goodPoint || r.improvement || r.message || r.memo)
+              .sort((a, b) => b.reportDate.localeCompare(a.reportDate));
+            if (withComments.length === 0) {
+              return <p className="text-sm text-stone-400">この月のコメントはまだありません</p>;
+            }
+            return (
+              <div className="space-y-3">
+                {withComments.map((r) => (
+                  <div key={r.id} className="rounded-xl border border-brand-100 bg-brand-50/40 p-3">
+                    <p className="text-xs font-bold text-stone-500">
+                      {formatDateJa(r.reportDate)} ／ {staffMap.get(r.staffId)?.name ?? "（不明）"}
+                    </p>
+                    <dl className="mt-2 space-y-2 text-sm">
+                      {r.goodPoint && (
+                        <div>
+                          <dt className="text-xs font-bold text-brand-700">喜んでいただけたこと</dt>
+                          <dd className="whitespace-pre-wrap text-ink-700">{r.goodPoint}</dd>
+                        </div>
+                      )}
+                      {r.improvement && (
+                        <div>
+                          <dt className="text-xs font-bold text-brand-700">気付き・改善点</dt>
+                          <dd className="whitespace-pre-wrap text-ink-700">{r.improvement}</dd>
+                        </div>
+                      )}
+                      {r.message && (
+                        <div>
+                          <dt className="text-xs font-bold text-brand-700">ひとこと</dt>
+                          <dd className="whitespace-pre-wrap text-ink-700">{r.message}</dd>
+                        </div>
+                      )}
+                      {r.memo && (
+                        <div>
+                          <dt className="text-xs font-bold text-stone-400">メモ</dt>
+                          <dd className="whitespace-pre-wrap text-stone-500">{r.memo}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </section>
       </div>
     </div>
   );
