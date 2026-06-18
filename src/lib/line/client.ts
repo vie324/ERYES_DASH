@@ -105,6 +105,22 @@ export async function verifyLineSignature(rawBody: string, signature: string | n
   return expected === signature;
 }
 
+/** 友だちの表示名（ニックネーム）を取得。失敗時・モックモード時は null */
+export async function getProfileName(lineUserId: string): Promise<string | null> {
+  if (!isLineConfigured()) return null;
+  try {
+    const res = await fetch(`${LINE_API}/profile/${encodeURIComponent(lineUserId)}`, {
+      headers: { Authorization: `Bearer ${env.lineChannelAccessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { displayName?: string };
+    const name = (data.displayName ?? "").trim();
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
 /** LIFFのアクセストークンを検証してLINEユーザーIDを取得（本番モード用） */
 export async function getLineUserIdFromAccessToken(accessToken: string): Promise<string | null> {
   try {

@@ -104,7 +104,7 @@ export default async function StaffHelpPage() {
         <HelpAccordion
           icon="clipboard"
           title="カウンセリングの確認"
-          summary="ご来店前にお客様が入力した内容をチェック"
+          summary="お客様が入力したカウンセリング内容をチェック"
           href="/staff/counseling"
           steps={[
             "「本日のカウンセリング」を開くと、未確認が上に出ています。",
