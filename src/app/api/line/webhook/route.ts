@@ -1,5 +1,6 @@
 // LINE Messaging API Webhook
-// ・友だち追加（follow）→ あいさつメッセージに続けて、宛名付きで「フルネーム送信」を案内
+// ・友だち追加（follow）→ フルネーム送信を促すあいさつを返信
+//   （公式アカウントの「あいさつメッセージ」はオフ運用のため、これが友だち追加時の1通目）
 // ・テキスト受信（message）→ 未登録ならフルネームとして顧客登録、登録済みなら案内を返信
 // 氏名はチャットで受け取って登録し、続けてメニューの「カルテ入力」でカルテを記入してもらう。
 //（「カルテ入力」から先に送信された場合も api/liff/counseling 側で顧客を自動作成する）
@@ -7,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
-import { getProfileName, replyText, verifyLineSignature } from "@/lib/line/client";
+import { replyText, verifyLineSignature } from "@/lib/line/client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,23 +19,28 @@ interface LineEvent {
   message?: { type: string; text?: string };
 }
 
-// 友だち追加直後の応答（LINEの「あいさつメッセージ」のすぐ下に届く）。
-// お客様はご来店後に友だち追加されるため、「来店前」「事前に」等の表現は使わない。
-const MSG_WELCOME = (name?: string) =>
-  (name ? `${name}様\n` : "") +
-  "ご登録ありがとうございます。\n" +
-  "はじめにお客様の「フルネーム」（例：佐藤 花子）をこのトークに送信してください。\n" +
-  "その後、下のメニューの「カルテ入力」を開いて、カルテ（カウンセリングシート）のご記入をお願いいたします。";
+// 友だち追加時に最初に届くあいさつ（公式アカウントの「あいさつメッセージ」はオフ運用）。
+const MSG_WELCOME =
+  "友だち追加ありがとうございます🌸\n" +
+  "はじめに、お客様の「フルネーム」をこのトークに送信してください。\n" +
+  "（例：山田 花子）\n" +
+  "\n" +
+  "ご登録後、下記の「カルテ入力」をしていただく流れとなります。";
 
 // フルネームとして読み取れなかった場合の再依頼
 const MSG_ASK_AGAIN =
   "恐れ入ります、お名前をうまく読み取れませんでした。\n" +
-  "お客様の「フルネーム」だけを送信してください。（例：佐藤 花子）";
+  "お客様の「フルネーム」だけを送信してください。（例：山田 花子）";
 
 // 氏名登録の完了後に「カルテ入力」へ案内
 const MSG_REGISTERED = (name: string) =>
-  `${name}様、ありがとうございます。お名前を登録いたしました。\n` +
-  "続いて、下のメニューの「カルテ入力」を開いて、カルテ（カウンセリングシート）のご記入をお願いいたします。";
+  `${name}様、ありがとうございます。\n` +
+  "お名前を登録いたしました☺️\n" +
+  "\n" +
+  "続いて、下記の「カルテ入力」を開いて、カルテ（カウンセリングシート）のご記入をお願いいたします。\n" +
+  "\n" +
+  `${name}様にとって最適な施術をしていくために最初にご記載いただいております。\n` +
+  "お手数おかけしますが、どうぞよろしくお願い致します。";
 
 // 登録済みのお客様からのテキストへの定型案内
 const MSG_GUIDE =
@@ -53,11 +59,7 @@ async function handleEvent(event: LineEvent): Promise<void> {
   const userId = event.source?.userId;
 
   if (event.type === "follow" && event.replyToken) {
-    // 宛名：登録済みのお客様はカルテのお名前、新規はLINEの表示名（取得できなければ宛名なし）
-    const existing = userId ? await db.getCustomerByLineUserId(userId) : null;
-    const name =
-      existing?.fullName || (userId ? await getProfileName(userId) : null) || undefined;
-    await replyText(event.replyToken, MSG_WELCOME(name));
+    await replyText(event.replyToken, MSG_WELCOME);
     return;
   }
 
