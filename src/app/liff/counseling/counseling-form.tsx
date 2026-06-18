@@ -138,7 +138,7 @@ export function CounselingForm({
       <header className="bg-white/90 backdrop-blur border-b border-brand-200 py-5 text-center">
         <img src={logoSrc} alt="EREYS" className="h-10 w-auto mx-auto" />
         <p className="text-xs font-bold tracking-[0.25em] text-brand-600 mt-1.5">
-          ご来店前カウンセリング
+          カウンセリングシート
         </p>
       </header>
 

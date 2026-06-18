@@ -1,11 +1,13 @@
 // LINE Messaging API Webhook
-// ・友だち追加（follow）→ フルネームの送信を促す自動返信
-// ・テキスト受信（message）→ 未登録ならフルネームとして顧客登録、登録済みなら案内を返信
+// ・友だち追加（follow）→ あいさつメッセージに続けて、宛名付きで「カルテ入力」への案内を返信
+// ・テキスト受信（message）→ 「カルテ入力」へ誘導する案内を返信
+// 顧客登録は、お客様がメニューの「カルテ入力」からカルテを送信した時点で自動的に行われる
+// （氏名はカルテのお名前欄で取得するため、チャットでの氏名送信は不要）。
 // LINE未接続（モックモード）では署名検証をスキップし、curl等で動作確認できる（README参照）。
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
-import { replyText, verifyLineSignature } from "@/lib/line/client";
+import { getProfileName, replyText, verifyLineSignature } from "@/lib/line/client";
 
 export const dynamic = "force-dynamic";
 
@@ -16,64 +18,36 @@ interface LineEvent {
   message?: { type: string; text?: string };
 }
 
-const MSG_WELCOME =
-  "友だち追加ありがとうございます🌸\n" +
-  "はじめに、お客様の「フルネーム」をこのトークに送信してください。\n" +
-  "（例：山田 花子）\n\n" +
-  "ご登録後、メニューの「カウンセリング」からご来店前のご入力をお願いいたします。";
+// 友だち追加直後の応答（LINEの「あいさつメッセージ」のすぐ下に届く）。
+// お客様はご来店後に友だち追加されるため、「来店前」「事前に」等の表現は使わない。
+const MSG_WELCOME = (name?: string) =>
+  (name ? `${name}様\n` : "") +
+  "ご登録ありがとうございます。\n" +
+  "下のメニューの「カルテ入力」を開いて、カルテ（カウンセリングシート）のご記入をお願いいたします。\n" +
+  "ご来店時に、お手隙のタイミングでご入力いただけますと幸いです。";
 
-const MSG_ASK_AGAIN =
-  "恐れ入ります、お名前をうまく読み取れませんでした🙇\n" +
-  "お客様の「フルネーム」だけを送信してください。（例：山田 花子）";
-
-const MSG_REGISTERED = (name: string) =>
-  `${name} 様、ご登録ありがとうございます✨\n` +
-  "メニューの「カウンセリング」を開いて、ご来店前のご入力をお願いいたします。\n" +
-  "当日お会いできるのを楽しみにしております🌸";
-
+// テキストメッセージへの定型案内
 const MSG_GUIDE =
-  "メッセージありがとうございます🌸\n" +
-  "カウンセリングのご入力はメニューの「カウンセリング」からお願いいたします。\n" +
-  "ご予約の変更・キャンセルはお電話またはホットペッパービューティーからお願いいたします。";
-
-/** フルネームとして妥当かの簡易チェック（30文字以内・URLや改行を含まない） */
-function looksLikeName(text: string): boolean {
-  const t = text.trim();
-  return t.length >= 1 && t.length <= 30 && !/https?:\/\//.test(t) && !t.includes("\n");
-}
+  "メッセージありがとうございます。\n" +
+  "カルテのご記入は、下のメニューの「カルテ入力」からお願いいたします。\n" +
+  "ご予約の変更・キャンセルは、お電話またはホットペッパービューティーより承っております。";
 
 async function handleEvent(event: LineEvent): Promise<void> {
   const db = getDataStore();
   const userId = event.source?.userId;
 
   if (event.type === "follow" && event.replyToken) {
-    // 既存顧客の再追加（再フォロー）の場合は名前入力を求めない
+    // 宛名：登録済みのお客様はカルテのお名前、新規はLINEの表示名（取得できなければ宛名なし）
     const existing = userId ? await db.getCustomerByLineUserId(userId) : null;
-    await replyText(
-      event.replyToken,
-      existing ? MSG_REGISTERED(existing.fullName) : MSG_WELCOME
-    );
+    const name =
+      existing?.fullName || (userId ? await getProfileName(userId) : null) || undefined;
+    await replyText(event.replyToken, MSG_WELCOME(name));
     return;
   }
 
-  if (event.type === "message" && event.message?.type === "text" && event.replyToken && userId) {
-    const text = event.message.text ?? "";
-    const existing = await db.getCustomerByLineUserId(userId);
-
-    if (existing) {
-      // TODO: 登録済み顧客からの全メッセージに定型文を返している。
-      //       運用開始後にうるさいようなら自動応答をオフにする（このreplyを削除するだけ）。
-      await replyText(event.replyToken, MSG_GUIDE);
-      return;
-    }
-
-    if (!looksLikeName(text)) {
-      await replyText(event.replyToken, MSG_ASK_AGAIN);
-      return;
-    }
-
-    const customer = await db.createCustomer({ lineUserId: userId, fullName: text.trim() });
-    await replyText(event.replyToken, MSG_REGISTERED(customer.fullName));
+  if (event.type === "message" && event.message?.type === "text" && event.replyToken) {
+    // 氏名はメニューの「カルテ入力」で登録するため、ここでは案内のみを返す。
+    await replyText(event.replyToken, MSG_GUIDE);
     return;
   }
 
