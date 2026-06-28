@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 // カウンセリング回答の表示（スタッフ画面・管理者画面で共用）
 
 import { COUNSELING_ITEMS, formatAnswer, visibleItems } from "@/lib/counseling/items";
@@ -13,7 +14,7 @@ export function riskFlags(answers: Record<string, unknown>): string[] {
   if (typeof answers.pregnant === "string" && answers.pregnant.startsWith("はい")) {
     flags.push("妊娠中・可能性・生理中の申告あり");
   }
-  if (answers.agreement !== true) flags.push("注意事項に未同意");
+  if (answers.consent_agreed !== true) flags.push("注意事項・同意書が未署名");
   return flags;
 }
 
@@ -40,7 +41,18 @@ export function CounselingDetail({
   const shownItems = visibleItems(response.answers.menu);
   // 定義済み項目以外のキーが回答に含まれる場合も表示する（項目変更後の過去回答対策）
   const knownKeys = new Set(COUNSELING_ITEMS.map((i) => i.key));
-  const extraKeys = Object.keys(response.answers).filter((k) => !knownKeys.has(k));
+  // 「その他」自由記入（${key}_other）と同意書（consent_*）は専用表示のため一覧からは除外
+  const otherKeys = new Set(
+    COUNSELING_ITEMS.filter((i) => i.options?.includes("その他")).map((i) => `${i.key}_other`)
+  );
+  const extraKeys = Object.keys(response.answers).filter(
+    (k) => !knownKeys.has(k) && !otherKeys.has(k) && !k.startsWith("consent_")
+  );
+
+  const signature =
+    typeof response.answers.consent_signature === "string" ? response.answers.consent_signature : "";
+  const consentName = typeof response.answers.consent_name === "string" ? response.answers.consent_name : "";
+  const consentAgreed = response.answers.consent_agreed === true;
 
   return (
     <div className="space-y-4">
@@ -77,14 +89,27 @@ export function CounselingDetail({
       )}
 
       <div className="card divide-y divide-stone-100">
-        {shownItems.map((item) => (
-          <div key={item.key} className="py-3 first:pt-0 last:pb-0">
-            <p className="text-xs font-bold text-stone-500">{item.label}</p>
-            <p className="text-base mt-0.5 whitespace-pre-wrap">
-              {formatAnswer(item, response.answers[item.key])}
-            </p>
-          </div>
-        ))}
+        {shownItems.map((item) => {
+          const value = response.answers[item.key];
+          let display = formatAnswer(item, value);
+          // 「その他」選択時の自由記入を併記
+          const otherText = response.answers[`${item.key}_other`];
+          if (
+            item.options?.includes("その他") &&
+            Array.isArray(value) &&
+            value.includes("その他") &&
+            typeof otherText === "string" &&
+            otherText
+          ) {
+            display += `（その他：${otherText}）`;
+          }
+          return (
+            <div key={item.key} className="py-3 first:pt-0 last:pb-0">
+              <p className="text-xs font-bold text-stone-500">{item.label}</p>
+              <p className="text-base mt-0.5 whitespace-pre-wrap">{display}</p>
+            </div>
+          );
+        })}
         {extraKeys.map((key) => (
           <div key={key} className="py-3">
             <p className="text-xs font-bold text-stone-500">{key}</p>
@@ -92,6 +117,23 @@ export function CounselingDetail({
           </div>
         ))}
       </div>
+
+      {(signature || consentName || consentAgreed) && (
+        <div className="card space-y-2">
+          <p className="text-xs font-bold text-stone-500">注意事項・同意書</p>
+          <p className="text-sm">
+            {consentAgreed ? "注意事項に同意のうえ署名済み" : "未同意"}
+            {consentName ? `　／　お名前：${consentName}` : ""}
+          </p>
+          {signature && (
+            <img
+              src={signature}
+              alt="お客様のご署名"
+              className="w-full max-w-xs rounded-lg border border-stone-200 bg-white"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

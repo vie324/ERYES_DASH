@@ -3,10 +3,17 @@
 /* eslint-disable @next/next/no-img-element */
 // カウンセリング入力フォーム（顧客がスマホで入力する画面）
 // 項目定義は src/lib/counseling/items.ts にあり、コード修正だけで増減できる。
+// 入力後は「注意事項・署名」ステップに進み、お名前と手書き署名をいただいてから送信する。
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { COUNSELING_ITEMS, MENU_KEY, visibleItems, type CounselingItem } from "@/lib/counseling/items";
+import {
+  CONSENT_AGREE_LABEL,
+  CONSENT_NOTICE_INTRO,
+  CONSENT_NOTICE_SECTIONS,
+  CONSENT_NOTICE_TITLE,
+} from "@/lib/counseling/notice";
 import { Icon } from "@/components/icons";
 
 // LIFF SDK（CDN読み込み）の最小型定義
@@ -25,6 +32,7 @@ declare global {
 }
 
 type Phase = "init" | "ready" | "submitting" | "done" | "fatal";
+type Step = "form" | "consent";
 
 export function CounselingForm({
   liffId,
@@ -35,11 +43,16 @@ export function CounselingForm({
 }) {
   const isMock = !liffId;
   const [phase, setPhase] = useState<Phase>(isMock ? "ready" : "init");
+  const [step, setStep] = useState<Step>("form");
   const [errors, setErrors] = useState<string[]>([]);
   const [fullName, setFullName] = useState("");
   const [menus, setMenus] = useState<string[]>([]); // 選択中のメニュー（セクションの表示切替に使う）
   const [mockUserId, setMockUserId] = useState("mock-user-1");
   const [inLineApp, setInLineApp] = useState(false);
+  // 同意書（注意事項への同意・お名前・手書き署名）
+  const [signName, setSignName] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [signature, setSignature] = useState("");
   const accessTokenRef = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -83,17 +96,55 @@ export function CounselingForm({
     }
   }, [liffId, loadProfile]);
 
+  // カウンセリング入力 → 注意事項・署名へ
+  const goConsent = () => {
+    if (!formRef.current) return;
+    // ご希望メニューはチェックボックスのため標準バリデーションが効かない → 個別に確認
+    if (menus.length === 0) {
+      setErrors(["ご希望のメニューを選択してください"]);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (!formRef.current.reportValidity()) return; // 必須項目の未入力チェック（ブラウザ標準）
+    setErrors([]);
+    setSignName((prev) => prev || fullName);
+    setStep("consent");
+    window.scrollTo(0, 0);
+  };
+
+  const backToForm = () => {
+    setErrors([]);
+    setStep("form");
+    window.scrollTo(0, 0);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formRef.current || phase === "submitting") return;
+    if (step !== "consent" || phase === "submitting") return;
+
+    // 同意書の検証
+    const ve: string[] = [];
+    if (!signName.trim()) ve.push("お名前をご記入ください");
+    if (!agree) ve.push("注意事項へのご同意が必要です");
+    if (!signature) ve.push("ご署名をお願いいたします");
+    if (ve.length > 0) {
+      setErrors(ve);
+      window.scrollTo(0, 0);
+      return;
+    }
+
     setErrors([]);
     setPhase("submitting");
 
-    const fd = new FormData(formRef.current);
+    const fd = new FormData(formRef.current!);
     const answers: Record<string, unknown> = {};
     for (const item of COUNSELING_ITEMS) {
       if (item.type === "checkbox") {
         answers[item.key] = fd.getAll(item.key).map(String);
+        // 「その他」選択時の自由記入
+        if (item.options?.includes("その他")) {
+          answers[`${item.key}_other`] = String(fd.get(`${item.key}_other`) ?? "");
+        }
       } else if (item.type === "agree") {
         answers[item.key] = fd.get(item.key) === "on";
       } else {
@@ -109,6 +160,7 @@ export function CounselingForm({
           accessToken: accessTokenRef.current ?? undefined,
           mockUserId: isMock ? mockUserId : undefined,
           answers,
+          consent: { name: signName.trim(), signature, agreed: agree },
         }),
       });
       const data = (await res.json()) as { ok: boolean; errors?: string[] };
@@ -138,7 +190,7 @@ export function CounselingForm({
       <header className="bg-white/90 backdrop-blur border-b border-brand-200 py-5 text-center">
         <img src={logoSrc} alt="EREYS" className="h-10 w-auto mx-auto" />
         <p className="text-xs font-bold tracking-[0.25em] text-brand-600 mt-1.5">
-          カウンセリングシート
+          {step === "consent" ? "注意事項・ご署名" : "カウンセリングシート"}
         </p>
       </header>
 
@@ -195,35 +247,178 @@ export function CounselingForm({
               </div>
             )}
 
-            {groupBySection(visibleItems(menus)).map((group) => (
-              <section key={group.section} className="space-y-4">
-                <h2 className="font-display text-base font-bold text-ink-900 flex items-center gap-2 pt-1">
-                  <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
-                  {group.section}
-                </h2>
-                {group.items.map((item) => (
-                  <FormField
-                    key={item.key}
-                    item={item}
-                    fullName={fullName}
-                    onFullNameChange={setFullName}
-                    menus={menus}
-                    onToggleMenu={(opt) =>
-                      setMenus((prev) =>
-                        prev.includes(opt) ? prev.filter((m) => m !== opt) : [...prev, opt]
-                      )
-                    }
-                  />
-                ))}
-              </section>
-            ))}
+            {/* ステップ1：カウンセリング入力 */}
+            <div className={step === "form" ? "space-y-4" : "hidden"}>
+              {groupBySection(visibleItems(menus)).map((group) => (
+                <section key={group.section} className="space-y-4">
+                  <h2 className="font-display text-base font-bold text-ink-900 flex items-center gap-2 pt-1">
+                    <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
+                    {group.section}
+                  </h2>
+                  {group.items.map((item) => (
+                    <FormField
+                      key={item.key}
+                      item={item}
+                      fullName={fullName}
+                      onFullNameChange={setFullName}
+                      menus={menus}
+                      onToggleMenu={(opt) =>
+                        setMenus((prev) =>
+                          prev.includes(opt) ? prev.filter((m) => m !== opt) : [...prev, opt]
+                        )
+                      }
+                    />
+                  ))}
+                </section>
+              ))}
 
-            <button type="submit" disabled={phase === "submitting"} className="btn-primary w-full text-lg">
-              {phase === "submitting" ? "送信中…" : "この内容で送信する"}
-            </button>
+              <button type="button" onClick={goConsent} className="btn-primary w-full text-lg">
+                次へ（注意事項の確認・ご署名）
+              </button>
+            </div>
+
+            {/* ステップ2：注意事項・同意・署名 */}
+            <div className={step === "consent" ? "space-y-4" : "hidden"}>
+              <section className="card space-y-3">
+                <h2 className="font-display text-base font-bold text-ink-900">{CONSENT_NOTICE_TITLE}</h2>
+                <p className="text-xs text-stone-500">{CONSENT_NOTICE_INTRO}</p>
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50/60 p-3 space-y-3">
+                  {CONSENT_NOTICE_SECTIONS.map((sec) => (
+                    <div key={sec.heading}>
+                      <p className="text-xs font-bold text-brand-700">{sec.heading}</p>
+                      <ul className="mt-1 space-y-1 text-xs text-ink-700 list-disc list-inside">
+                        {sec.items.map((t, i) => (
+                          <li key={i}>{t}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="card space-y-4">
+                <label className="flex items-start gap-3 text-sm font-bold text-stone-700">
+                  <input
+                    type="checkbox"
+                    checked={agree}
+                    onChange={(e) => setAgree(e.target.checked)}
+                    className="mt-0.5 h-6 w-6 accent-brand-500 shrink-0"
+                  />
+                  <span>{CONSENT_AGREE_LABEL}</span>
+                </label>
+
+                <div>
+                  <p className="label !mb-2">
+                    お名前（フルネーム）
+                    <span className="text-red-500 text-xs font-bold ml-1">必須</span>
+                  </p>
+                  <input
+                    type="text"
+                    value={signName}
+                    onChange={(e) => setSignName(e.target.value)}
+                    placeholder="例）山田 花子"
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <p className="label !mb-2">
+                    ご署名（指でなぞってご記入ください）
+                    <span className="text-red-500 text-xs font-bold ml-1">必須</span>
+                  </p>
+                  <SignaturePad onChange={setSignature} />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={backToForm}
+                  className="rounded-2xl border-2 border-stone-300 px-5 font-bold text-stone-600"
+                >
+                  戻る
+                </button>
+                <button type="submit" disabled={phase === "submitting"} className="btn-primary flex-1 text-lg">
+                  {phase === "submitting" ? "送信中…" : "同意して送信する"}
+                </button>
+              </div>
+            </div>
           </form>
         )}
       </main>
+    </div>
+  );
+}
+
+/** 手書き署名パッド（指・スタイラスで描画 → PNGのデータURLを onChange で返す） */
+function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const hasDrawn = useRef(false);
+
+  const coords = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const c = canvasRef.current!;
+    const rect = c.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * c.width,
+      y: ((e.clientY - rect.top) / rect.height) * c.height,
+    };
+  };
+
+  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const ctx = canvasRef.current!.getContext("2d")!;
+    drawing.current = true;
+    const { x, y } = coords(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = coords(e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#1c1917";
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    hasDrawn.current = true;
+  };
+
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (hasDrawn.current && canvasRef.current) {
+      onChange(canvasRef.current.toDataURL("image/png"));
+    }
+  };
+
+  const clear = () => {
+    const c = canvasRef.current;
+    if (!c) return;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    hasDrawn.current = false;
+    onChange("");
+  };
+
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={600}
+        height={220}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+        className="w-full h-44 rounded-xl border-2 border-dashed border-brand-300 bg-white touch-none"
+      />
+      <button type="button" onClick={clear} className="mt-2 text-xs font-bold text-stone-500 underline">
+        署名をやり直す
+      </button>
     </div>
   );
 }
@@ -255,6 +450,10 @@ function FormField({
   menus: string[];
   onToggleMenu: (opt: string) => void;
 }) {
+  // 「その他」を選んだときに自由記入欄を出すための状態
+  const [showOther, setShowOther] = useState(false);
+  const hasOther = item.type === "checkbox" && item.key !== MENU_KEY && (item.options?.includes("その他") ?? false);
+
   const requiredMark = item.required && (
     <span className="text-red-500 text-xs font-bold ml-1">必須</span>
   );
@@ -310,6 +509,7 @@ function FormField({
           {item.options?.map((opt) => {
             // 「ご希望メニュー」は表示切替に使うため制御コンポーネントにする
             const isMenu = item.key === MENU_KEY;
+            const isOther = opt === "その他";
             return (
               <label
                 key={opt}
@@ -321,13 +521,23 @@ function FormField({
                   value={opt}
                   {...(isMenu
                     ? { checked: menus.includes(opt), onChange: () => onToggleMenu(opt) }
-                    : {})}
+                    : isOther
+                      ? { onChange: (e: React.ChangeEvent<HTMLInputElement>) => setShowOther(e.target.checked) }
+                      : {})}
                   className="h-5 w-5 accent-brand-500 shrink-0"
                 />
                 {opt}
               </label>
             );
           })}
+          {hasOther && showOther && (
+            <input
+              type="text"
+              name={`${item.key}_other`}
+              placeholder="「その他」の内容をご記入ください"
+              className="input"
+            />
+          )}
         </div>
       )}
 
@@ -337,6 +547,7 @@ function FormField({
           rows={3}
           required={item.required}
           placeholder={item.placeholder}
+          defaultValue={item.defaultValue}
           className="input min-h-24"
         />
       )}
@@ -358,6 +569,7 @@ function FormField({
             name={item.key}
             required={item.required}
             placeholder={item.placeholder}
+            defaultValue={item.defaultValue}
             className="input"
           />
         ))}

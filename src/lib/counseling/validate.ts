@@ -47,6 +47,12 @@ export function validateAnswers(input: unknown): ValidationResult {
           : [];
         if (item.required && arr.length === 0) errors.push(`「${item.label}」を選択してください`);
         answers[item.key] = arr;
+        // 「その他」選択時の自由記入（${key}_other）を併せて保存する
+        if (item.options?.includes("その他")) {
+          const otherRaw = raw[`${item.key}_other`];
+          const otherStr = typeof otherRaw === "string" ? otherRaw.trim().slice(0, MAX_TEXT) : "";
+          if (otherStr) answers[`${item.key}_other`] = otherStr;
+        }
         break;
       }
       case "agree": {
