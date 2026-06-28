@@ -19,6 +19,7 @@ export interface CounselingItem {
   options?: string[]; // radio / checkbox 用
   placeholder?: string;
   note?: string; // 入力欄の下に出す補足
+  defaultValue?: string; // 初期値（例：生年月日の初期年）
 }
 
 // 「ご希望メニュー」の選択肢。値に "まつげ"/"眉" を含めることで lash/brow を判定する。
@@ -75,11 +76,19 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
     note: "LINE登録時のお名前が自動で入ります",
   },
   { key: "furigana", label: "フリガナ", type: "text", required: true, section: S_PROFILE, placeholder: "例）ヤマダ ハナコ" },
-  { key: "birthday", label: "生年月日", type: "date", required: false, section: S_PROFILE },
+  {
+    key: "birthday",
+    label: "生年月日",
+    type: "date",
+    required: false,
+    section: S_PROFILE,
+    defaultValue: "1990-01-01",
+    note: "初期表示は1990年です。ご自身の生年月日に選び直してください",
+  },
   { key: "gender", label: "性別", type: "radio", required: false, section: S_PROFILE, options: ["女性", "男性", "その他・回答しない"] },
   { key: "phone", label: "電話番号", type: "tel", required: true, section: S_PROFILE, placeholder: "例）090-1234-5678" },
   { key: "email", label: "メールアドレス", type: "text", required: false, section: S_PROFILE, placeholder: "例）example@mail.com" },
-  { key: "address", label: "ご住所", type: "text", required: false, section: S_PROFILE, placeholder: "例）東京都目黒区自由が丘1-1-1" },
+  { key: "address", label: "ご住所", type: "text", required: true, section: S_PROFILE, placeholder: "例）東京都目黒区自由が丘1-1-1" },
 
   // ---- ご来店のきっかけ ----
   {
@@ -90,13 +99,8 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
     section: S_VISIT,
     options: [
       "ホットペッパービューティー",
-      "楽天ビューティー",
-      "Google",
-      "Yahoo検索",
-      "ホームページ",
-      "看板",
+      "web検索",
       "Instagram",
-      "Facebook",
       "LINE",
       "ご紹介",
       "その他",
@@ -114,7 +118,6 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
       "施術が初めて",
       "口コミを見て",
       "価格が安い",
-      "5日間のお直しシステム",
       "他店舗に通っていた",
       "その他",
     ],
@@ -136,7 +139,7 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
     type: "checkbox",
     required: false,
     section: S_HEALTH,
-    options: ["アルコール", "金属", "花粉", "食品", "薬品", "ヒアルロン酸", "絆創膏", "その他"],
+    options: ["アルコール", "金属", "花粉", "薬品", "その他"],
   },
   {
     key: "pregnant",
@@ -149,14 +152,6 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
   {
     key: "dermatology",
     label: "通院中の病名・皮膚疾患・既往（アトピー・ケロイド体質等）があればご記入ください",
-    type: "textarea",
-    required: false,
-    section: S_HEALTH,
-  },
-  { key: "medication", label: "常用しているお薬があればご記入ください", type: "textarea", required: false, section: S_HEALTH },
-  {
-    key: "surgery_history",
-    label: "手術・病歴があればご記入ください（時期も）",
     type: "textarea",
     required: false,
     section: S_HEALTH,
@@ -298,14 +293,6 @@ export const COUNSELING_ITEMS: CounselingItem[] = [
     type: "textarea",
     required: false,
     section: S_CONFIRM,
-  },
-  {
-    key: "agreement",
-    label: "注意事項への同意",
-    type: "agree",
-    required: true,
-    section: S_CONFIRM,
-    note: "施術前後の注意事項の説明を受け、内容に同意します（安全な施術のため、カウンセリング項目には正しい内容でお答えください）",
   },
 ];
 

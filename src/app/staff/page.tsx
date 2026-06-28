@@ -83,6 +83,12 @@ export default async function StaffHomePage() {
           title="自分の成績"
           description="売上・次回予約率・月次推移"
         />
+        <BigMenuLink
+          href="/staff/reports"
+          icon="book"
+          title="過去の日報をふりかえる"
+          description="これまでの日報・ふりかえりを見返す"
+        />
       </div>
 
       <Link
