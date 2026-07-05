@@ -5,6 +5,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import type {
+  AbsenceReport,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -15,12 +16,20 @@ import type {
   CounselingResponse,
   CounselingStatus,
   Customer,
+  DailyPlan,
   DailyReport,
   DailyReportInput,
   DataStore,
   DayoffRequest,
+  EniReport,
+  IdealSchedule,
+  Meeting,
   NewShiftAssignment,
   NextAppointment,
+  OrderRequest,
+  OrderStatus,
+  PracticePair,
+  PracticeRecord,
   ScheduleOverride,
   ShiftAssignment,
   ShiftPreference,
@@ -53,6 +62,8 @@ const mapStaff = (r: Row): Staff => ({
   name: r.name,
   loginId: r.login_id,
   role: r.role,
+  jobType: r.job_type ?? "",
+  isExecutive: r.is_executive ?? false,
   fixedOvertimeHours: r.fixed_overtime_hours,
   isActive: r.is_active,
 });
@@ -153,6 +164,85 @@ const mapScheduleOverride = (r: Row): ScheduleOverride => ({
   startTime: r.start_time ?? "",
   endTime: r.end_time ?? "",
   note: r.note ?? "",
+});
+
+const mapEniReport = (r: Row): EniReport => ({
+  id: r.id,
+  staffId: r.staff_id,
+  periodKey: r.period_key,
+  answers: r.answers ?? {},
+  updatedAt: new Date(r.updated_at),
+});
+
+const mapPracticeRecord = (r: Row): PracticeRecord => ({
+  id: r.id,
+  staffId: r.staff_id,
+  practiceDate: r.practice_date,
+  minutes: r.minutes,
+  partnerStaffId: r.partner_staff_id,
+  partnerName: r.partner_name ?? "",
+  content: r.content ?? "",
+  createdAt: new Date(r.created_at),
+});
+
+const mapPracticePair = (r: Row): PracticePair => ({
+  id: r.id,
+  targetMonth: r.target_month,
+  memberStaffId: r.member_staff_id,
+  partnerStaffId: r.partner_staff_id,
+});
+
+const mapMeeting = (r: Row): Meeting => ({
+  id: r.id,
+  meetingType: r.meeting_type,
+  title: r.title ?? "",
+  meetingDate: r.meeting_date,
+  startTime: r.start_time ?? "",
+  hostStaffId: r.host_staff_id,
+  guestStaffId: r.guest_staff_id,
+  minutesUrl: r.minutes_url ?? "",
+  minutesText: r.minutes_text ?? "",
+  minutesDone: r.minutes_done ?? false,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+});
+
+const mapAbsenceReport = (r: Row): AbsenceReport => ({
+  id: r.id,
+  staffId: r.staff_id,
+  absenceDate: r.absence_date,
+  kind: r.kind,
+  hours: Number(r.hours ?? 0),
+  reason: r.reason ?? "",
+  reportedBy: r.reported_by,
+  createdAt: new Date(r.created_at),
+});
+
+const mapOrderRequest = (r: Row): OrderRequest => ({
+  id: r.id,
+  staffId: r.staff_id,
+  category: r.category,
+  itemName: r.item_name,
+  quantity: r.quantity,
+  note: r.note ?? "",
+  status: r.status,
+  createdAt: new Date(r.created_at),
+  updatedAt: new Date(r.updated_at),
+});
+
+const mapDailyPlan = (r: Row): DailyPlan => ({
+  id: r.id,
+  staffId: r.staff_id,
+  planDate: r.plan_date,
+  content: r.content ?? "",
+});
+
+const mapIdealSchedule = (r: Row): IdealSchedule => ({
+  id: r.id,
+  staffId: r.staff_id,
+  scope: r.scope,
+  content: r.content ?? "",
+  updatedAt: new Date(r.updated_at),
 });
 
 const mapBroadcast = (r: Row): Broadcast => ({
@@ -301,6 +391,8 @@ class SupabaseStore implements DataStore {
         login_id: input.loginId,
         password_hash: input.passwordHash,
         role: input.role,
+        job_type: input.jobType ?? "",
+        is_executive: input.isExecutive ?? false,
         fixed_overtime_hours: input.fixedOvertimeHours,
       })
       .select()
@@ -311,13 +403,17 @@ class SupabaseStore implements DataStore {
 
   async updateStaff(
     id: string,
-    patch: Partial<Pick<Staff, "name" | "role" | "fixedOvertimeHours" | "isActive">> & {
+    patch: Partial<
+      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+    > & {
       passwordHash?: string;
     }
   ): Promise<Staff> {
     const row: Row = {};
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.role !== undefined) row.role = patch.role;
+    if (patch.jobType !== undefined) row.job_type = patch.jobType;
+    if (patch.isExecutive !== undefined) row.is_executive = patch.isExecutive;
     if (patch.fixedOvertimeHours !== undefined) row.fixed_overtime_hours = patch.fixedOvertimeHours;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     if (patch.passwordHash !== undefined) row.password_hash = patch.passwordHash;
@@ -1036,6 +1132,326 @@ class SupabaseStore implements DataStore {
       .eq("staff_id", staffId)
       .eq("date", date);
     if (error) throw new Error(`[supabase] 個別調整削除: ${error.message}`);
+  }
+
+  // ---- ENi（ヘアサロン）向け機能 ----
+
+  async upsertEniReport(input: {
+    kind: "stylist" | "weekly";
+    staffId: string;
+    periodKey: string;
+    answers: Record<string, unknown>;
+  }): Promise<EniReport> {
+    const { data, error } = await this.sb
+      .from("eni_reports")
+      .upsert(
+        {
+          kind: input.kind,
+          staff_id: input.staffId,
+          period_key: input.periodKey,
+          answers: input.answers,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "kind,staff_id,period_key" }
+      )
+      .select()
+      .single();
+    return mapEniReport(must(data, error, "ENiレポート保存"));
+  }
+
+  async getEniReport(
+    kind: "stylist" | "weekly",
+    staffId: string,
+    periodKey: string
+  ): Promise<EniReport | null> {
+    const { data, error } = await this.sb
+      .from("eni_reports")
+      .select("*")
+      .eq("kind", kind)
+      .eq("staff_id", staffId)
+      .eq("period_key", periodKey)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] ENiレポート取得: ${error.message}`);
+    return data ? mapEniReport(data) : null;
+  }
+
+  async listEniReports(
+    kind: "stylist" | "weekly",
+    filter: { staffId?: string; from: string; to: string }
+  ): Promise<EniReport[]> {
+    let query = this.sb
+      .from("eni_reports")
+      .select("*")
+      .eq("kind", kind)
+      .gte("period_key", filter.from)
+      .lte("period_key", filter.to)
+      .order("period_key", { ascending: false });
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "ENiレポート一覧").map(mapEniReport);
+  }
+
+  async createPracticeRecord(
+    input: Omit<PracticeRecord, "id" | "createdAt">
+  ): Promise<PracticeRecord> {
+    const { data, error } = await this.sb
+      .from("practice_records")
+      .insert({
+        staff_id: input.staffId,
+        practice_date: input.practiceDate,
+        minutes: input.minutes,
+        partner_staff_id: input.partnerStaffId,
+        partner_name: input.partnerName,
+        content: input.content,
+      })
+      .select()
+      .single();
+    return mapPracticeRecord(must(data, error, "練習記録作成"));
+  }
+
+  async listPracticeRecords(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<PracticeRecord[]> {
+    let query = this.sb
+      .from("practice_records")
+      .select("*")
+      .gte("practice_date", filter.from)
+      .lte("practice_date", filter.to)
+      .order("practice_date");
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "練習記録一覧").map(mapPracticeRecord);
+  }
+
+  async getPracticeRecord(id: string): Promise<PracticeRecord | null> {
+    const { data, error } = await this.sb
+      .from("practice_records")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 練習記録取得: ${error.message}`);
+    return data ? mapPracticeRecord(data) : null;
+  }
+
+  async deletePracticeRecord(id: string): Promise<void> {
+    const { error } = await this.sb.from("practice_records").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 練習記録削除: ${error.message}`);
+  }
+
+  async listPracticePairs(targetMonth: string): Promise<PracticePair[]> {
+    const { data, error } = await this.sb
+      .from("practice_pairs")
+      .select("*")
+      .eq("target_month", targetMonth);
+    return must(data, error, "練習ペア一覧").map(mapPracticePair);
+  }
+
+  async setPracticePair(
+    targetMonth: string,
+    memberStaffId: string,
+    partnerStaffId: string
+  ): Promise<void> {
+    if (!partnerStaffId) {
+      const { error } = await this.sb
+        .from("practice_pairs")
+        .delete()
+        .eq("target_month", targetMonth)
+        .eq("member_staff_id", memberStaffId);
+      if (error) throw new Error(`[supabase] 練習ペア解除: ${error.message}`);
+      return;
+    }
+    const { error } = await this.sb.from("practice_pairs").upsert(
+      {
+        target_month: targetMonth,
+        member_staff_id: memberStaffId,
+        partner_staff_id: partnerStaffId,
+      },
+      { onConflict: "target_month,member_staff_id" }
+    );
+    if (error) throw new Error(`[supabase] 練習ペア保存: ${error.message}`);
+  }
+
+  async createMeeting(
+    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">
+  ): Promise<Meeting> {
+    const { data, error } = await this.sb
+      .from("meetings")
+      .insert({
+        meeting_type: input.meetingType,
+        title: input.title,
+        meeting_date: input.meetingDate,
+        start_time: input.startTime,
+        host_staff_id: input.hostStaffId,
+        guest_staff_id: input.guestStaffId,
+        created_by: input.createdBy,
+      })
+      .select()
+      .single();
+    return mapMeeting(must(data, error, "ミーティング作成"));
+  }
+
+  async getMeeting(id: string): Promise<Meeting | null> {
+    const { data, error } = await this.sb.from("meetings").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(`[supabase] ミーティング取得: ${error.message}`);
+    return data ? mapMeeting(data) : null;
+  }
+
+  async listMeetings(filter: { from: string; to: string }): Promise<Meeting[]> {
+    const { data, error } = await this.sb
+      .from("meetings")
+      .select("*")
+      .gte("meeting_date", filter.from)
+      .lte("meeting_date", filter.to)
+      .order("meeting_date")
+      .order("start_time");
+    return must(data, error, "ミーティング一覧").map(mapMeeting);
+  }
+
+  async listMeetingsMissingMinutes(until: string): Promise<Meeting[]> {
+    const { data, error } = await this.sb
+      .from("meetings")
+      .select("*")
+      .eq("minutes_done", false)
+      .lte("meeting_date", until)
+      .order("meeting_date");
+    return must(data, error, "議事録未提出一覧").map(mapMeeting);
+  }
+
+  async updateMeetingMinutes(
+    id: string,
+    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+  ): Promise<Meeting> {
+    const { data, error } = await this.sb
+      .from("meetings")
+      .update({
+        minutes_url: patch.minutesUrl,
+        minutes_text: patch.minutesText,
+        minutes_done: patch.minutesDone,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    return mapMeeting(must(data, error, "議事録更新"));
+  }
+
+  async deleteMeeting(id: string): Promise<void> {
+    const { error } = await this.sb.from("meetings").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] ミーティング削除: ${error.message}`);
+  }
+
+  async createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport> {
+    const { data, error } = await this.sb
+      .from("absence_reports")
+      .insert({
+        staff_id: input.staffId,
+        absence_date: input.absenceDate,
+        kind: input.kind,
+        hours: input.hours,
+        reason: input.reason,
+        reported_by: input.reportedBy,
+      })
+      .select()
+      .single();
+    return mapAbsenceReport(must(data, error, "欠勤報告作成"));
+  }
+
+  async listAbsenceReports(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<AbsenceReport[]> {
+    let query = this.sb
+      .from("absence_reports")
+      .select("*")
+      .gte("absence_date", filter.from)
+      .lte("absence_date", filter.to)
+      .order("absence_date");
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "欠勤報告一覧").map(mapAbsenceReport);
+  }
+
+  async createOrderRequest(
+    input: Omit<OrderRequest, "id" | "status" | "createdAt" | "updatedAt">
+  ): Promise<OrderRequest> {
+    const { data, error } = await this.sb
+      .from("order_requests")
+      .insert({
+        staff_id: input.staffId,
+        category: input.category,
+        item_name: input.itemName,
+        quantity: input.quantity,
+        note: input.note,
+      })
+      .select()
+      .single();
+    return mapOrderRequest(must(data, error, "発注申請作成"));
+  }
+
+  async listOrderRequests(filter: {
+    staffId?: string;
+    from: Date;
+    to: Date;
+  }): Promise<OrderRequest[]> {
+    let query = this.sb
+      .from("order_requests")
+      .select("*")
+      .gte("created_at", filter.from.toISOString())
+      .lt("created_at", filter.to.toISOString())
+      .order("created_at", { ascending: false });
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "発注申請一覧").map(mapOrderRequest);
+  }
+
+  async updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
+    const { error } = await this.sb
+      .from("order_requests")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] 発注状況更新: ${error.message}`);
+  }
+
+  async upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void> {
+    const { error } = await this.sb
+      .from("daily_plans")
+      .upsert({ staff_id: staffId, plan_date: planDate, content }, { onConflict: "staff_id,plan_date" });
+    if (error) throw new Error(`[supabase] 朝スケジュール保存: ${error.message}`);
+  }
+
+  async listDailyPlans(planDate: string): Promise<DailyPlan[]> {
+    const { data, error } = await this.sb
+      .from("daily_plans")
+      .select("*")
+      .eq("plan_date", planDate);
+    return must(data, error, "朝スケジュール一覧").map(mapDailyPlan);
+  }
+
+  async listIdealSchedules(staffId: string): Promise<IdealSchedule[]> {
+    const { data, error } = await this.sb
+      .from("ideal_schedules")
+      .select("*")
+      .eq("staff_id", staffId);
+    return must(data, error, "理想スケジュール取得").map(mapIdealSchedule);
+  }
+
+  async upsertIdealSchedule(
+    staffId: string,
+    scope: "week" | "month",
+    content: string
+  ): Promise<void> {
+    const { error } = await this.sb.from("ideal_schedules").upsert(
+      {
+        staff_id: staffId,
+        scope,
+        content,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "staff_id,scope" }
+    );
+    if (error) throw new Error(`[supabase] 理想スケジュール保存: ${error.message}`);
   }
 }
 

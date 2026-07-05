@@ -78,6 +78,17 @@ export function weekdayOf(dateStr: string): number {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 }
 
+/** その日を含む週の月曜日（"YYYY-MM-DD"。週報の週キーに使う） */
+export function weekStartOf(dateStr: string): string {
+  const wd = weekdayOf(dateStr); // 0=日
+  return addDays(dateStr, wd === 0 ? -6 : 1 - wd);
+}
+
+/** 週の表示 "7月7日(月)〜7月13日(日)" */
+export function formatWeekJa(weekStart: string): string {
+  return `${formatDateJa(weekStart)}〜${formatDateJa(addDays(weekStart, 6))}`;
+}
+
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"];
 
 /** 曜日の日本語1文字（0=日〜6=土） */

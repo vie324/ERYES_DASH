@@ -24,12 +24,18 @@ export interface Store {
   attendanceEnabled: boolean;
 }
 
+// 職種：''=未設定（アイサロン等）/ stylist=スタイリスト / assistant=アシスタント
+// ヘアサロン（ENi）のスタッフに設定すると、ホームにENi向けメニュー（日報/週報・練習記録等）が出る
+export type JobType = "" | "stylist" | "assistant";
+
 export interface Staff {
   id: string;
   storeId: string;
   name: string;
   loginId: string;
   role: Role;
+  jobType: JobType;
+  isExecutive: boolean; // 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
   fixedOvertimeHours: number;
   isActive: boolean;
 }
@@ -218,6 +224,105 @@ export interface NewShiftAssignment {
   shiftType: ShiftType;
 }
 
+// ============================================================
+// ENi（ヘアサロン）向け機能のドメインモデル
+// ============================================================
+
+/** スタイリスト日報／アシスタント週報（項目は src/lib/eni/forms.ts で定義。回答はJSONで保存） */
+export interface EniReport {
+  id: string;
+  staffId: string;
+  /** スタイリスト日報＝日付 "YYYY-MM-DD" ／ 週報＝週の月曜 "YYYY-MM-DD" */
+  periodKey: string;
+  answers: Record<string, unknown>;
+  updatedAt: Date;
+}
+
+/** 練習記録（月間活動記録表のシステム化。1回の練習＝1行） */
+export interface PracticeRecord {
+  id: string;
+  staffId: string; // 練習した人
+  practiceDate: string; // "YYYY-MM-DD"
+  minutes: number; // 練習時間（分）
+  partnerStaffId: string | null; // 相手（スタッフの場合）
+  partnerName: string; // 相手（モデルさん等の自由記入。スタッフ選択時は空）
+  content: string; // 練習内容（任意）
+  createdAt: Date;
+}
+
+/** 練習ペア（月ごとに、メンバー→ついてもらう先輩を割り当てる） */
+export interface PracticePair {
+  id: string;
+  targetMonth: string; // "YYYY-MM"
+  memberStaffId: string; // 練習するメンバー（アシスタント）
+  partnerStaffId: string; // ペアの相手（先輩・スタイリスト）
+}
+
+export type MeetingType = "1on1" | "all" | "other";
+
+/** ミーティング（1on1・全体など）＋議事録の提出管理 */
+export interface Meeting {
+  id: string;
+  meetingType: MeetingType;
+  title: string; // 全体・その他のときの題名（1on1は空でよい）
+  meetingDate: string; // "YYYY-MM-DD"
+  startTime: string; // "14:00"（空文字は時間未定）
+  hostStaffId: string; // 実施する人（スタイリスト等）
+  guestStaffId: string | null; // 相手（1on1の相手）
+  minutesUrl: string; // 議事録リンク（Notion等）
+  minutesText: string; // 議事録の直接記入
+  minutesDone: boolean; // 議事録の提出済みフラグ
+  createdBy: string;
+  createdAt: Date;
+}
+
+export type AbsenceKind = "absence" | "early_leave" | "late";
+
+/** 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ） */
+export interface AbsenceReport {
+  id: string;
+  staffId: string; // 対象者
+  absenceDate: string; // "YYYY-MM-DD"
+  kind: AbsenceKind;
+  hours: number; // 何時間（欠勤は0でよい）
+  reason: string;
+  reportedBy: string;
+  createdAt: Date;
+}
+
+export type OrderCategory = "wig" | "store_sale" | "material";
+export type OrderStatus = "requested" | "ordered" | "received";
+
+/** 発注・購入申請（ウィッグ／社販／商材） */
+export interface OrderRequest {
+  id: string;
+  staffId: string; // 申請者
+  category: OrderCategory;
+  itemName: string;
+  quantity: number;
+  note: string;
+  status: OrderStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** 毎朝のスケジュール（1人1日1件。自由記入） */
+export interface DailyPlan {
+  id: string;
+  staffId: string;
+  planDate: string; // "YYYY-MM-DD"
+  content: string;
+}
+
+/** 理想のスケジュール（週／月。1人につき各1件） */
+export interface IdealSchedule {
+  id: string;
+  staffId: string;
+  scope: "week" | "month";
+  content: string;
+  updatedAt: Date;
+}
+
 // ---- 入力用 ----
 
 export interface DailyReportInput {
@@ -252,6 +357,8 @@ export interface StaffInput {
   loginId: string;
   passwordHash: string;
   role: Role;
+  jobType?: JobType;
+  isExecutive?: boolean;
   fixedOvertimeHours: number;
 }
 
@@ -273,7 +380,9 @@ export interface DataStore {
   createStaff(input: StaffInput): Promise<Staff>;
   updateStaff(
     id: string,
-    patch: Partial<Pick<Staff, "name" | "role" | "fixedOvertimeHours" | "isActive">> & {
+    patch: Partial<
+      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+    > & {
       passwordHash?: string;
     }
   ): Promise<Staff>;
@@ -386,6 +495,58 @@ export interface DataStore {
   listScheduleOverrides(filter: { staffId?: string; from: string; to: string }): Promise<ScheduleOverride[]>;
   upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void>;
   deleteScheduleOverride(staffId: string, date: string): Promise<void>;
+
+  // ---- ENi（ヘアサロン）向け機能 ----
+  // スタイリスト日報／アシスタント週報（kind で区別。periodKey は日付または週の月曜）
+  upsertEniReport(input: {
+    kind: "stylist" | "weekly";
+    staffId: string;
+    periodKey: string;
+    answers: Record<string, unknown>;
+  }): Promise<EniReport>;
+  getEniReport(kind: "stylist" | "weekly", staffId: string, periodKey: string): Promise<EniReport | null>;
+  listEniReports(
+    kind: "stylist" | "weekly",
+    filter: { staffId?: string; from: string; to: string }
+  ): Promise<EniReport[]>;
+
+  // 練習記録・ペア
+  createPracticeRecord(input: Omit<PracticeRecord, "id" | "createdAt">): Promise<PracticeRecord>;
+  listPracticeRecords(filter: { staffId?: string; from: string; to: string }): Promise<PracticeRecord[]>;
+  deletePracticeRecord(id: string): Promise<void>;
+  getPracticeRecord(id: string): Promise<PracticeRecord | null>;
+  listPracticePairs(targetMonth: string): Promise<PracticePair[]>;
+  /** ペアの割当（partnerStaffId が空文字なら解除） */
+  setPracticePair(targetMonth: string, memberStaffId: string, partnerStaffId: string): Promise<void>;
+
+  // ミーティング＋議事録
+  createMeeting(input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">): Promise<Meeting>;
+  getMeeting(id: string): Promise<Meeting | null>;
+  listMeetings(filter: { from: string; to: string }): Promise<Meeting[]>;
+  /** 議事録の未提出一覧（過去のミーティングで minutesDone=false） */
+  listMeetingsMissingMinutes(until: string): Promise<Meeting[]>;
+  updateMeetingMinutes(
+    id: string,
+    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+  ): Promise<Meeting>;
+  deleteMeeting(id: string): Promise<void>;
+
+  // 欠勤・早退の報告
+  createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport>;
+  listAbsenceReports(filter: { staffId?: string; from: string; to: string }): Promise<AbsenceReport[]>;
+
+  // 発注・購入申請
+  createOrderRequest(
+    input: Omit<OrderRequest, "id" | "status" | "createdAt" | "updatedAt">
+  ): Promise<OrderRequest>;
+  listOrderRequests(filter: { staffId?: string; from: Date; to: Date }): Promise<OrderRequest[]>;
+  updateOrderStatus(id: string, status: OrderStatus): Promise<void>;
+
+  // 毎朝のスケジュール・理想のスケジュール
+  upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void>;
+  listDailyPlans(planDate: string): Promise<DailyPlan[]>;
+  listIdealSchedules(staffId: string): Promise<IdealSchedule[]>;
+  upsertIdealSchedule(staffId: string, scope: "week" | "month", content: string): Promise<void>;
 
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
   /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */

@@ -18,6 +18,8 @@ create table if not exists stores (
 );
 
 -- スタッフマスタ（ログイン情報を含む。パスワードはscryptハッシュ）
+-- job_type: ''=未設定（アイサロン等）/ stylist / assistant（ENiのヘアスタッフに設定）
+-- is_executive: 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
 create table if not exists staff (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references stores(id),
@@ -25,10 +27,16 @@ create table if not exists staff (
   login_id text not null unique,
   password_hash text not null,
   role text not null default 'staff' check (role in ('admin', 'staff')),
+  job_type text not null default '' check (job_type in ('', 'stylist', 'assistant')),
+  is_executive boolean not null default false,
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- 既存DBに後から列を足す場合（本番に staff が既にある場合）に実行：
+--   alter table staff add column if not exists job_type text not null default '';
+--   alter table staff add column if not exists is_executive boolean not null default false;
 
 -- 顧客（LINE友だち追加時に自動登録）
 create table if not exists customers (
@@ -223,6 +231,103 @@ create table if not exists shift_assignments (
   unique (staff_id, date)
 );
 
+-- ============================================================
+-- ENi（ヘアサロン）向け機能
+-- ============================================================
+
+-- スタイリスト日報／アシスタント週報（項目可変のためJSONBで保存）
+-- kind: stylist=日報（period_key=日付）/ weekly=週報（period_key=週の月曜）
+create table if not exists eni_reports (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('stylist', 'weekly')),
+  staff_id uuid not null references staff(id) on delete cascade,
+  period_key date not null,
+  answers jsonb not null default '{}',
+  updated_at timestamptz not null default now(),
+  unique (kind, staff_id, period_key)
+);
+
+-- 練習記録（月間活動記録表のシステム化。1回の練習＝1行）
+create table if not exists practice_records (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  practice_date date not null,
+  minutes integer not null check (minutes > 0),
+  partner_staff_id uuid references staff(id),
+  partner_name text not null default '',   -- モデルさん等の自由記入（スタッフ選択時は空）
+  content text not null default '',        -- 練習内容（任意）
+  created_at timestamptz not null default now()
+);
+
+-- 練習ペア（月ごとに、メンバー→ついてもらう先輩を割り当てる）
+create table if not exists practice_pairs (
+  id uuid primary key default gen_random_uuid(),
+  target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
+  member_staff_id uuid not null references staff(id) on delete cascade,
+  partner_staff_id uuid not null references staff(id) on delete cascade,
+  unique (target_month, member_staff_id)
+);
+
+-- ミーティング（1on1・全体など）＋議事録の提出管理
+create table if not exists meetings (
+  id uuid primary key default gen_random_uuid(),
+  meeting_type text not null default '1on1' check (meeting_type in ('1on1', 'all', 'other')),
+  title text not null default '',
+  meeting_date date not null,
+  start_time text not null default '',
+  host_staff_id uuid not null references staff(id),
+  guest_staff_id uuid references staff(id),
+  minutes_url text not null default '',
+  minutes_text text not null default '',
+  minutes_done boolean not null default false,
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now()
+);
+
+-- 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ）
+create table if not exists absence_reports (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id),
+  absence_date date not null,
+  kind text not null check (kind in ('absence', 'early_leave', 'late')),
+  hours numeric not null default 0,
+  reason text not null default '',
+  reported_by uuid not null references staff(id),
+  created_at timestamptz not null default now()
+);
+
+-- 発注・購入申請（wig=ウィッグ / store_sale=社販 / material=商材）
+create table if not exists order_requests (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id),
+  category text not null check (category in ('wig', 'store_sale', 'material')),
+  item_name text not null,
+  quantity integer not null default 1 check (quantity > 0),
+  note text not null default '',
+  status text not null default 'requested' check (status in ('requested', 'ordered', 'received')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 毎朝のスケジュール（1人1日1件・自由記入）
+create table if not exists daily_plans (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  plan_date date not null,
+  content text not null default '',
+  unique (staff_id, plan_date)
+);
+
+-- 理想のスケジュール（週／月。1人につき各1件）
+create table if not exists ideal_schedules (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  scope text not null check (scope in ('week', 'month')),
+  content text not null default '',
+  updated_at timestamptz not null default now(),
+  unique (staff_id, scope)
+);
+
 -- ---- インデックス ----
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
@@ -235,6 +340,13 @@ create index if not exists idx_appointments_scheduled on next_appointments (sche
 create index if not exists idx_appointments_reminder on next_appointments (reminder_sent_at, scheduled_at);
 create index if not exists idx_dayoff_requests_date on dayoff_requests (date);
 create index if not exists idx_schedule_overrides_date on schedule_overrides (date);
+create index if not exists idx_eni_reports_period on eni_reports (kind, period_key);
+create index if not exists idx_practice_records_date on practice_records (practice_date);
+create index if not exists idx_practice_records_staff on practice_records (staff_id, practice_date);
+create index if not exists idx_meetings_date on meetings (meeting_date);
+create index if not exists idx_absence_reports_date on absence_reports (absence_date);
+create index if not exists idx_order_requests_created on order_requests (created_at);
+create index if not exists idx_daily_plans_date on daily_plans (plan_date);
 create index if not exists idx_shift_requests_month on shift_requests (target_month);
 create index if not exists idx_shift_available_month on staff_available_stores (target_month);
 create index if not exists idx_shift_assignments_month on shift_assignments (target_month, date);
@@ -259,6 +371,14 @@ alter table shift_assignments enable row level security;
 alter table work_patterns enable row level security;
 alter table dayoff_requests enable row level security;
 alter table schedule_overrides enable row level security;
+alter table eni_reports enable row level security;
+alter table practice_records enable row level security;
+alter table practice_pairs enable row level security;
+alter table meetings enable row level security;
+alter table absence_reports enable row level security;
+alter table order_requests enable row level security;
+alter table daily_plans enable row level security;
+alter table ideal_schedules enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。

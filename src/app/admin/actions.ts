@@ -9,7 +9,12 @@ import { getDataStore } from "@/lib/data";
 import { hashPassword } from "@/lib/auth/password";
 import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
 import { multicastText, pushText } from "@/lib/line/client";
-import type { Role } from "@/lib/data/types";
+import type { JobType, Role } from "@/lib/data/types";
+
+function jobTypeField(formData: FormData): JobType {
+  const v = String(formData.get("job_type") ?? "");
+  return v === "stylist" || v === "assistant" ? v : "";
+}
 
 // ---- 顧客 ----
 
@@ -214,6 +219,8 @@ export async function createStaffAction(formData: FormData): Promise<void> {
       loginId,
       passwordHash: hashPassword(password),
       role,
+      jobType: jobTypeField(formData),
+      isExecutive: formData.get("is_executive") === "on",
       fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     });
   } catch {
@@ -240,6 +247,8 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   await getDataStore().updateStaff(id, {
     name,
     role: lockSelf ? "admin" : role,
+    jobType: jobTypeField(formData),
+    isExecutive: formData.get("is_executive") === "on",
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),

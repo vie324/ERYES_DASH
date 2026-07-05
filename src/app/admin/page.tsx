@@ -135,7 +135,22 @@ export default async function AdminHomePage() {
             description="労働時間・残業の月次集計" />
         )}
         <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
-          description="店舗・スタッフ・勤怠運用の設定" />
+          description="店舗・スタッフ（職種・幹部）・勤怠運用の設定" />
+      </div>
+
+      {/* ENi（ヘアサロン）の管理メニュー：スタッフ画面と同じページを管理者権限で開く */}
+      <h2 className="font-bold text-sm text-stone-500 mt-6 mb-2">ENi（ヘアサロン）</h2>
+      <div className="space-y-3">
+        <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
+          description="スタイリスト日報・アシスタント週報の一覧" />
+        <BigMenuLink href="/staff/practice" icon="sparkles" title="練習記録・ペア設定"
+          description="月間活動記録の確認・今月のペアの割当" />
+        <BigMenuLink href="/staff/meetings" icon="user" title="ミーティング・議事録"
+          description="1on1・全体MTGの予定と議事録の提出状況" />
+        <BigMenuLink href="/staff/absence" icon="alertTriangle" title="欠勤・早退の報告一覧"
+          description="誰が・何時間・どんな理由か（幹部・管理者のみ）" />
+        <BigMenuLink href="/staff/orders" icon="banknote" title="発注・購入申請の管理"
+          description="ウィッグ・社販・商材の申請と発注状況" />
       </div>
 
       <Link

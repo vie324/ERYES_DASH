@@ -7,6 +7,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
 import type {
+  AbsenceReport,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -17,12 +18,20 @@ import type {
   CounselingResponse,
   CounselingStatus,
   Customer,
+  DailyPlan,
   DailyReport,
   DailyReportInput,
   DataStore,
   DayoffRequest,
+  EniReport,
+  IdealSchedule,
+  Meeting,
   NewShiftAssignment,
   NextAppointment,
+  OrderRequest,
+  OrderStatus,
+  PracticePair,
+  PracticeRecord,
   ScheduleOverride,
   ShiftAssignment,
   ShiftPreference,
@@ -54,6 +63,14 @@ interface MockDb {
   workPatterns: WorkPatternDay[];
   dayoffRequests: DayoffRequest[];
   scheduleOverrides: ScheduleOverride[];
+  eniReports: (EniReport & { kind: "stylist" | "weekly" })[];
+  practiceRecords: PracticeRecord[];
+  practicePairs: PracticePair[];
+  meetings: Meeting[];
+  absenceReports: AbsenceReport[];
+  orderRequests: OrderRequest[];
+  dailyPlans: DailyPlan[];
+  idealSchedules: IdealSchedule[];
 }
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -106,6 +123,8 @@ function seed(): MockDb {
       name: "相川 恵",
       loginId: "admin",
       role: "admin",
+      jobType: "",
+      isExecutive: true,
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("admin1234"),
@@ -116,6 +135,8 @@ function seed(): MockDb {
       name: "佐藤 美咲",
       loginId: "misaki",
       role: "staff",
+      jobType: "",
+      isExecutive: false,
       // デモで残業超過アラートの動作が見えるよう、あえて少なめに設定している
       fixedOvertimeHours: 10,
       isActive: true,
@@ -127,23 +148,29 @@ function seed(): MockDb {
       name: "田中 凛",
       loginId: "rin",
       role: "staff",
+      jobType: "",
+      isExecutive: false,
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("staff1234"),
     },
-    // シフト管理（3店舗）デモ用の追加スタッフ
-    ...[
-      ["staff-3", "山本 大輝", "daiki"],
-      ["staff-4", "中島 結菜", "yuina"],
-      ["staff-5", "小林 蒼", "aoi"],
-      ["staff-6", "藤田 ひかり", "hikari"],
-    ].map(
-      ([id, name, loginId]): StaffWithSecret => ({
+    // ENi（ヘアサロン）デモ用スタッフ：スタイリスト2名（1名は幹部）＋アシスタント2名
+    ...(
+      [
+        ["staff-3", "山本 大輝", "daiki", "stylist", true],
+        ["staff-4", "中島 結菜", "yuina", "stylist", false],
+        ["staff-5", "小林 蒼", "aoi", "assistant", false],
+        ["staff-6", "藤田 ひかり", "hikari", "assistant", false],
+      ] as [string, string, string, "stylist" | "assistant", boolean][]
+    ).map(
+      ([id, name, loginId, jobType, isExecutive]): StaffWithSecret => ({
         id,
         storeId: store.id,
         name,
         loginId,
         role: "staff",
+        jobType,
+        isExecutive,
         fixedOvertimeHours: 20,
         isActive: true,
         passwordHash: hashPassword("staff1234"),
@@ -376,6 +403,136 @@ function seed(): MockDb {
     },
   ];
 
+  // ---- ENi（ヘアサロン）のデモデータ ----
+  const eniReports: (EniReport & { kind: "stylist" | "weekly" })[] = [
+    {
+      id: randomUUID(),
+      kind: "stylist",
+      staffId: "staff-3",
+      periodKey: addDays(today, -1),
+      answers: {
+        clients_total: 8,
+        clients_new: 2,
+        clients_shimei: 5,
+        service_sales: 68000,
+        retail_sales: 8800,
+        next_bookings: 6,
+        highlight: "ハイライトの提案がお客様にとても好評だった",
+        issue: "施術の合間の声かけをもう少し増やしたい",
+        share: "",
+      },
+      updatedAt: jstAt(addDays(today, -1), 20),
+    },
+  ];
+  const practicePairs: PracticePair[] = [
+    { id: randomUUID(), targetMonth: month, memberStaffId: "staff-5", partnerStaffId: "staff-3" },
+    { id: randomUUID(), targetMonth: month, memberStaffId: "staff-6", partnerStaffId: "staff-4" },
+  ];
+  const practiceRecords: PracticeRecord[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      practiceDate: addDays(today, -2),
+      minutes: 60,
+      partnerStaffId: "staff-3",
+      partnerName: "",
+      content: "ワインディング",
+      createdAt: jstAt(addDays(today, -2), 21),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      practiceDate: addDays(today, -1),
+      minutes: 90,
+      partnerStaffId: "staff-3",
+      partnerName: "",
+      content: "ブロー",
+      createdAt: jstAt(addDays(today, -1), 21),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-6",
+      practiceDate: addDays(today, -1),
+      minutes: 30,
+      partnerStaffId: null,
+      partnerName: "モデル 花田さん",
+      content: "カラー塗布",
+      createdAt: jstAt(addDays(today, -1), 21),
+    },
+  ];
+  const meetings: Meeting[] = [
+    {
+      id: randomUUID(),
+      meetingType: "1on1",
+      title: "",
+      meetingDate: addDays(today, -3),
+      startTime: "13:00",
+      hostStaffId: "staff-3",
+      guestStaffId: "staff-5",
+      minutesUrl: "",
+      minutesText: "",
+      minutesDone: false, // 議事録が未提出のデモ（一覧で赤く出る）
+      createdBy: "staff-3",
+      createdAt: jstAt(addDays(today, -5), 10),
+    },
+    {
+      id: randomUUID(),
+      meetingType: "all",
+      title: "月初 全体ミーティング",
+      meetingDate: addDays(today, 4),
+      startTime: "09:30",
+      hostStaffId: "staff-3",
+      guestStaffId: null,
+      minutesUrl: "",
+      minutesText: "",
+      minutesDone: false,
+      createdBy: "staff-4",
+      createdAt: jstAt(addDays(today, -2), 12),
+    },
+  ];
+  const absenceReports: AbsenceReport[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-6",
+      absenceDate: addDays(today, -4),
+      kind: "early_leave",
+      hours: 2,
+      reason: "体調不良（発熱）のため早退",
+      reportedBy: "staff-4",
+      createdAt: jstAt(addDays(today, -4), 15),
+    },
+  ];
+  const orderRequests: OrderRequest[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      category: "wig",
+      itemName: "カットウィッグ（レディース）",
+      quantity: 2,
+      note: "国家試験の練習用",
+      status: "requested",
+      createdAt: jstAt(addDays(today, -1), 9),
+      updatedAt: jstAt(addDays(today, -1), 9),
+    },
+  ];
+  const dailyPlans: DailyPlan[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      planDate: today,
+      content: "午前：営業アシスト\n14:00 モデル施術（カラー）\n19:00 ワインディング練習1h",
+    },
+  ];
+  const idealSchedules: IdealSchedule[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      scope: "week",
+      content: "月：休み\n火〜金：営業＋閉店後練習1h\n土日：営業（モデル施術を週1回入れる）",
+      updatedAt: jstAt(addDays(today, -7), 22),
+    },
+  ];
+
   // ---- シフト管理のデモデータ ----
   const shiftRules: ShiftRules = {
     maxConsecutiveDays: 5,
@@ -503,6 +660,14 @@ function seed(): MockDb {
     workPatterns,
     dayoffRequests,
     scheduleOverrides: [],
+    eniReports,
+    practiceRecords,
+    practicePairs,
+    meetings,
+    absenceReports,
+    orderRequests,
+    dailyPlans,
+    idealSchedules,
   };
 }
 
@@ -586,6 +751,8 @@ class MockStore implements DataStore {
       name: input.name,
       loginId: input.loginId,
       role: input.role,
+      jobType: input.jobType ?? "",
+      isExecutive: input.isExecutive ?? false,
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
       passwordHash: input.passwordHash,
@@ -597,7 +764,9 @@ class MockStore implements DataStore {
 
   async updateStaff(
     id: string,
-    patch: Partial<Pick<Staff, "name" | "role" | "fixedOvertimeHours" | "isActive">> & {
+    patch: Partial<
+      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+    > & {
       passwordHash?: string;
     }
   ): Promise<Staff> {
@@ -620,7 +789,12 @@ class MockStore implements DataStore {
       this.db.shiftAssignments.some((a) => a.staffId === id) ||
       this.db.shiftRequestMonths.some((m) => m.staffId === id) ||
       this.db.shiftRequests.some((r) => r.staffId === id) ||
-      this.db.shiftAvailableStores.some((a) => a.staffId === id);
+      this.db.shiftAvailableStores.some((a) => a.staffId === id) ||
+      this.db.eniReports.some((r) => r.staffId === id) ||
+      this.db.practiceRecords.some((r) => r.staffId === id || r.partnerStaffId === id) ||
+      this.db.meetings.some((m) => m.hostStaffId === id || m.guestStaffId === id) ||
+      this.db.absenceReports.some((r) => r.staffId === id || r.reportedBy === id) ||
+      this.db.orderRequests.some((r) => r.staffId === id);
     if (referenced) {
       throw new Error(
         "このスタッフには日報・打刻・シフト等の記録があるため削除できません。代わりに「無効」にしてください（記録は残ります）"
@@ -1133,6 +1307,248 @@ class MockStore implements DataStore {
     this.db.scheduleOverrides = this.db.scheduleOverrides.filter(
       (o) => !(o.staffId === staffId && o.date === date)
     );
+  }
+
+  // ---- ENi（ヘアサロン）向け機能 ----
+
+  async upsertEniReport(input: {
+    kind: "stylist" | "weekly";
+    staffId: string;
+    periodKey: string;
+    answers: Record<string, unknown>;
+  }): Promise<EniReport> {
+    const found = this.db.eniReports.find(
+      (r) => r.kind === input.kind && r.staffId === input.staffId && r.periodKey === input.periodKey
+    );
+    if (found) {
+      found.answers = input.answers;
+      found.updatedAt = new Date();
+      return found;
+    }
+    const created = {
+      id: randomUUID(),
+      kind: input.kind,
+      staffId: input.staffId,
+      periodKey: input.periodKey,
+      answers: input.answers,
+      updatedAt: new Date(),
+    };
+    this.db.eniReports.push(created);
+    return created;
+  }
+
+  async getEniReport(
+    kind: "stylist" | "weekly",
+    staffId: string,
+    periodKey: string
+  ): Promise<EniReport | null> {
+    return (
+      this.db.eniReports.find(
+        (r) => r.kind === kind && r.staffId === staffId && r.periodKey === periodKey
+      ) ?? null
+    );
+  }
+
+  async listEniReports(
+    kind: "stylist" | "weekly",
+    filter: { staffId?: string; from: string; to: string }
+  ): Promise<EniReport[]> {
+    return this.db.eniReports
+      .filter(
+        (r) =>
+          r.kind === kind &&
+          r.periodKey >= filter.from &&
+          r.periodKey <= filter.to &&
+          (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => b.periodKey.localeCompare(a.periodKey));
+  }
+
+  async createPracticeRecord(
+    input: Omit<PracticeRecord, "id" | "createdAt">
+  ): Promise<PracticeRecord> {
+    const created: PracticeRecord = { id: randomUUID(), createdAt: new Date(), ...input };
+    this.db.practiceRecords.push(created);
+    return created;
+  }
+
+  async listPracticeRecords(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<PracticeRecord[]> {
+    return this.db.practiceRecords
+      .filter(
+        (r) =>
+          r.practiceDate >= filter.from &&
+          r.practiceDate <= filter.to &&
+          (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => a.practiceDate.localeCompare(b.practiceDate));
+  }
+
+  async getPracticeRecord(id: string): Promise<PracticeRecord | null> {
+    return this.db.practiceRecords.find((r) => r.id === id) ?? null;
+  }
+
+  async deletePracticeRecord(id: string): Promise<void> {
+    this.db.practiceRecords = this.db.practiceRecords.filter((r) => r.id !== id);
+  }
+
+  async listPracticePairs(targetMonth: string): Promise<PracticePair[]> {
+    return this.db.practicePairs.filter((p) => p.targetMonth === targetMonth);
+  }
+
+  async setPracticePair(
+    targetMonth: string,
+    memberStaffId: string,
+    partnerStaffId: string
+  ): Promise<void> {
+    this.db.practicePairs = this.db.practicePairs.filter(
+      (p) => !(p.targetMonth === targetMonth && p.memberStaffId === memberStaffId)
+    );
+    if (partnerStaffId) {
+      this.db.practicePairs.push({ id: randomUUID(), targetMonth, memberStaffId, partnerStaffId });
+    }
+  }
+
+  async createMeeting(
+    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">
+  ): Promise<Meeting> {
+    const created: Meeting = {
+      id: randomUUID(),
+      createdAt: new Date(),
+      minutesUrl: "",
+      minutesText: "",
+      minutesDone: false,
+      ...input,
+    };
+    this.db.meetings.push(created);
+    return created;
+  }
+
+  async getMeeting(id: string): Promise<Meeting | null> {
+    return this.db.meetings.find((m) => m.id === id) ?? null;
+  }
+
+  async listMeetings(filter: { from: string; to: string }): Promise<Meeting[]> {
+    return this.db.meetings
+      .filter((m) => m.meetingDate >= filter.from && m.meetingDate <= filter.to)
+      .sort(
+        (a, b) =>
+          a.meetingDate.localeCompare(b.meetingDate) || a.startTime.localeCompare(b.startTime)
+      );
+  }
+
+  async listMeetingsMissingMinutes(until: string): Promise<Meeting[]> {
+    return this.db.meetings
+      .filter((m) => !m.minutesDone && m.meetingDate <= until)
+      .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
+  }
+
+  async updateMeetingMinutes(
+    id: string,
+    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+  ): Promise<Meeting> {
+    const found = this.db.meetings.find((m) => m.id === id);
+    if (!found) throw new Error("ミーティングが見つかりません");
+    found.minutesUrl = patch.minutesUrl;
+    found.minutesText = patch.minutesText;
+    found.minutesDone = patch.minutesDone;
+    return found;
+  }
+
+  async deleteMeeting(id: string): Promise<void> {
+    this.db.meetings = this.db.meetings.filter((m) => m.id !== id);
+  }
+
+  async createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport> {
+    const created: AbsenceReport = { id: randomUUID(), createdAt: new Date(), ...input };
+    this.db.absenceReports.push(created);
+    return created;
+  }
+
+  async listAbsenceReports(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<AbsenceReport[]> {
+    return this.db.absenceReports
+      .filter(
+        (r) =>
+          r.absenceDate >= filter.from &&
+          r.absenceDate <= filter.to &&
+          (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => a.absenceDate.localeCompare(b.absenceDate));
+  }
+
+  async createOrderRequest(
+    input: Omit<OrderRequest, "id" | "status" | "createdAt" | "updatedAt">
+  ): Promise<OrderRequest> {
+    const created: OrderRequest = {
+      id: randomUUID(),
+      status: "requested",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...input,
+    };
+    this.db.orderRequests.push(created);
+    return created;
+  }
+
+  async listOrderRequests(filter: {
+    staffId?: string;
+    from: Date;
+    to: Date;
+  }): Promise<OrderRequest[]> {
+    return this.db.orderRequests
+      .filter(
+        (r) =>
+          r.createdAt >= filter.from &&
+          r.createdAt < filter.to &&
+          (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
+    const found = this.db.orderRequests.find((r) => r.id === id);
+    if (found) {
+      found.status = status;
+      found.updatedAt = new Date();
+    }
+  }
+
+  async upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void> {
+    const found = this.db.dailyPlans.find((p) => p.staffId === staffId && p.planDate === planDate);
+    if (found) {
+      found.content = content;
+    } else {
+      this.db.dailyPlans.push({ id: randomUUID(), staffId, planDate, content });
+    }
+  }
+
+  async listDailyPlans(planDate: string): Promise<DailyPlan[]> {
+    return this.db.dailyPlans.filter((p) => p.planDate === planDate);
+  }
+
+  async listIdealSchedules(staffId: string): Promise<IdealSchedule[]> {
+    return this.db.idealSchedules.filter((s) => s.staffId === staffId);
+  }
+
+  async upsertIdealSchedule(
+    staffId: string,
+    scope: "week" | "month",
+    content: string
+  ): Promise<void> {
+    const found = this.db.idealSchedules.find((s) => s.staffId === staffId && s.scope === scope);
+    if (found) {
+      found.content = content;
+      found.updatedAt = new Date();
+    } else {
+      this.db.idealSchedules.push({ id: randomUUID(), staffId, scope, content, updatedAt: new Date() });
+    }
   }
 }
 
