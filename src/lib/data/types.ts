@@ -5,6 +5,10 @@ export type Role = "admin" | "staff";
 export type PunchType = "in" | "out";
 export type CounselingStatus = "pending" | "confirmed"; // 未確認 / 確認済み
 
+// 次回予約の状態（お客様のセルフサービス操作を含む）
+// scheduled=予約中 / confirmed=お客様確認済み / change_requested=変更希望あり / cancelled=お客様キャンセル
+export type AppointmentStatus = "scheduled" | "confirmed" | "change_requested" | "cancelled";
+
 // ---- シフト管理 ----
 export type ShiftPreference = "early" | "late" | "off"; // 早番 / 遅番 / 休み希望
 export type ShiftType = "early" | "late";
@@ -114,8 +118,22 @@ export interface NextAppointment {
   customerId: string;
   scheduledAt: Date;
   staffId: string | null;
-  reminderSentAt: Date | null;
+  status: AppointmentStatus;
+  requestedNewAt: Date | null; // お客様が希望した変更後の日時（change_requested時）
+  changeNote: string; // 変更・キャンセル時のお客様メモ
+  reminderSentAt: Date | null; // 前日リマインドの送信日時
+  preReminderSentAt: Date | null; // 1週間前の事前案内の送信日時
   createdAt: Date;
+}
+
+/** 次回予約の部分更新（管理者の変更承認・お客様のセルフ操作用） */
+export interface AppointmentPatch {
+  scheduledAt?: Date;
+  status?: AppointmentStatus;
+  requestedNewAt?: Date | null;
+  changeNote?: string;
+  reminderSentAt?: Date | null;
+  preReminderSentAt?: Date | null;
 }
 
 export interface Broadcast {
@@ -150,6 +168,36 @@ export interface ShiftRequest {
   targetMonth: string;
   date: string; // "YYYY-MM-DD"
   preference: ShiftPreference;
+}
+
+// ---- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能） ----
+
+/** 週の基本出勤パターン（スタッフ×曜日）。行が無い曜日は「休み」扱い */
+export interface WorkPatternDay {
+  staffId: string;
+  weekday: number; // 0=日〜6=土
+  isWorking: boolean;
+  startTime: string; // "10:00"（空文字は時間未設定＝終日）
+  endTime: string;
+}
+
+/** 希望休（スタッフが3ヶ月前に申請する休み希望日） */
+export interface DayoffRequest {
+  id: string;
+  staffId: string;
+  date: string; // "YYYY-MM-DD"
+  createdAt: Date;
+}
+
+/** スケジュールの個別上書き（管理者の手動調整。パターン・希望休より優先） */
+export interface ScheduleOverride {
+  id: string;
+  staffId: string;
+  date: string; // "YYYY-MM-DD"
+  isWorking: boolean;
+  startTime: string;
+  endTime: string;
+  note: string;
 }
 
 /** シフト割当（1スタッフ1日1件） */
@@ -276,17 +324,24 @@ export interface DataStore {
     scheduledAt: Date;
     staffId: string | null;
   }): Promise<NextAppointment>;
+  getNextAppointment(id: string): Promise<NextAppointment | null>;
+  updateNextAppointment(id: string, patch: AppointmentPatch): Promise<NextAppointment>;
   listNextAppointments(filter?: {
     customerId?: string;
     from?: Date;
     to?: Date;
   }): Promise<NextAppointment[]>;
   deleteNextAppointment(id: string): Promise<void>;
-  /** リマインド未送信かつ scheduledAt が from〜to の予約（定時バッチ用） */
+  /** リマインド未送信かつ scheduledAt が from〜to の予約（キャンセル済みは除く。定時バッチ用） */
   listAppointmentsNeedingReminder(from: Date, to: Date): Promise<NextAppointment[]>;
   markReminderSent(id: string, sentAt: Date): Promise<void>;
+  /** 1週間前の事前案内が未送信かつ scheduledAt が from〜to の予約（キャンセル済みは除く） */
+  listAppointmentsNeedingPreReminder(from: Date, to: Date): Promise<NextAppointment[]>;
+  markPreReminderSent(id: string, sentAt: Date): Promise<void>;
   /** 当月などの期間内に送信済みリマインド数（Push通数カウント用） */
   countRemindersSent(from: Date, to: Date): Promise<number>;
+  /** 期間内に送信済みの1週間前案内数（Push通数カウント用） */
+  countPreRemindersSent(from: Date, to: Date): Promise<number>;
 
   // 一斉配信
   createBroadcast(input: {
@@ -317,6 +372,20 @@ export interface DataStore {
     targetMonth: string,
     staffId?: string
   ): Promise<{ staffId: string; storeId: string }[]>;
+
+  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+  /** 週の基本パターン（staffId指定でそのスタッフ分のみ） */
+  listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]>;
+  /** スタッフの週パターンを丸ごと保存（7曜日分を入れ替え） */
+  saveWorkPattern(staffId: string, days: Omit<WorkPatternDay, "staffId">[]): Promise<void>;
+  /** 希望休（from〜to の日付範囲、"YYYY-MM-DD"） */
+  listDayoffRequests(filter: { staffId?: string; from: string; to: string }): Promise<DayoffRequest[]>;
+  /** 対象月の希望休を丸ごと入れ替え（再提出は上書き） */
+  replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void>;
+  /** スケジュールの個別上書き（from〜to の日付範囲） */
+  listScheduleOverrides(filter: { staffId?: string; from: string; to: string }): Promise<ScheduleOverride[]>;
+  upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void>;
+  deleteScheduleOverride(staffId: string, date: string): Promise<void>;
 
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
   /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */

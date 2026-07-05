@@ -5,6 +5,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import type {
+  AppointmentPatch,
   AssignmentStatus,
   Attendance,
   AttendanceInput,
@@ -17,8 +18,10 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  DayoffRequest,
   NewShiftAssignment,
   NextAppointment,
+  ScheduleOverride,
   ShiftAssignment,
   ShiftPreference,
   ShiftRequest,
@@ -28,6 +31,7 @@ import type {
   StaffInput,
   StaffWithSecret,
   Store,
+  WorkPatternDay,
 } from "@/lib/data/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -118,8 +122,37 @@ const mapAppointment = (r: Row): NextAppointment => ({
   customerId: r.customer_id,
   scheduledAt: new Date(r.scheduled_at),
   staffId: r.staff_id,
+  status: r.status ?? "scheduled",
+  requestedNewAt: r.requested_new_at ? new Date(r.requested_new_at) : null,
+  changeNote: r.change_note ?? "",
   reminderSentAt: r.reminder_sent_at ? new Date(r.reminder_sent_at) : null,
+  preReminderSentAt: r.pre_reminder_sent_at ? new Date(r.pre_reminder_sent_at) : null,
   createdAt: new Date(r.created_at),
+});
+
+const mapWorkPattern = (r: Row): WorkPatternDay => ({
+  staffId: r.staff_id,
+  weekday: r.weekday,
+  isWorking: r.is_working,
+  startTime: r.start_time ?? "",
+  endTime: r.end_time ?? "",
+});
+
+const mapDayoffRequest = (r: Row): DayoffRequest => ({
+  id: r.id,
+  staffId: r.staff_id,
+  date: r.date,
+  createdAt: new Date(r.created_at),
+});
+
+const mapScheduleOverride = (r: Row): ScheduleOverride => ({
+  id: r.id,
+  staffId: r.staff_id,
+  date: r.date,
+  isWorking: r.is_working,
+  startTime: r.start_time ?? "",
+  endTime: r.end_time ?? "",
+  note: r.note ?? "",
 });
 
 const mapBroadcast = (r: Row): Broadcast => ({
@@ -579,6 +612,39 @@ class SupabaseStore implements DataStore {
     return must(data, error, "次回予約一覧").map(mapAppointment);
   }
 
+  async getNextAppointment(id: string): Promise<NextAppointment | null> {
+    const { data, error } = await this.sb
+      .from("next_appointments")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 次回予約取得: ${error.message}`);
+    return data ? mapAppointment(data) : null;
+  }
+
+  async updateNextAppointment(id: string, patch: AppointmentPatch): Promise<NextAppointment> {
+    const row: Row = {};
+    if (patch.scheduledAt !== undefined) row.scheduled_at = patch.scheduledAt.toISOString();
+    if (patch.status !== undefined) row.status = patch.status;
+    if (patch.requestedNewAt !== undefined) {
+      row.requested_new_at = patch.requestedNewAt ? patch.requestedNewAt.toISOString() : null;
+    }
+    if (patch.changeNote !== undefined) row.change_note = patch.changeNote;
+    if (patch.reminderSentAt !== undefined) {
+      row.reminder_sent_at = patch.reminderSentAt ? patch.reminderSentAt.toISOString() : null;
+    }
+    if (patch.preReminderSentAt !== undefined) {
+      row.pre_reminder_sent_at = patch.preReminderSentAt ? patch.preReminderSentAt.toISOString() : null;
+    }
+    const { data, error } = await this.sb
+      .from("next_appointments")
+      .update(row)
+      .eq("id", id)
+      .select()
+      .single();
+    return mapAppointment(must(data, error, "次回予約更新"));
+  }
+
   async deleteNextAppointment(id: string): Promise<void> {
     const { error } = await this.sb.from("next_appointments").delete().eq("id", id);
     if (error) throw new Error(`[supabase] 次回予約削除: ${error.message}`);
@@ -589,6 +655,7 @@ class SupabaseStore implements DataStore {
       .from("next_appointments")
       .select("*")
       .is("reminder_sent_at", null)
+      .neq("status", "cancelled")
       .gte("scheduled_at", from.toISOString())
       .lt("scheduled_at", to.toISOString());
     return must(data, error, "リマインド対象取得").map(mapAppointment);
@@ -602,6 +669,25 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] リマインド記録: ${error.message}`);
   }
 
+  async listAppointmentsNeedingPreReminder(from: Date, to: Date): Promise<NextAppointment[]> {
+    const { data, error } = await this.sb
+      .from("next_appointments")
+      .select("*")
+      .is("pre_reminder_sent_at", null)
+      .neq("status", "cancelled")
+      .gte("scheduled_at", from.toISOString())
+      .lt("scheduled_at", to.toISOString());
+    return must(data, error, "事前案内対象取得").map(mapAppointment);
+  }
+
+  async markPreReminderSent(id: string, sentAt: Date): Promise<void> {
+    const { error } = await this.sb
+      .from("next_appointments")
+      .update({ pre_reminder_sent_at: sentAt.toISOString() })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] 事前案内記録: ${error.message}`);
+  }
+
   async countRemindersSent(from: Date, to: Date): Promise<number> {
     const { count, error } = await this.sb
       .from("next_appointments")
@@ -609,6 +695,16 @@ class SupabaseStore implements DataStore {
       .gte("reminder_sent_at", from.toISOString())
       .lt("reminder_sent_at", to.toISOString());
     if (error) throw new Error(`[supabase] リマインド数取得: ${error.message}`);
+    return count ?? 0;
+  }
+
+  async countPreRemindersSent(from: Date, to: Date): Promise<number> {
+    const { count, error } = await this.sb
+      .from("next_appointments")
+      .select("*", { count: "exact", head: true })
+      .gte("pre_reminder_sent_at", from.toISOString())
+      .lt("pre_reminder_sent_at", to.toISOString());
+    if (error) throw new Error(`[supabase] 事前案内数取得: ${error.message}`);
     return count ?? 0;
   }
 
@@ -840,6 +936,106 @@ class SupabaseStore implements DataStore {
       .eq("target_month", targetMonth)
       .select("id");
     return must(data, error, "シフト確定").length;
+  }
+
+  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+
+  async listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]> {
+    let query = this.sb.from("work_patterns").select("*").order("weekday");
+    if (staffId) query = query.eq("staff_id", staffId);
+    const { data, error } = await query;
+    return must(data, error, "出勤パターン一覧").map(mapWorkPattern);
+  }
+
+  async saveWorkPattern(staffId: string, days: Omit<WorkPatternDay, "staffId">[]): Promise<void> {
+    const del = await this.sb.from("work_patterns").delete().eq("staff_id", staffId);
+    if (del.error) throw new Error(`[supabase] 出勤パターン削除: ${del.error.message}`);
+    if (days.length > 0) {
+      const ins = await this.sb.from("work_patterns").insert(
+        days.map((d) => ({
+          staff_id: staffId,
+          weekday: d.weekday,
+          is_working: d.isWorking,
+          start_time: d.startTime,
+          end_time: d.endTime,
+        }))
+      );
+      if (ins.error) throw new Error(`[supabase] 出勤パターン保存: ${ins.error.message}`);
+    }
+  }
+
+  async listDayoffRequests(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<DayoffRequest[]> {
+    let query = this.sb
+      .from("dayoff_requests")
+      .select("*")
+      .gte("date", filter.from)
+      .lte("date", filter.to)
+      .order("date");
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "希望休一覧").map(mapDayoffRequest);
+  }
+
+  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void> {
+    const from = `${targetMonth}-01`;
+    const to = `${targetMonth}-31`;
+    const del = await this.sb
+      .from("dayoff_requests")
+      .delete()
+      .eq("staff_id", staffId)
+      .gte("date", from)
+      .lte("date", to);
+    if (del.error) throw new Error(`[supabase] 希望休削除: ${del.error.message}`);
+    if (dates.length > 0) {
+      const ins = await this.sb
+        .from("dayoff_requests")
+        .insert(dates.map((date) => ({ staff_id: staffId, date })));
+      if (ins.error) throw new Error(`[supabase] 希望休保存: ${ins.error.message}`);
+    }
+  }
+
+  async listScheduleOverrides(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<ScheduleOverride[]> {
+    let query = this.sb
+      .from("schedule_overrides")
+      .select("*")
+      .gte("date", filter.from)
+      .lte("date", filter.to)
+      .order("date");
+    if (filter.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return must(data, error, "個別調整一覧").map(mapScheduleOverride);
+  }
+
+  async upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void> {
+    const { error } = await this.sb.from("schedule_overrides").upsert(
+      {
+        staff_id: input.staffId,
+        date: input.date,
+        is_working: input.isWorking,
+        start_time: input.startTime,
+        end_time: input.endTime,
+        note: input.note,
+      },
+      { onConflict: "staff_id,date" }
+    );
+    if (error) throw new Error(`[supabase] 個別調整保存: ${error.message}`);
+  }
+
+  async deleteScheduleOverride(staffId: string, date: string): Promise<void> {
+    const { error } = await this.sb
+      .from("schedule_overrides")
+      .delete()
+      .eq("staff_id", staffId)
+      .eq("date", date);
+    if (error) throw new Error(`[supabase] 個別調整削除: ${error.message}`);
   }
 }
 

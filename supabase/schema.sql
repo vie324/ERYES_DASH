@@ -103,14 +103,61 @@ create table if not exists attendances (
   is_valid boolean not null
 );
 
--- 次回予約（前日リマインドの対象。reminder_sent_at で二重送信を防止）
+-- 次回予約（1週間前・前日リマインドの対象。*_sent_at で二重送信を防止）
+-- status: scheduled=予約中 / confirmed=お客様確認済み / change_requested=変更希望あり / cancelled=お客様キャンセル
 create table if not exists next_appointments (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references customers(id),
   scheduled_at timestamptz not null,
   staff_id uuid references staff(id),
-  reminder_sent_at timestamptz,
+  status text not null default 'scheduled'
+    check (status in ('scheduled', 'confirmed', 'change_requested', 'cancelled')),
+  requested_new_at timestamptz,            -- お客様が希望した変更後の日時
+  change_note text not null default '',    -- 変更・キャンセル時のお客様メモ
+  reminder_sent_at timestamptz,            -- 前日リマインド送信日時
+  pre_reminder_sent_at timestamptz,        -- 1週間前の事前案内送信日時
   created_at timestamptz not null default now()
+);
+
+-- 既存DBに後から列を足す場合（本番に next_appointments が既にある場合）に実行：
+--   alter table next_appointments add column if not exists status text not null default 'scheduled';
+--   alter table next_appointments add column if not exists requested_new_at timestamptz;
+--   alter table next_appointments add column if not exists change_note text not null default '';
+--   alter table next_appointments add column if not exists pre_reminder_sent_at timestamptz;
+
+-- ============================================================
+-- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能）
+-- ============================================================
+
+-- 週の基本出勤パターン（スタッフ×曜日）。weekday: 0=日〜6=土。行が無い曜日は「休み」扱い
+create table if not exists work_patterns (
+  staff_id uuid not null references staff(id) on delete cascade,
+  weekday integer not null check (weekday between 0 and 6),
+  is_working boolean not null default false,
+  start_time text not null default '',   -- "10:00"（空文字は時間未設定）
+  end_time text not null default '',
+  primary key (staff_id, weekday)
+);
+
+-- 希望休（スタッフが「3ヶ月後の月」を対象に、当月7日までに申請する休み希望日）
+create table if not exists dayoff_requests (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  date date not null,
+  created_at timestamptz not null default now(),
+  unique (staff_id, date)
+);
+
+-- スケジュールの個別上書き（管理者の手動調整。パターン・希望休より優先）
+create table if not exists schedule_overrides (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  date date not null,
+  is_working boolean not null,
+  start_time text not null default '',
+  end_time text not null default '',
+  note text not null default '',
+  unique (staff_id, date)
 );
 
 -- 一斉配信の履歴
@@ -186,6 +233,8 @@ create index if not exists idx_attendances_punched on attendances (punched_at);
 create index if not exists idx_attendances_staff on attendances (staff_id, punched_at);
 create index if not exists idx_appointments_scheduled on next_appointments (scheduled_at);
 create index if not exists idx_appointments_reminder on next_appointments (reminder_sent_at, scheduled_at);
+create index if not exists idx_dayoff_requests_date on dayoff_requests (date);
+create index if not exists idx_schedule_overrides_date on schedule_overrides (date);
 create index if not exists idx_shift_requests_month on shift_requests (target_month);
 create index if not exists idx_shift_available_month on staff_available_stores (target_month);
 create index if not exists idx_shift_assignments_month on shift_assignments (target_month, date);
@@ -207,6 +256,9 @@ alter table shift_request_months enable row level security;
 alter table shift_requests enable row level security;
 alter table staff_available_stores enable row level security;
 alter table shift_assignments enable row level security;
+alter table work_patterns enable row level security;
+alter table dayoff_requests enable row level security;
+alter table schedule_overrides enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。

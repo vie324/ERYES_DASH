@@ -7,6 +7,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
 import type {
+  AppointmentPatch,
   AssignmentStatus,
   Attendance,
   AttendanceInput,
@@ -19,8 +20,10 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  DayoffRequest,
   NewShiftAssignment,
   NextAppointment,
+  ScheduleOverride,
   ShiftAssignment,
   ShiftPreference,
   ShiftRequest,
@@ -30,6 +33,7 @@ import type {
   StaffInput,
   StaffWithSecret,
   Store,
+  WorkPatternDay,
 } from "@/lib/data/types";
 
 interface MockDb {
@@ -47,6 +51,9 @@ interface MockDb {
   shiftRequests: ShiftRequest[];
   shiftAvailableStores: { staffId: string; targetMonth: string; storeId: string }[];
   shiftAssignments: ShiftAssignment[];
+  workPatterns: WorkPatternDay[];
+  dayoffRequests: DayoffRequest[];
+  scheduleOverrides: ScheduleOverride[];
 }
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -305,14 +312,18 @@ function seed(): MockDb {
     }
   }
 
-  // 次回予約：明日（リマインド対象）と来週
+  // 次回予約：明日（リマインド対象）と来週（1週間前案内の対象）
   const appointments: NextAppointment[] = [
     {
       id: "appt-1",
       customerId: "cust-1",
       scheduledAt: jstAt(addDays(today, 1), 14),
       staffId: "staff-1",
+      status: "scheduled",
+      requestedNewAt: null,
+      changeNote: "",
       reminderSentAt: null,
+      preReminderSentAt: jstAt(addDays(today, -6), 10),
       createdAt: jstAt(addDays(today, -7), 13),
     },
     {
@@ -320,8 +331,48 @@ function seed(): MockDb {
       customerId: "cust-2",
       scheduledAt: jstAt(addDays(today, 7), 11),
       staffId: null,
+      status: "scheduled",
+      requestedNewAt: null,
+      changeNote: "",
       reminderSentAt: null,
+      preReminderSentAt: null,
       createdAt: jstAt(addDays(today, -3), 16),
+    },
+  ];
+
+  // ---- 出勤スケジュール（基本パターン＋希望休）のデモデータ ----
+  // 例：staff-1=フル出勤（月曜定休）、staff-2=平日のみ 10:00-16:30（金曜は12:00-16:30）
+  const workPatterns: WorkPatternDay[] = [];
+  for (let wd = 0; wd <= 6; wd++) {
+    workPatterns.push({
+      staffId: "staff-1",
+      weekday: wd,
+      isWorking: wd !== 1, // 月曜定休
+      startTime: wd !== 1 ? "10:00" : "",
+      endTime: wd !== 1 ? "19:00" : "",
+    });
+    const isWeekday = wd >= 2 && wd <= 5; // 火〜金
+    workPatterns.push({
+      staffId: "staff-2",
+      weekday: wd,
+      isWorking: isWeekday,
+      startTime: isWeekday ? (wd === 5 ? "12:00" : "10:00") : "",
+      endTime: isWeekday ? "16:30" : "",
+    });
+  }
+  const dayoffMonth = addMonths(month, 3); // 3ヶ月後の希望休（募集中の月）
+  const dayoffRequests: DayoffRequest[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-2",
+      date: `${dayoffMonth}-10`,
+      createdAt: jstAt(today, 9),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-2",
+      date: `${dayoffMonth}-24`,
+      createdAt: jstAt(today, 9),
     },
   ];
 
@@ -449,6 +500,9 @@ function seed(): MockDb {
     shiftRequests,
     shiftAvailableStores,
     shiftAssignments,
+    workPatterns,
+    dayoffRequests,
+    scheduleOverrides: [],
   };
 }
 
@@ -759,11 +813,31 @@ class MockStore implements DataStore {
       customerId: input.customerId,
       scheduledAt: input.scheduledAt,
       staffId: input.staffId,
+      status: "scheduled",
+      requestedNewAt: null,
+      changeNote: "",
       reminderSentAt: null,
+      preReminderSentAt: null,
       createdAt: new Date(),
     };
     this.db.appointments.push(created);
     return created;
+  }
+
+  async getNextAppointment(id: string): Promise<NextAppointment | null> {
+    return this.db.appointments.find((a) => a.id === id) ?? null;
+  }
+
+  async updateNextAppointment(id: string, patch: AppointmentPatch): Promise<NextAppointment> {
+    const found = this.db.appointments.find((a) => a.id === id);
+    if (!found) throw new Error("予約が見つかりません");
+    if (patch.scheduledAt !== undefined) found.scheduledAt = patch.scheduledAt;
+    if (patch.status !== undefined) found.status = patch.status;
+    if (patch.requestedNewAt !== undefined) found.requestedNewAt = patch.requestedNewAt;
+    if (patch.changeNote !== undefined) found.changeNote = patch.changeNote;
+    if (patch.reminderSentAt !== undefined) found.reminderSentAt = patch.reminderSentAt;
+    if (patch.preReminderSentAt !== undefined) found.preReminderSentAt = patch.preReminderSentAt;
+    return found;
   }
 
   async listNextAppointments(filter?: {
@@ -787,7 +861,11 @@ class MockStore implements DataStore {
 
   async listAppointmentsNeedingReminder(from: Date, to: Date): Promise<NextAppointment[]> {
     return this.db.appointments.filter(
-      (a) => a.reminderSentAt === null && a.scheduledAt >= from && a.scheduledAt < to
+      (a) =>
+        a.reminderSentAt === null &&
+        a.status !== "cancelled" &&
+        a.scheduledAt >= from &&
+        a.scheduledAt < to
     );
   }
 
@@ -796,9 +874,30 @@ class MockStore implements DataStore {
     if (found) found.reminderSentAt = sentAt;
   }
 
+  async listAppointmentsNeedingPreReminder(from: Date, to: Date): Promise<NextAppointment[]> {
+    return this.db.appointments.filter(
+      (a) =>
+        a.preReminderSentAt === null &&
+        a.status !== "cancelled" &&
+        a.scheduledAt >= from &&
+        a.scheduledAt < to
+    );
+  }
+
+  async markPreReminderSent(id: string, sentAt: Date): Promise<void> {
+    const found = this.db.appointments.find((a) => a.id === id);
+    if (found) found.preReminderSentAt = sentAt;
+  }
+
   async countRemindersSent(from: Date, to: Date): Promise<number> {
     return this.db.appointments.filter(
       (a) => a.reminderSentAt !== null && a.reminderSentAt >= from && a.reminderSentAt < to
+    ).length;
+  }
+
+  async countPreRemindersSent(from: Date, to: Date): Promise<number> {
+    return this.db.appointments.filter(
+      (a) => a.preReminderSentAt !== null && a.preReminderSentAt >= from && a.preReminderSentAt < to
     ).length;
   }
 
@@ -963,6 +1062,77 @@ class MockStore implements DataStore {
       }
     }
     return count;
+  }
+
+  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+
+  async listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]> {
+    return this.db.workPatterns
+      .filter((p) => !staffId || p.staffId === staffId)
+      .sort((a, b) => a.weekday - b.weekday);
+  }
+
+  async saveWorkPattern(staffId: string, days: Omit<WorkPatternDay, "staffId">[]): Promise<void> {
+    this.db.workPatterns = this.db.workPatterns.filter((p) => p.staffId !== staffId);
+    for (const d of days) {
+      this.db.workPatterns.push({ staffId, ...d });
+    }
+  }
+
+  async listDayoffRequests(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<DayoffRequest[]> {
+    return this.db.dayoffRequests
+      .filter(
+        (r) =>
+          r.date >= filter.from &&
+          r.date <= filter.to &&
+          (!filter.staffId || r.staffId === filter.staffId)
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void> {
+    this.db.dayoffRequests = this.db.dayoffRequests.filter(
+      (r) => !(r.staffId === staffId && r.date.startsWith(targetMonth))
+    );
+    for (const date of dates) {
+      this.db.dayoffRequests.push({ id: randomUUID(), staffId, date, createdAt: new Date() });
+    }
+  }
+
+  async listScheduleOverrides(filter: {
+    staffId?: string;
+    from: string;
+    to: string;
+  }): Promise<ScheduleOverride[]> {
+    return this.db.scheduleOverrides
+      .filter(
+        (o) =>
+          o.date >= filter.from &&
+          o.date <= filter.to &&
+          (!filter.staffId || o.staffId === filter.staffId)
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void> {
+    const found = this.db.scheduleOverrides.find(
+      (o) => o.staffId === input.staffId && o.date === input.date
+    );
+    if (found) {
+      Object.assign(found, input);
+    } else {
+      this.db.scheduleOverrides.push({ id: randomUUID(), ...input });
+    }
+  }
+
+  async deleteScheduleOverride(staffId: string, date: string): Promise<void> {
+    this.db.scheduleOverrides = this.db.scheduleOverrides.filter(
+      (o) => !(o.staffId === staffId && o.date === date)
+    );
   }
 }
 

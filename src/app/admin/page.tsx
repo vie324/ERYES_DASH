@@ -12,7 +12,6 @@ import {
 import { formatPercent, formatYen, summarize } from "@/lib/kpi";
 import { aggregateAttendance, formatMinutes, overtimeStatus } from "@/lib/attendance";
 import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
-import { currentTargetMonth } from "@/lib/shift/period";
 import { BigMenuLink, StatCard } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
@@ -25,7 +24,7 @@ export default async function AdminHomePage() {
   const { from, to } = monthRange(month);
 
   const tomorrowBounds = jstDayBoundsUtc(addDays(today, 1));
-  const [todayReports, monthReports, pending, stores, staffList, pushCount, tomorrowAppointments] =
+  const [todayReports, monthReports, pending, stores, staffList, pushCount, upcomingAppointments] =
     await Promise.all([
       db.listDailyReports({ from: today, to: today }),
       db.listDailyReports({ from, to }),
@@ -33,19 +32,23 @@ export default async function AdminHomePage() {
       db.listStores(),
       db.listStaff(),
       getMonthlyPushCount(db),
-      db.listNextAppointments({ from: tomorrowBounds.start, to: tomorrowBounds.end }),
+      db.listNextAppointments({ from: new Date() }),
     ]);
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   const todayKpi = summarize(todayReports);
   const monthKpi = summarize(monthReports);
 
-  // シフト：募集中の月の提出状況
-  const shiftRules = await db.getShiftRules();
-  const shiftTargetMonth = currentTargetMonth(shiftRules);
-  const shiftSubmissions = await db.listShiftRequestMonths(shiftTargetMonth);
-  const activeStaffCount = staffList.filter((s) => s.isActive).length;
-  const shiftUnsubmitted = Math.max(0, activeStaffCount - shiftSubmissions.length);
+  // 明日のリマインド予定と、お客様対応が必要な予約（変更希望・キャンセル）
+  const tomorrowAppointments = upcomingAppointments.filter(
+    (a) =>
+      a.status !== "cancelled" &&
+      a.scheduledAt >= tomorrowBounds.start &&
+      a.scheduledAt < tomorrowBounds.end
+  );
+  const appointmentAttention = upcomingAppointments.filter(
+    (a) => a.status === "change_requested" || a.status === "cancelled"
+  ).length;
 
   // 残業アラート（勤怠運用がONのときのみ）
   const overtimeAlerts: { name: string; minutes: number; status: "warning" | "over" }[] = [];
@@ -110,15 +113,19 @@ export default async function AdminHomePage() {
       <div className="space-y-3">
         <BigMenuLink href="/admin/reports" icon="barChart" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
-        <BigMenuLink href="/admin/shift" icon="calendar" title="シフト管理"
-          description={`希望の集計・自動割当・確定（未提出 ${shiftUnsubmitted}名）`}
-          badge={shiftUnsubmitted} />
+        <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
+          description="基本パターン＋希望休でシフトを管理" />
         <BigMenuLink href="/admin/counseling" icon="clipboard" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
         <BigMenuLink href="/admin/customers" icon="user" title="顧客一覧"
           description="LINE登録済みのお客様" />
         <BigMenuLink href="/admin/appointments" icon="bell" title="次回予約・リマインド"
-          description="予約登録と前日リマインドの状況" />
+          description={
+            appointmentAttention > 0
+              ? `お客様からの変更希望・キャンセルが ${appointmentAttention} 件あります`
+              : "予約登録・事前案内とリマインドの状況"
+          }
+          badge={appointmentAttention} />
         <BigMenuLink href="/admin/broadcast" icon="megaphone" title="一斉配信"
           description="全顧客へのお知らせ送信" />
         <BigMenuLink href="/admin/csv" icon="fileText" title="売上CSV出力"

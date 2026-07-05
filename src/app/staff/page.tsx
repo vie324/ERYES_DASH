@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { formatDateJa, todayJst } from "@/lib/date";
-import { currentTargetMonth, isRequestEditable } from "@/lib/shift/period";
+import { formatDateJa, monthRange, todayJst } from "@/lib/date";
+import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { BigMenuLink } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
@@ -13,20 +13,21 @@ export default async function StaffHomePage() {
   const db = getDataStore();
   const today = todayJst();
 
-  const [pendingCounseling, todayReport, stores, shiftRules, todayCash] = await Promise.all([
+  const [pendingCounseling, todayReport, stores, todayCash] = await Promise.all([
     db.listCounselingResponses({ status: "pending" }),
     db.getDailyReport(session.staffId, today),
     db.listStores(),
-    db.getShiftRules(),
     db.listCashReports({ from: today, to: today }),
   ]);
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
-  // シフト希望が未提出ならバッジを出す
-  const targetMonth = currentTargetMonth(shiftRules);
-  const shiftSubmitted = await db.getShiftRequestMonth(session.staffId, targetMonth);
-  const shiftBadge =
-    !shiftSubmitted && isRequestEditable(targetMonth, shiftRules) ? "！" : null;
+  // 希望休：3ヶ月後の月の申請期間中（毎月7日まで）で、まだ1日も登録がなければ知らせる
+  const dayoffTarget = defaultDayoffTargetMonth(today);
+  const dayoffEditable = isDayoffEditable(dayoffTarget, today);
+  const myDayoffs = dayoffEditable
+    ? await db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
+    : [];
+  const shiftBadge = dayoffEditable && myDayoffs.length === 0 ? "！" : null;
 
   return (
     <div>
@@ -63,10 +64,10 @@ export default async function StaffHomePage() {
           description={`本日 ${todayCash.length} / ${stores.length}店舗 入力済み`}
         />
         <BigMenuLink
-          href="/staff/shift"
+          href="/staff/schedule"
           icon="calendar"
-          title="シフト"
-          description="自分のシフト確認・希望の提出"
+          title="出勤スケジュール"
+          description="自分の予定の確認・希望休の提出"
           badge={shiftBadge}
         />
         {attendanceAvailable && (

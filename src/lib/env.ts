@@ -12,6 +12,8 @@ export const env = {
   lineChannelSecret: process.env.LINE_CHANNEL_SECRET || "",
   lineChannelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || "",
   liffId: process.env.NEXT_PUBLIC_LIFF_ID || "",
+  // 予約確認・変更用のLIFFアプリ（エンドポイント: /liff/appointment）。未設定でも他機能は動く
+  liffAppointmentId: process.env.NEXT_PUBLIC_LIFF_APPOINTMENT_ID || "",
 };
 
 /** Supabase が設定済みか（false の場合はメモリ内デモデータで動作） */
