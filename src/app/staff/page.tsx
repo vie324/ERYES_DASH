@@ -1,16 +1,21 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, monthRange, todayJst, weekStartOf } from "@/lib/date";
+import { getBrand } from "@/lib/brand";
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { BigMenuLink } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
 
 // スタッフのホーム：迷わないよう「やること」を大きなボタンだけにする。
-// 職種（job_type）が未設定＝アイサロンのメニュー、stylist/assistant＝ENi（ヘアサロン）のメニューを表示。
+// ログイン後に選んだ業態（EREYS/ENi）に応じてメニュー（項目）を切り替える。
 export default async function StaffHomePage() {
   const session = await requireSession();
+  const brand = await getBrand();
+  if (!brand) redirect("/select");
+
   const db = getDataStore();
   const today = todayJst();
 
@@ -35,7 +40,7 @@ export default async function StaffHomePage() {
 
       <ShiftNoticeBanner staffId={session.staffId} />
 
-      {jobType === "" ? (
+      {brand === "eyes" ? (
         <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />
       ) : (
         <EniMenu
@@ -152,18 +157,20 @@ async function EniMenu({
 }: {
   staffId: string;
   today: string;
-  jobType: "stylist" | "assistant";
+  jobType: "" | "stylist" | "assistant";
   isExec: boolean;
   shiftBadge: string | null;
 }) {
   const db = getDataStore();
   const weekStart = weekStartOf(today);
+  const showStylist = jobType !== "assistant"; // スタイリスト or 未設定
+  const showWeekly = jobType !== "stylist"; // アシスタント or 未設定
 
   const [todayPlan, missingMinutes, todayStylistReport, thisWeekReport] = await Promise.all([
     db.listDailyPlans(today).then((plans) => plans.find((p) => p.staffId === staffId) ?? null),
     db.listMeetingsMissingMinutes(today),
-    jobType === "stylist" ? db.getEniReport("stylist", staffId, today) : Promise.resolve(null),
-    jobType === "assistant" ? db.getEniReport("weekly", staffId, weekStart) : Promise.resolve(null),
+    showStylist ? db.getEniReport("stylist", staffId, today) : Promise.resolve(null),
+    showWeekly ? db.getEniReport("weekly", staffId, weekStart) : Promise.resolve(null),
   ]);
   const myMissingMinutes = missingMinutes.filter(
     (m) => m.hostStaffId === staffId || m.createdBy === staffId
@@ -171,7 +178,7 @@ async function EniMenu({
 
   return (
     <div className="space-y-3">
-      {jobType === "stylist" ? (
+      {showStylist && (
         <BigMenuLink
           href="/staff/eni-report"
           icon="pencil"
@@ -181,7 +188,8 @@ async function EniMenu({
           }
           badge={todayStylistReport ? null : "！"}
         />
-      ) : (
+      )}
+      {showWeekly && (
         <BigMenuLink
           href="/staff/weekly-report"
           icon="pencil"

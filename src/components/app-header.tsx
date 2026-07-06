@@ -5,9 +5,18 @@ import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
 import { getLogoSrc } from "@/lib/logo";
 import { Icon } from "@/components/icons";
+import { BRAND_INFO, type Brand } from "@/lib/brand";
 import type { Session } from "@/lib/auth/session";
 
-export function AppHeader({ session, homeHref }: { session: Session; homeHref: string }) {
+export function AppHeader({
+  session,
+  homeHref,
+  brand,
+}: {
+  session: Session;
+  homeHref: string;
+  brand?: Brand | null;
+}) {
   const helpHref = session.role === "admin" ? "/admin/help" : "/staff/help";
   return (
     <header className="sticky top-0 z-10 bg-brand-50/85 backdrop-blur border-b border-brand-200/70">
@@ -19,6 +28,16 @@ export function AppHeader({ session, homeHref }: { session: Session; homeHref: s
             {session.role === "admin" ? "管理者" : "スタッフ"}
           </span>
         </Link>
+        {brand && (
+          <Link
+            href="/select"
+            className="flex items-center gap-1 text-[11px] font-bold text-brand-700 bg-white/70 border border-brand-300 rounded-full px-2.5 py-1 shrink-0 transition-colors hover:bg-white"
+            aria-label="業態を切り替え"
+          >
+            {BRAND_INFO[brand].label}
+            <span className="text-brand-400">切替</span>
+          </Link>
+        )}
         <div className="flex items-center gap-2 shrink-0">
           <Link
             href={helpHref}

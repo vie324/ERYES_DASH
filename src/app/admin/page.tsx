@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import {
@@ -12,12 +13,48 @@ import {
 import { formatPercent, formatYen, summarize } from "@/lib/kpi";
 import { aggregateAttendance, formatMinutes, overtimeStatus } from "@/lib/attendance";
 import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
+import { getBrand } from "@/lib/brand";
 import { BigMenuLink, StatCard } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
-// 管理者ダッシュボード：本日・当月の数字と注意事項を一目で確認し、各機能へ移動する
+// 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える
 export default async function AdminHomePage() {
   await requireAdmin();
+  const brand = await getBrand();
+  if (!brand) redirect("/select");
+  const today = todayJst();
+
+  return (
+    <div>
+      <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
+      <h1 className="font-display text-2xl font-bold mb-4">
+        管理者メニュー
+        <span className="text-sm font-bold text-brand-500 ml-2">
+          {brand === "eyes" ? "EREYS" : "ENi"}
+        </span>
+      </h1>
+
+      {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
+
+      <Link
+        href="/admin/help"
+        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
+      >
+        <Icon name="help" className="w-4 h-4" />
+        使い方ガイド（運用の流れ・各機能の説明）
+      </Link>
+
+      <p className="mt-2 text-center">
+        <Link href="/staff" className="text-sm font-bold text-brand-700 underline">
+          スタッフ画面へ（日報入力・打刻はこちら）
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+/** EREYS（アイサロン）の管理ダッシュボード */
+async function EyesAdminDashboard() {
   const db = getDataStore();
   const today = todayJst();
   const month = thisMonthJst();
@@ -39,7 +76,6 @@ export default async function AdminHomePage() {
   const todayKpi = summarize(todayReports);
   const monthKpi = summarize(monthReports);
 
-  // 明日のリマインド予定と、お客様対応が必要な予約（変更希望・キャンセル）
   const tomorrowAppointments = upcomingAppointments.filter(
     (a) =>
       a.status !== "cancelled" &&
@@ -66,10 +102,7 @@ export default async function AdminHomePage() {
   }
 
   return (
-    <div>
-      <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
-      <h1 className="font-display text-2xl font-bold mb-4">管理者メニュー</h1>
-
+    <>
       {(overtimeAlerts.length > 0 || pushCount >= LINE_FREE_QUOTA * 0.8) && (
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-4 space-y-1.5">
           <p className="text-sm font-bold text-amber-800 flex items-center gap-1.5">
@@ -137,35 +170,58 @@ export default async function AdminHomePage() {
         <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
           description="店舗・スタッフ（職種・幹部）・勤怠運用の設定" />
       </div>
+    </>
+  );
+}
 
-      {/* ENi（ヘアサロン）の管理メニュー：スタッフ画面と同じページを管理者権限で開く */}
-      <h2 className="font-bold text-sm text-stone-500 mt-6 mb-2">ENi（ヘアサロン）</h2>
+/** ENi（ヘアサロン）の管理ダッシュボード */
+async function EniAdminDashboard() {
+  const db = getDataStore();
+  const today = todayJst();
+  const month = thisMonthJst();
+  const { from, to } = monthRange(month);
+
+  const [missingMinutes, orders] = await Promise.all([
+    db.listMeetingsMissingMinutes(today),
+    db.listOrderRequests({ from: jstDayBoundsUtc(from).start, to: jstDayBoundsUtc(to).end }),
+  ]);
+  const requestedOrders = orders.filter((o) => o.status === "requested").length;
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <StatCard
+          label="議事録 未提出"
+          value={`${missingMinutes.length}件`}
+          tone={missingMinutes.length > 0 ? "warning" : "default"}
+          sub="実施日を過ぎたミーティング"
+        />
+        <StatCard
+          label="発注 申請中"
+          value={`${requestedOrders}件`}
+          tone={requestedOrders > 0 ? "accent" : "default"}
+          sub="ウィッグ・社販・商材"
+        />
+      </div>
+
       <div className="space-y-3">
         <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
           description="スタイリスト日報・アシスタント週報の一覧" />
         <BigMenuLink href="/staff/practice" icon="sparkles" title="練習記録・ペア設定"
           description="月間活動記録の確認・今月のペアの割当" />
         <BigMenuLink href="/staff/meetings" icon="user" title="ミーティング・議事録"
-          description="1on1・全体MTGの予定と議事録の提出状況" />
+          description="1on1・全体MTGの予定と議事録の提出状況"
+          badge={missingMinutes.length} />
         <BigMenuLink href="/staff/absence" icon="alertTriangle" title="欠勤・早退の報告一覧"
           description="誰が・何時間・どんな理由か（幹部・管理者のみ）" />
         <BigMenuLink href="/staff/orders" icon="banknote" title="発注・購入申請の管理"
-          description="ウィッグ・社販・商材の申請と発注状況" />
+          description="ウィッグ・社販・商材の申請と発注状況"
+          badge={requestedOrders} />
+        <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
+          description="基本パターン＋希望休でシフトを管理" />
+        <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
+          description="スタッフの職種・幹部・店舗の設定" />
       </div>
-
-      <Link
-        href="/admin/help"
-        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
-      >
-        <Icon name="help" className="w-4 h-4" />
-        使い方ガイド（運用の流れ・各機能の説明）
-      </Link>
-
-      <p className="mt-2 text-center">
-        <Link href="/staff" className="text-sm font-bold text-brand-700 underline">
-          スタッフ画面へ（日報入力・打刻はこちら）
-        </Link>
-      </p>
-    </div>
+    </>
   );
 }
