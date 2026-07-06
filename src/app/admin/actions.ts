@@ -7,9 +7,14 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { hashPassword } from "@/lib/auth/password";
-import { jstLocalToUtc } from "@/lib/date";
-import { multicastText } from "@/lib/line/client";
-import type { Role } from "@/lib/data/types";
+import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
+import { multicastText, pushText } from "@/lib/line/client";
+import type { JobType, Role } from "@/lib/data/types";
+
+function jobTypeField(formData: FormData): JobType {
+  const v = String(formData.get("job_type") ?? "");
+  return v === "stylist" || v === "assistant" ? v : "";
+}
 
 // ---- 顧客 ----
 
@@ -56,6 +61,48 @@ export async function deleteAppointmentAction(formData: FormData): Promise<void>
   if (id) await getDataStore().deleteNextAppointment(id);
   revalidatePath("/admin/appointments");
   redirect(`${backTo}?deleted=1`);
+}
+
+/** お客様からの変更希望を確定する（日時を差し替え、リマインドを再送対象に戻し、LINEでお知らせ） */
+export async function approveAppointmentChangeAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  // 確定日時：既定はお客様の希望日時。管理者が調整した場合はその値
+  const scheduledLocal = String(formData.get("scheduled_at") ?? "");
+  if (!id || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(scheduledLocal)) {
+    redirect("/admin/appointments?error=input");
+  }
+
+  const db = getDataStore();
+  const appointment = await db.getNextAppointment(id);
+  if (!appointment) redirect("/admin/appointments?error=input");
+
+  const newAt = jstLocalToUtc(scheduledLocal);
+  await db.updateNextAppointment(id, {
+    scheduledAt: newAt,
+    status: "scheduled",
+    requestedNewAt: null,
+    changeNote: "",
+    // 日時が変わったので、1週間前案内・前日リマインドを新しい日程で送り直す
+    reminderSentAt: null,
+    preReminderSentAt: null,
+  });
+
+  // お客様へ変更確定のお知らせ（LINE未連携なら送信されない）
+  const customer = await db.getCustomer(appointment!.customerId);
+  if (customer?.lineUserId) {
+    const store = await db.getStore();
+    await pushText(
+      customer.lineUserId,
+      `【${store.name}】ご予約変更のお知らせ\n` +
+        `${customer.fullName} 様\n\n` +
+        `ご予約を ${formatDateTimeJa(newAt, true)} に変更いたしました。\n` +
+        `ご来店をお待ちしております。`
+    );
+  }
+
+  revalidatePath("/admin/appointments");
+  redirect("/admin/appointments?changed=1");
 }
 
 // ---- カウンセリング（管理者からの確認操作） ----
@@ -172,6 +219,8 @@ export async function createStaffAction(formData: FormData): Promise<void> {
       loginId,
       passwordHash: hashPassword(password),
       role,
+      jobType: jobTypeField(formData),
+      isExecutive: formData.get("is_executive") === "on",
       fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     });
   } catch {
@@ -198,6 +247,8 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   await getDataStore().updateStaff(id, {
     name,
     role: lockSelf ? "admin" : role,
+    jobType: jobTypeField(formData),
+    isExecutive: formData.get("is_executive") === "on",
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),

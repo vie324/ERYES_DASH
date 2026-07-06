@@ -170,6 +170,9 @@ export default async function AdminSettingsPage({
                 ) : (
                   <StatusBadge label="スタッフ" tone="muted" />
                 )}
+                {s.isExecutive && <StatusBadge label="幹部" tone="warning" />}
+                {s.jobType === "stylist" && <StatusBadge label="スタイリスト" tone="ok" />}
+                {s.jobType === "assistant" && <StatusBadge label="アシスタント" tone="ok" />}
                 {!s.isActive && <StatusBadge label="無効" tone="danger" />}
                 <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
@@ -203,6 +206,31 @@ export default async function AdminSettingsPage({
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">職種（ENiのヘアスタッフのみ）</label>
+                    <select name="job_type" defaultValue={s.jobType} className="input">
+                      <option value="">未設定（アイサロン等）</option>
+                      <option value="stylist">スタイリスト</option>
+                      <option value="assistant">アシスタント</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                      <input
+                        type="checkbox"
+                        name="is_executive"
+                        defaultChecked={s.isExecutive}
+                        className="h-5 w-5 accent-brand-500"
+                      />
+                      幹部メンバー
+                    </label>
+                  </div>
+                </div>
+                <p className="text-xs text-stone-400 -mt-1">
+                  ※ 職種を設定するとホームがENi向けメニュー（日報/週報・練習記録等）になります。
+                  幹部は欠勤・早退の閲覧、発注管理、ペア設定、日報/週報の閲覧ができます。
+                </p>
                 <div>
                   <label className="label">新しいパスワード（変更する場合のみ・8文字以上）</label>
                   <input name="new_password" type="password" autoComplete="new-password" className="input" />
@@ -294,6 +322,22 @@ export default async function AdminSettingsPage({
                 defaultValue={20}
                 className="input"
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="new_job_type">職種（ENiのヘアスタッフのみ）</label>
+              <select id="new_job_type" name="job_type" className="input" defaultValue="">
+                <option value="">未設定（アイサロン等）</option>
+                <option value="stylist">スタイリスト</option>
+                <option value="assistant">アシスタント</option>
+              </select>
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                <input type="checkbox" name="is_executive" className="h-5 w-5 accent-brand-500" />
+                幹部メンバー
+              </label>
             </div>
           </div>
           <button type="submit" className="btn-primary w-full">スタッフを追加</button>
