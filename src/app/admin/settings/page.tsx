@@ -215,21 +215,28 @@ export default async function AdminSettingsPage({
                       <option value="assistant">アシスタント</option>
                     </select>
                   </div>
-                  <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
-                      <input
-                        type="checkbox"
-                        name="is_executive"
-                        defaultChecked={s.isExecutive}
-                        className="h-5 w-5 accent-brand-500"
-                      />
-                      幹部メンバー
-                    </label>
+                  <div>
+                    <label className="label">ランク（アシスタントのみ）</label>
+                    <select name="rank" defaultValue={s.rank} className="input">
+                      <option value="">未設定</option>
+                      <option value="first">ファースト</option>
+                      <option value="middle">ミドル</option>
+                      <option value="final">ファイナル</option>
+                    </select>
                   </div>
                 </div>
+                <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                  <input
+                    type="checkbox"
+                    name="is_executive"
+                    defaultChecked={s.isExecutive}
+                    className="h-5 w-5 accent-brand-500"
+                  />
+                  幹部メンバー
+                </label>
                 <p className="text-xs text-stone-400 -mt-1">
-                  ※ 職種を設定するとホームがENi向けメニュー（日報/週報・練習記録等）になります。
-                  幹部は欠勤・早退の閲覧、発注管理、ペア設定、日報/週報の閲覧ができます。
+                  ※ 職種を設定するとホームがENi向けメニューになります。ランクでアシスタント週報の内容が変わります。
+                  幹部は欠勤・早退の閲覧、発注管理、ペア設定、日報/週報の閲覧・コメントができます。
                 </p>
                 <div>
                   <label className="label">新しいパスワード（変更する場合のみ・8文字以上）</label>

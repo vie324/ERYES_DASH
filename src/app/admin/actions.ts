@@ -9,11 +9,16 @@ import { getDataStore } from "@/lib/data";
 import { hashPassword } from "@/lib/auth/password";
 import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
 import { multicastText, pushText } from "@/lib/line/client";
-import type { JobType, Role } from "@/lib/data/types";
+import type { AssistantRank, JobType, Role } from "@/lib/data/types";
 
 function jobTypeField(formData: FormData): JobType {
   const v = String(formData.get("job_type") ?? "");
   return v === "stylist" || v === "assistant" ? v : "";
+}
+
+function rankField(formData: FormData): AssistantRank {
+  const v = String(formData.get("rank") ?? "");
+  return v === "first" || v === "middle" || v === "final" ? v : "";
 }
 
 // ---- 顧客 ----
@@ -220,6 +225,7 @@ export async function createStaffAction(formData: FormData): Promise<void> {
       passwordHash: hashPassword(password),
       role,
       jobType: jobTypeField(formData),
+      rank: rankField(formData),
       isExecutive: formData.get("is_executive") === "on",
       fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     });
@@ -248,6 +254,7 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
     name,
     role: lockSelf ? "admin" : role,
     jobType: jobTypeField(formData),
+    rank: rankField(formData),
     isExecutive: formData.get("is_executive") === "on",
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     isActive: lockSelf ? true : isActive,

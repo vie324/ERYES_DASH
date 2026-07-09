@@ -19,6 +19,7 @@ import type {
   CounselingStatus,
   Customer,
   DailyPlan,
+  DailyPlanFields,
   DailyReport,
   DailyReportInput,
   DataStore,
@@ -124,6 +125,7 @@ function seed(): MockDb {
       loginId: "admin",
       role: "admin",
       jobType: "",
+      rank: "",
       isExecutive: true,
       fixedOvertimeHours: 20,
       isActive: true,
@@ -136,6 +138,7 @@ function seed(): MockDb {
       loginId: "misaki",
       role: "staff",
       jobType: "",
+      rank: "",
       isExecutive: false,
       // デモで残業超過アラートの動作が見えるよう、あえて少なめに設定している
       fixedOvertimeHours: 10,
@@ -149,6 +152,7 @@ function seed(): MockDb {
       loginId: "rin",
       role: "staff",
       jobType: "",
+      rank: "",
       isExecutive: false,
       fixedOvertimeHours: 20,
       isActive: true,
@@ -157,19 +161,20 @@ function seed(): MockDb {
     // ENi（ヘアサロン）デモ用スタッフ：スタイリスト2名（1名は幹部）＋アシスタント2名
     ...(
       [
-        ["staff-3", "山本 大輝", "daiki", "stylist", true],
-        ["staff-4", "中島 結菜", "yuina", "stylist", false],
-        ["staff-5", "小林 蒼", "aoi", "assistant", false],
-        ["staff-6", "藤田 ひかり", "hikari", "assistant", false],
-      ] as [string, string, string, "stylist" | "assistant", boolean][]
+        ["staff-3", "山本 大輝", "daiki", "stylist", "", true],
+        ["staff-4", "中島 結菜", "yuina", "stylist", "", false],
+        ["staff-5", "小林 蒼", "aoi", "assistant", "first", false],
+        ["staff-6", "藤田 ひかり", "hikari", "assistant", "middle", false],
+      ] as [string, string, string, "stylist" | "assistant", "" | "first" | "middle" | "final", boolean][]
     ).map(
-      ([id, name, loginId, jobType, isExecutive]): StaffWithSecret => ({
+      ([id, name, loginId, jobType, rank, isExecutive]): StaffWithSecret => ({
         id,
         storeId: store.id,
         name,
         loginId,
         role: "staff",
         jobType,
+        rank,
         isExecutive,
         fixedOvertimeHours: 20,
         isActive: true,
@@ -417,10 +422,14 @@ function seed(): MockDb {
         service_sales: 68000,
         retail_sales: 8800,
         next_bookings: 6,
-        highlight: "ハイライトの提案がお客様にとても好評だった",
-        issue: "施術の合間の声かけをもう少し増やしたい",
-        share: "",
+        good_point: "ハイライトの提案がお客様にとても好評だった",
+        self_issue: "施術の合間の声かけをもう少し増やしたい",
+        improve_idea: "似合わせのカウンセリングをもっと言語化したい",
+        onsite_notice: "受付の動線が混雑時に詰まりやすい",
+        staff_share: "",
       },
+      comment: "",
+      commentedBy: null,
       updatedAt: jstAt(addDays(today, -1), 20),
     },
   ];
@@ -471,6 +480,7 @@ function seed(): MockDb {
       guestStaffId: "staff-5",
       minutesUrl: "",
       minutesText: "",
+      minutesPhoto: "",
       minutesDone: false, // 議事録が未提出のデモ（一覧で赤く出る）
       createdBy: "staff-3",
       createdAt: jstAt(addDays(today, -5), 10),
@@ -485,6 +495,7 @@ function seed(): MockDb {
       guestStaffId: null,
       minutesUrl: "",
       minutesText: "",
+      minutesPhoto: "",
       minutesDone: false,
       createdBy: "staff-4",
       createdAt: jstAt(addDays(today, -2), 12),
@@ -520,7 +531,16 @@ function seed(): MockDb {
       id: randomUUID(),
       staffId: "staff-5",
       planDate: today,
-      content: "午前：営業アシスト\n14:00 モデル施術（カラー）\n19:00 ワインディング練習1h",
+      content: "",
+      fields: {
+        goal: "ワインディングを時間内に巻き切る",
+        horenso: "モデルさんの来店時間を先輩に共有",
+        todo: "レイヤーのシャンプー入客、閉店後に練習1h",
+        timetable: "10:00 開店準備\n11:00〜 入客アシスト\n14:00 モデル施術（カラー）\n19:00 ワインディング練習\n20:30 片付け・退勤",
+      },
+      photo: "",
+      seenBy: null,
+      seenAt: null,
     },
   ];
   const idealSchedules: IdealSchedule[] = [
@@ -752,6 +772,7 @@ class MockStore implements DataStore {
       loginId: input.loginId,
       role: input.role,
       jobType: input.jobType ?? "",
+      rank: input.rank ?? "",
       isExecutive: input.isExecutive ?? false,
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
@@ -765,7 +786,10 @@ class MockStore implements DataStore {
   async updateStaff(
     id: string,
     patch: Partial<
-      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+      Pick<
+        Staff,
+        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+      >
     > & {
       passwordHash?: string;
     }
@@ -1331,6 +1355,8 @@ class MockStore implements DataStore {
       staffId: input.staffId,
       periodKey: input.periodKey,
       answers: input.answers,
+      comment: "",
+      commentedBy: null,
       updatedAt: new Date(),
     };
     this.db.eniReports.push(created);
@@ -1347,6 +1373,18 @@ class MockStore implements DataStore {
         (r) => r.kind === kind && r.staffId === staffId && r.periodKey === periodKey
       ) ?? null
     );
+  }
+
+  async getEniReportById(id: string): Promise<EniReport | null> {
+    return this.db.eniReports.find((r) => r.id === id) ?? null;
+  }
+
+  async commentEniReport(id: string, comment: string, commentedBy: string): Promise<void> {
+    const found = this.db.eniReports.find((r) => r.id === id);
+    if (found) {
+      found.comment = comment;
+      found.commentedBy = commentedBy;
+    }
   }
 
   async listEniReports(
@@ -1413,13 +1451,14 @@ class MockStore implements DataStore {
   }
 
   async createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">
+    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesPhoto" | "minutesDone">
   ): Promise<Meeting> {
     const created: Meeting = {
       id: randomUUID(),
       createdAt: new Date(),
       minutesUrl: "",
       minutesText: "",
+      minutesPhoto: "",
       minutesDone: false,
       ...input,
     };
@@ -1448,12 +1487,13 @@ class MockStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
   ): Promise<Meeting> {
     const found = this.db.meetings.find((m) => m.id === id);
     if (!found) throw new Error("ミーティングが見つかりません");
     found.minutesUrl = patch.minutesUrl;
     found.minutesText = patch.minutesText;
+    found.minutesPhoto = patch.minutesPhoto;
     found.minutesDone = patch.minutesDone;
     return found;
   }
@@ -1520,12 +1560,39 @@ class MockStore implements DataStore {
     }
   }
 
-  async upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void> {
+  async upsertDailyPlan(input: {
+    staffId: string;
+    planDate: string;
+    fields: DailyPlanFields;
+    photo: string;
+  }): Promise<void> {
+    const found = this.db.dailyPlans.find(
+      (p) => p.staffId === input.staffId && p.planDate === input.planDate
+    );
+    if (found) {
+      found.fields = input.fields;
+      found.photo = input.photo;
+      found.seenBy = null; // 編集したら「見ました」はリセット
+      found.seenAt = null;
+    } else {
+      this.db.dailyPlans.push({
+        id: randomUUID(),
+        staffId: input.staffId,
+        planDate: input.planDate,
+        content: "",
+        fields: input.fields,
+        photo: input.photo,
+        seenBy: null,
+        seenAt: null,
+      });
+    }
+  }
+
+  async markDailyPlanSeen(staffId: string, planDate: string, seenBy: string): Promise<void> {
     const found = this.db.dailyPlans.find((p) => p.staffId === staffId && p.planDate === planDate);
     if (found) {
-      found.content = content;
-    } else {
-      this.db.dailyPlans.push({ id: randomUUID(), staffId, planDate, content });
+      found.seenBy = seenBy;
+      found.seenAt = new Date();
     }
   }
 

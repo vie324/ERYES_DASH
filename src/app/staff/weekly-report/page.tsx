@@ -2,14 +2,13 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { addDays, formatWeekJa, todayJst, weekStartOf } from "@/lib/date";
-import { WEEKLY_REPORT_ITEMS } from "@/lib/eni/forms";
-import { formatPracticeMinutes } from "@/lib/eni/access";
+import { getWeeklyItems, RANK_LABEL } from "@/lib/eni/forms";
 import { EniFormFields } from "@/components/eni-form-fields";
 import { PageHeader } from "@/components/ui";
 import { saveWeeklyReportAction } from "./actions";
 
-// アシスタント週報（ENi）：週1回、ふりかえりと来週の目標を入力する。
-// その週の練習時間の合計が自動で表示される（練習記録から集計）。
+// アシスタント週報（ENi）：ランク（ファースト/ミドル/ファイナル）ごとに項目が変わる。
+// 練習は毎日入力をやめ、この週報の中でまとめて振り返る。
 export default async function WeeklyReportPage({
   searchParams,
 }: {
@@ -23,14 +22,14 @@ export default async function WeeklyReportPage({
     /^\d{4}-\d{2}-\d{2}$/.test(params.week ?? "") && weekStartOf(params.week!) === params.week
       ? params.week!
       : thisWeek;
-  const weekEnd = addDays(week, 6);
 
   const db = getDataStore();
-  const [existing, practice] = await Promise.all([
+  const [me, existing] = await Promise.all([
+    db.getStaff(session.staffId),
     db.getEniReport("weekly", session.staffId, week),
-    db.listPracticeRecords({ staffId: session.staffId, from: week, to: weekEnd }),
   ]);
-  const practiceTotal = practice.reduce((sum, r) => sum + r.minutes, 0);
+  const rank = me?.rank ?? "";
+  const items = getWeeklyItems(rank);
 
   return (
     <div>
@@ -52,13 +51,22 @@ export default async function WeeklyReportPage({
         </p>
       )}
 
+      {rank !== "" && (
+        <p className="rounded-xl bg-brand-50 text-brand-800 text-xs font-bold px-4 py-2 mb-4 inline-block">
+          あなたのランク：{RANK_LABEL[rank]}（この週報はランクに合わせた項目です）
+        </p>
+      )}
+
+      {existing?.comment && (
+        <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">
+          <p className="text-xs font-bold text-brand-700 mb-1">上司からのコメント</p>
+          <p className="text-sm whitespace-pre-wrap text-ink-800">{existing.comment}</p>
+        </div>
+      )}
+
       {/* 週の切り替え */}
       <div className="flex items-center justify-between card !py-2 mb-4">
-        <Link
-          href={`/staff/weekly-report?week=${addDays(week, -7)}`}
-          className="px-4 py-2 font-bold text-brand-500 text-lg"
-          aria-label="前の週"
-        >
+        <Link href={`/staff/weekly-report?week=${addDays(week, -7)}`} className="px-4 py-2 font-bold text-brand-500 text-lg" aria-label="前の週">
           ←
         </Link>
         <span className="font-display font-bold text-sm">
@@ -66,11 +74,7 @@ export default async function WeeklyReportPage({
           {week === thisWeek && <span className="text-brand-600 ml-1">（今週）</span>}
         </span>
         {week < thisWeek ? (
-          <Link
-            href={`/staff/weekly-report?week=${addDays(week, 7)}`}
-            className="px-4 py-2 font-bold text-brand-500 text-lg"
-            aria-label="次の週"
-          >
+          <Link href={`/staff/weekly-report?week=${addDays(week, 7)}`} className="px-4 py-2 font-bold text-brand-500 text-lg" aria-label="次の週">
             →
           </Link>
         ) : (
@@ -78,23 +82,13 @@ export default async function WeeklyReportPage({
         )}
       </div>
 
-      <div className="card mb-4 flex items-center justify-between">
-        <span className="text-sm font-bold text-stone-500">この週の練習時間（自動集計）</span>
-        <span className="font-display text-xl font-bold text-brand-700">
-          {practiceTotal > 0 ? formatPracticeMinutes(practiceTotal) : "0"}
-          <span className="text-xs text-stone-400 ml-1">（{practice.length}回）</span>
-        </span>
-      </div>
-
       <form action={saveWeeklyReportAction} className="space-y-4">
         <input type="hidden" name="week_start" value={week} />
         {existing && (
-          <p className="text-xs text-amber-600 font-bold">
-            この週は入力済みです。保存すると上書きされます。
-          </p>
+          <p className="text-xs text-amber-600 font-bold">この週は入力済みです。保存すると上書きされます。</p>
         )}
 
-        <EniFormFields items={WEEKLY_REPORT_ITEMS} answers={existing?.answers ?? {}} />
+        <EniFormFields items={items} answers={existing?.answers ?? {}} />
 
         <button type="submit" className="btn-primary w-full text-lg">
           {existing ? "上書き保存する" : "週報を保存する"}

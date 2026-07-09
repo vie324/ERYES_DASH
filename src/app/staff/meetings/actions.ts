@@ -39,13 +39,15 @@ export async function createMeetingAction(formData: FormData): Promise<void> {
   redirect(`/staff/meetings?month=${month}&saved=created`);
 }
 
-/** 議事録の保存（実施者・登録者・幹部・管理者のみ） */
+/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。リンク／本文／写真のいずれか */
 export async function saveMeetingMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
   const month = String(formData.get("month") ?? "");
   const minutesUrl = String(formData.get("minutes_url") ?? "").trim().slice(0, 500);
   const minutesText = String(formData.get("minutes_text") ?? "").trim().slice(0, 5000);
+  const photoRaw = String(formData.get("minutes_photo") ?? "");
+  const minutesPhoto = photoRaw.startsWith("data:image/") ? photoRaw.slice(0, 2_500_000) : "";
 
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
@@ -59,8 +61,9 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   await db.updateMeetingMinutes(id, {
     minutesUrl,
     minutesText,
-    // リンクか本文のどちらかが入っていれば「提出済み」
-    minutesDone: Boolean(minutesUrl || minutesText),
+    minutesPhoto,
+    // リンク・本文・写真のいずれかが入っていれば「提出済み」
+    minutesDone: Boolean(minutesUrl || minutesText || minutesPhoto),
   });
   revalidatePath("/staff/meetings");
   redirect(`/staff/meetings?month=${month}&saved=minutes`);

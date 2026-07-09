@@ -17,6 +17,7 @@ import type {
   CounselingStatus,
   Customer,
   DailyPlan,
+  DailyPlanFields,
   DailyReport,
   DailyReportInput,
   DataStore,
@@ -63,6 +64,7 @@ const mapStaff = (r: Row): Staff => ({
   loginId: r.login_id,
   role: r.role,
   jobType: r.job_type ?? "",
+  rank: r.rank ?? "",
   isExecutive: r.is_executive ?? false,
   fixedOvertimeHours: r.fixed_overtime_hours,
   isActive: r.is_active,
@@ -171,6 +173,8 @@ const mapEniReport = (r: Row): EniReport => ({
   staffId: r.staff_id,
   periodKey: r.period_key,
   answers: r.answers ?? {},
+  comment: r.comment ?? "",
+  commentedBy: r.commented_by ?? null,
   updatedAt: new Date(r.updated_at),
 });
 
@@ -202,6 +206,7 @@ const mapMeeting = (r: Row): Meeting => ({
   guestStaffId: r.guest_staff_id,
   minutesUrl: r.minutes_url ?? "",
   minutesText: r.minutes_text ?? "",
+  minutesPhoto: r.minutes_photo ?? "",
   minutesDone: r.minutes_done ?? false,
   createdBy: r.created_by,
   createdAt: new Date(r.created_at),
@@ -230,11 +235,17 @@ const mapOrderRequest = (r: Row): OrderRequest => ({
   updatedAt: new Date(r.updated_at),
 });
 
+const EMPTY_PLAN_FIELDS = { goal: "", horenso: "", todo: "", timetable: "" };
+
 const mapDailyPlan = (r: Row): DailyPlan => ({
   id: r.id,
   staffId: r.staff_id,
   planDate: r.plan_date,
   content: r.content ?? "",
+  fields: { ...EMPTY_PLAN_FIELDS, ...(r.fields ?? {}) },
+  photo: r.photo ?? "",
+  seenBy: r.seen_by ?? null,
+  seenAt: r.seen_at ? new Date(r.seen_at) : null,
 });
 
 const mapIdealSchedule = (r: Row): IdealSchedule => ({
@@ -392,6 +403,7 @@ class SupabaseStore implements DataStore {
         password_hash: input.passwordHash,
         role: input.role,
         job_type: input.jobType ?? "",
+        rank: input.rank ?? "",
         is_executive: input.isExecutive ?? false,
         fixed_overtime_hours: input.fixedOvertimeHours,
       })
@@ -404,7 +416,10 @@ class SupabaseStore implements DataStore {
   async updateStaff(
     id: string,
     patch: Partial<
-      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+      Pick<
+        Staff,
+        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+      >
     > & {
       passwordHash?: string;
     }
@@ -413,6 +428,7 @@ class SupabaseStore implements DataStore {
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.role !== undefined) row.role = patch.role;
     if (patch.jobType !== undefined) row.job_type = patch.jobType;
+    if (patch.rank !== undefined) row.rank = patch.rank;
     if (patch.isExecutive !== undefined) row.is_executive = patch.isExecutive;
     if (patch.fixedOvertimeHours !== undefined) row.fixed_overtime_hours = patch.fixedOvertimeHours;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
@@ -1175,6 +1191,12 @@ class SupabaseStore implements DataStore {
     return data ? mapEniReport(data) : null;
   }
 
+  async getEniReportById(id: string): Promise<EniReport | null> {
+    const { data, error } = await this.sb.from("eni_reports").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(`[supabase] ENiレポート取得: ${error.message}`);
+    return data ? mapEniReport(data) : null;
+  }
+
   async listEniReports(
     kind: "stylist" | "weekly",
     filter: { staffId?: string; from: string; to: string }
@@ -1189,6 +1211,14 @@ class SupabaseStore implements DataStore {
     if (filter.staffId) query = query.eq("staff_id", filter.staffId);
     const { data, error } = await query;
     return must(data, error, "ENiレポート一覧").map(mapEniReport);
+  }
+
+  async commentEniReport(id: string, comment: string, commentedBy: string): Promise<void> {
+    const { error } = await this.sb
+      .from("eni_reports")
+      .update({ comment, commented_by: commentedBy })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] 上司コメント保存: ${error.message}`);
   }
 
   async createPracticeRecord(
@@ -1321,13 +1351,14 @@ class SupabaseStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
   ): Promise<Meeting> {
     const { data, error } = await this.sb
       .from("meetings")
       .update({
         minutes_url: patch.minutesUrl,
         minutes_text: patch.minutesText,
+        minutes_photo: patch.minutesPhoto,
         minutes_done: patch.minutesDone,
       })
       .eq("id", id)
@@ -1414,11 +1445,34 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] 発注状況更新: ${error.message}`);
   }
 
-  async upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void> {
+  async upsertDailyPlan(input: {
+    staffId: string;
+    planDate: string;
+    fields: DailyPlanFields;
+    photo: string;
+  }): Promise<void> {
+    // 編集すると「見ました」はリセット（seen_by/seen_at を null に）
+    const { error } = await this.sb.from("daily_plans").upsert(
+      {
+        staff_id: input.staffId,
+        plan_date: input.planDate,
+        fields: input.fields,
+        photo: input.photo,
+        seen_by: null,
+        seen_at: null,
+      },
+      { onConflict: "staff_id,plan_date" }
+    );
+    if (error) throw new Error(`[supabase] 今日のスケジュール保存: ${error.message}`);
+  }
+
+  async markDailyPlanSeen(staffId: string, planDate: string, seenBy: string): Promise<void> {
     const { error } = await this.sb
       .from("daily_plans")
-      .upsert({ staff_id: staffId, plan_date: planDate, content }, { onConflict: "staff_id,plan_date" });
-    if (error) throw new Error(`[supabase] 朝スケジュール保存: ${error.message}`);
+      .update({ seen_by: seenBy, seen_at: new Date().toISOString() })
+      .eq("staff_id", staffId)
+      .eq("plan_date", planDate);
+    if (error) throw new Error(`[supabase] 確認記録: ${error.message}`);
   }
 
   async listDailyPlans(planDate: string): Promise<DailyPlan[]> {
@@ -1426,7 +1480,7 @@ class SupabaseStore implements DataStore {
       .from("daily_plans")
       .select("*")
       .eq("plan_date", planDate);
-    return must(data, error, "朝スケジュール一覧").map(mapDailyPlan);
+    return must(data, error, "今日のスケジュール一覧").map(mapDailyPlan);
   }
 
   async listIdealSchedules(staffId: string): Promise<IdealSchedule[]> {
