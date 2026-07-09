@@ -28,6 +28,7 @@ create table if not exists staff (
   password_hash text not null,
   role text not null default 'staff' check (role in ('admin', 'staff')),
   job_type text not null default '' check (job_type in ('', 'stylist', 'assistant')),
+  rank text not null default '' check (rank in ('', 'first', 'middle', 'final')),  -- アシスタントのランク
   is_executive boolean not null default false,
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
@@ -36,6 +37,7 @@ create table if not exists staff (
 
 -- 既存DBに後から列を足す場合（本番に staff が既にある場合）に実行：
 --   alter table staff add column if not exists job_type text not null default '';
+--   alter table staff add column if not exists rank text not null default '';
 --   alter table staff add column if not exists is_executive boolean not null default false;
 
 -- 顧客（LINE友だち追加時に自動登録）
@@ -243,6 +245,8 @@ create table if not exists eni_reports (
   staff_id uuid not null references staff(id) on delete cascade,
   period_key date not null,
   answers jsonb not null default '{}',
+  comment text not null default '',            -- 上司からの全体コメント
+  commented_by uuid references staff(id),
   updated_at timestamptz not null default now(),
   unique (kind, staff_id, period_key)
 );
@@ -279,6 +283,7 @@ create table if not exists meetings (
   guest_staff_id uuid references staff(id),
   minutes_url text not null default '',
   minutes_text text not null default '',
+  minutes_photo text not null default '',      -- 議事録の写真（データURL）
   minutes_done boolean not null default false,
   created_by uuid not null references staff(id),
   created_at timestamptz not null default now()
@@ -309,12 +314,17 @@ create table if not exists order_requests (
   updated_at timestamptz not null default now()
 );
 
--- 毎朝のスケジュール（1人1日1件・自由記入）
+-- 今日のスケジュール（1人1日1件）。構造化フォーム or スケジュール帳の写真。
+-- fields: { goal, horenso, todo, timetable } ／ seen_by: ペアの先輩が確認したら記録
 create table if not exists daily_plans (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id) on delete cascade,
   plan_date date not null,
   content text not null default '',
+  fields jsonb not null default '{}',
+  photo text not null default '',
+  seen_by uuid references staff(id),
+  seen_at timestamptz,
   unique (staff_id, plan_date)
 );
 

@@ -206,11 +206,11 @@ async function EniAdminDashboard() {
 
       <div className="space-y-3">
         <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
-          description="スタイリスト日報・アシスタント週報の一覧" />
-        <BigMenuLink href="/staff/practice" icon="sparkles" title="練習記録・ペア設定"
-          description="月間活動記録の確認・今月のペアの割当" />
+          description="スタイリスト日報・アシスタント週報の閲覧＋コメント" />
+        <BigMenuLink href="/staff/practice" icon="sparkles" title="練習ペアの設定"
+          description="今月のペア（誰に付いてもらうか）の割当" />
         <BigMenuLink href="/staff/meetings" icon="user" title="ミーティング・議事録"
-          description="1on1・全体MTGの予定と議事録の提出状況"
+          description="カレンダーで予定確認・議事録の提出状況"
           badge={missingMinutes.length} />
         <BigMenuLink href="/staff/absence" icon="alertTriangle" title="欠勤・早退の報告一覧"
           description="誰が・何時間・どんな理由か（幹部・管理者のみ）" />

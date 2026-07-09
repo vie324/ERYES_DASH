@@ -206,10 +206,10 @@ async function EniMenu({
         badge={todayPlan ? null : "！"}
       />
       <BigMenuLink
-        href="/staff/practice"
-        icon="sparkles"
-        title="練習記録"
-        description="今日の練習を記録・月の練習時間を確認"
+        href="/staff/eni-reports"
+        icon="fileText"
+        title="日報・週報を見る"
+        description={jobType === "assistant" ? "みんなの週報を見る" : "みんなの日報・週報を見る"}
       />
       <BigMenuLink
         href="/staff/meetings"
@@ -218,7 +218,7 @@ async function EniMenu({
         description={
           myMissingMinutes > 0
             ? `議事録が未提出のミーティングが ${myMissingMinutes} 件あります`
-            : "予定の登録・議事録の提出"
+            : "カレンダーで確認・議事録の提出"
         }
         badge={myMissingMinutes}
       />
@@ -243,10 +243,10 @@ async function EniMenu({
       />
       {isExec && (
         <BigMenuLink
-          href="/staff/eni-reports"
-          icon="fileText"
-          title="日報・週報を見る（幹部）"
-          description="スタイリスト日報・アシスタント週報の一覧"
+          href="/staff/practice"
+          icon="sparkles"
+          title="練習ペアの設定（幹部）"
+          description="今月のペア（誰に付いてもらうか）の割当"
         />
       )}
     </div>

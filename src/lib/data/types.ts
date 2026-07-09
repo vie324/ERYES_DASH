@@ -25,8 +25,10 @@ export interface Store {
 }
 
 // 職種：''=未設定（アイサロン等）/ stylist=スタイリスト / assistant=アシスタント
-// ヘアサロン（ENi）のスタッフに設定すると、ホームにENi向けメニュー（日報/週報・練習記録等）が出る
+// ヘアサロン（ENi）のスタッフに設定すると、ホームにENi向けメニュー（日報/週報等）が出る
 export type JobType = "" | "stylist" | "assistant";
+// アシスタントのランク（週報の内容がランクごとに変わる）。''=未設定
+export type AssistantRank = "" | "first" | "middle" | "final";
 
 export interface Staff {
   id: string;
@@ -35,6 +37,7 @@ export interface Staff {
   loginId: string;
   role: Role;
   jobType: JobType;
+  rank: AssistantRank; // アシスタントのランク（ファースト/ミドル/ファイナル）
   isExecutive: boolean; // 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
   fixedOvertimeHours: number;
   isActive: boolean;
@@ -235,6 +238,8 @@ export interface EniReport {
   /** スタイリスト日報＝日付 "YYYY-MM-DD" ／ 週報＝週の月曜 "YYYY-MM-DD" */
   periodKey: string;
   answers: Record<string, unknown>;
+  comment: string; // 上司（幹部・スタイリスト・管理者）からの全体コメント
+  commentedBy: string | null;
   updatedAt: Date;
 }
 
@@ -271,6 +276,7 @@ export interface Meeting {
   guestStaffId: string | null; // 相手（1on1の相手）
   minutesUrl: string; // 議事録リンク（Notion等）
   minutesText: string; // 議事録の直接記入
+  minutesPhoto: string; // 議事録の写真（データURL）
   minutesDone: boolean; // 議事録の提出済みフラグ
   createdBy: string;
   createdAt: Date;
@@ -306,12 +312,24 @@ export interface OrderRequest {
   updatedAt: Date;
 }
 
-/** 毎朝のスケジュール（1人1日1件。自由記入） */
+/** 今日のスケジュールの構造化フォーム */
+export interface DailyPlanFields {
+  goal: string; // 今日の目標
+  horenso: string; // ホウレンソウすること
+  todo: string; // やること
+  timetable: string; // 5:00〜24:00のタイムテーブル
+}
+
+/** 毎朝のスケジュール（1人1日1件）。フォーム入力またはスケジュール帳の写真 */
 export interface DailyPlan {
   id: string;
   staffId: string;
   planDate: string; // "YYYY-MM-DD"
-  content: string;
+  content: string; // 旧・自由記入（後方互換）
+  fields: DailyPlanFields;
+  photo: string; // スケジュール帳の写真（データURL）
+  seenBy: string | null; // ペアの先輩が確認したら記録
+  seenAt: Date | null;
 }
 
 /** 理想のスケジュール（週／月。1人につき各1件） */
@@ -358,6 +376,7 @@ export interface StaffInput {
   passwordHash: string;
   role: Role;
   jobType?: JobType;
+  rank?: AssistantRank;
   isExecutive?: boolean;
   fixedOvertimeHours: number;
 }
@@ -381,7 +400,10 @@ export interface DataStore {
   updateStaff(
     id: string,
     patch: Partial<
-      Pick<Staff, "name" | "role" | "jobType" | "isExecutive" | "fixedOvertimeHours" | "isActive">
+      Pick<
+        Staff,
+        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+      >
     > & {
       passwordHash?: string;
     }
@@ -505,10 +527,13 @@ export interface DataStore {
     answers: Record<string, unknown>;
   }): Promise<EniReport>;
   getEniReport(kind: "stylist" | "weekly", staffId: string, periodKey: string): Promise<EniReport | null>;
+  getEniReportById(id: string): Promise<EniReport | null>;
   listEniReports(
     kind: "stylist" | "weekly",
     filter: { staffId?: string; from: string; to: string }
   ): Promise<EniReport[]>;
+  /** 上司コメントの保存 */
+  commentEniReport(id: string, comment: string, commentedBy: string): Promise<void>;
 
   // 練習記録・ペア
   createPracticeRecord(input: Omit<PracticeRecord, "id" | "createdAt">): Promise<PracticeRecord>;
@@ -520,14 +545,16 @@ export interface DataStore {
   setPracticePair(targetMonth: string, memberStaffId: string, partnerStaffId: string): Promise<void>;
 
   // ミーティング＋議事録
-  createMeeting(input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">): Promise<Meeting>;
+  createMeeting(
+    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesPhoto" | "minutesDone">
+  ): Promise<Meeting>;
   getMeeting(id: string): Promise<Meeting | null>;
   listMeetings(filter: { from: string; to: string }): Promise<Meeting[]>;
   /** 議事録の未提出一覧（過去のミーティングで minutesDone=false） */
   listMeetingsMissingMinutes(until: string): Promise<Meeting[]>;
   updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesDone: boolean }
+    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
   ): Promise<Meeting>;
   deleteMeeting(id: string): Promise<void>;
 
@@ -543,7 +570,14 @@ export interface DataStore {
   updateOrderStatus(id: string, status: OrderStatus): Promise<void>;
 
   // 毎朝のスケジュール・理想のスケジュール
-  upsertDailyPlan(staffId: string, planDate: string, content: string): Promise<void>;
+  upsertDailyPlan(input: {
+    staffId: string;
+    planDate: string;
+    fields: DailyPlanFields;
+    photo: string;
+  }): Promise<void>;
+  /** ペアの先輩が確認したことを記録（「見ました」マーク） */
+  markDailyPlanSeen(staffId: string, planDate: string, seenBy: string): Promise<void>;
   listDailyPlans(planDate: string): Promise<DailyPlan[]>;
   listIdealSchedules(staffId: string): Promise<IdealSchedule[]>;
   upsertIdealSchedule(staffId: string, scope: "week" | "month", content: string): Promise<void>;
