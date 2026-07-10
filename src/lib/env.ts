@@ -14,7 +14,16 @@ export const env = {
   liffId: process.env.NEXT_PUBLIC_LIFF_ID || "",
   // 予約確認・変更用のLIFFアプリ（エンドポイント: /liff/appointment）。未設定でも他機能は動く
   liffAppointmentId: process.env.NEXT_PUBLIC_LIFF_APPOINTMENT_ID || "",
+
+  // 議事録のAI整形（Anthropic）。未設定時はテンプレ整形にフォールバック
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
 };
+
+/** 議事録のAI整形が使えるか（Anthropic APIキーが設定済みか） */
+export function isAnthropicConfigured(): boolean {
+  return Boolean(env.anthropicApiKey);
+}
 
 /** Supabase が設定済みか（false の場合はメモリ内デモデータで動作） */
 export function isSupabaseConfigured(): boolean {

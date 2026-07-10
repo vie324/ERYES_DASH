@@ -19,7 +19,7 @@ export function AppHeader({
 }) {
   const helpHref = session.role === "admin" ? "/admin/help" : "/staff/help";
   return (
-    <header className="sticky top-0 z-10 bg-brand-50/85 backdrop-blur border-b border-brand-200/70">
+    <header className="sticky top-0 z-10 bg-brand-50/85 backdrop-blur border-b border-brand-200/70 print:hidden">
       <div className="mx-auto max-w-3xl px-4 h-14 flex items-center justify-between gap-3">
         <Link href={homeHref} className="flex items-center gap-2.5 min-w-0">
           {/* 正式ロゴ（public/logo.png）があれば自動で優先表示される（src/lib/logo.ts） */}

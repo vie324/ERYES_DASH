@@ -5,13 +5,17 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
+import { findTemplate } from "@/lib/eni/meetings-templates";
 import type { MeetingType } from "@/lib/data/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** ミーティング（1on1・全体・その他）の登録 */
+/** ミーティングの登録（会議体テンプレート／1on1／その他） */
 export async function createMeetingAction(formData: FormData): Promise<void> {
   const session = await requireSession();
+  const committee = String(formData.get("committee") ?? "");
+  const template = findTemplate(committee);
+
   const typeRaw = String(formData.get("meeting_type") ?? "1on1");
   const meetingType: MeetingType = typeRaw === "all" || typeRaw === "other" ? typeRaw : "1on1";
   const title = String(formData.get("title") ?? "").trim().slice(0, 100);
@@ -19,35 +23,40 @@ export async function createMeetingAction(formData: FormData): Promise<void> {
   const startTimeRaw = String(formData.get("start_time") ?? "").trim();
   const hostStaffId = String(formData.get("host_staff_id") ?? "") || session.staffId;
   const guestStaffId = String(formData.get("guest_staff_id") ?? "") || null;
+  const participants = formData.getAll("participants").map(String).filter(Boolean).slice(0, 30);
+  const agenda = String(formData.get("agenda") ?? "").trim().slice(0, 2000);
   const month = date.slice(0, 7);
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect("/staff/meetings?error=input");
-  if (meetingType === "1on1" && !guestStaffId) {
+  if (meetingType === "1on1" && !committee && !guestStaffId) {
     redirect(`/staff/meetings?month=${month}&error=guest`);
   }
 
   await getDataStore().createMeeting({
-    meetingType,
-    title: meetingType === "1on1" ? "" : title,
+    meetingType: template ? "other" : meetingType,
+    committee,
+    title: template ? template.name : meetingType === "1on1" ? "" : title,
+    agenda,
     meetingDate: date,
     startTime: TIME_RE.test(startTimeRaw) ? startTimeRaw : "",
     hostStaffId,
-    guestStaffId,
+    guestStaffId: template ? null : guestStaffId,
+    participants,
     createdBy: session.staffId,
   });
   revalidatePath("/staff/meetings");
   redirect(`/staff/meetings?month=${month}&saved=created`);
 }
 
-/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。リンク／本文／写真のいずれか */
+/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／写真 */
 export async function saveMeetingMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
   const month = String(formData.get("month") ?? "");
-  const minutesUrl = String(formData.get("minutes_url") ?? "").trim().slice(0, 500);
-  const minutesText = String(formData.get("minutes_text") ?? "").trim().slice(0, 5000);
+  const minutesText = String(formData.get("minutes_text") ?? "").trim().slice(0, 12000);
   const photoRaw = String(formData.get("minutes_photo") ?? "");
   const minutesPhoto = photoRaw.startsWith("data:image/") ? photoRaw.slice(0, 2_500_000) : "";
+  const aiFlag = String(formData.get("ai_flag") ?? "") === "1";
 
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
@@ -59,11 +68,10 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   if (!canEdit) redirect(`/staff/meetings?month=${month}&error=forbidden`);
 
   await db.updateMeetingMinutes(id, {
-    minutesUrl,
     minutesText,
     minutesPhoto,
-    // リンク・本文・写真のいずれかが入っていれば「提出済み」
-    minutesDone: Boolean(minutesUrl || minutesText || minutesPhoto),
+    minutesAi: aiFlag || meeting!.minutesAi,
+    minutesDone: Boolean(minutesText || minutesPhoto),
   });
   revalidatePath("/staff/meetings");
   redirect(`/staff/meetings?month=${month}&saved=minutes`);

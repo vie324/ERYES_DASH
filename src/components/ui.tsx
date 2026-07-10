@@ -7,7 +7,7 @@ import { Icon, type IconName } from "@/components/icons";
 export function DemoBanner({ show }: { show: boolean }) {
   if (!show) return null;
   return (
-    <div className="bg-ink-900 text-brand-200 text-[11px] font-bold text-center px-3 py-1.5 tracking-wide">
+    <div className="bg-ink-900 text-brand-200 text-[11px] font-bold text-center px-3 py-1.5 tracking-wide print:hidden">
       デモモードで動作中（Supabase未設定のため、データは再起動でリセットされます）
     </div>
   );
