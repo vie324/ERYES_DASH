@@ -104,6 +104,12 @@ async function EyeMenu({
         badge={pendingCounseling.length}
       />
       <BigMenuLink
+        href="/staff/customers"
+        icon="user"
+        title="お客様のカルテ"
+        description="過去のお客様の初期カウンセリングを見返す"
+      />
+      <BigMenuLink
         href="/staff/report"
         icon="pencil"
         title="日報を入力"
