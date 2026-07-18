@@ -32,6 +32,7 @@ import type {
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
+  SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
   ShiftRequest,
@@ -199,14 +200,17 @@ const mapPracticePair = (r: Row): PracticePair => ({
 const mapMeeting = (r: Row): Meeting => ({
   id: r.id,
   meetingType: r.meeting_type,
+  committee: r.committee ?? "",
   title: r.title ?? "",
+  agenda: r.agenda ?? "",
   meetingDate: r.meeting_date,
   startTime: r.start_time ?? "",
   hostStaffId: r.host_staff_id,
   guestStaffId: r.guest_staff_id,
-  minutesUrl: r.minutes_url ?? "",
+  participants: Array.isArray(r.participants) ? r.participants : [],
   minutesText: r.minutes_text ?? "",
   minutesPhoto: r.minutes_photo ?? "",
+  minutesAi: r.minutes_ai ?? false,
   minutesDone: r.minutes_done ?? false,
   createdBy: r.created_by,
   createdAt: new Date(r.created_at),
@@ -253,7 +257,14 @@ const mapIdealSchedule = (r: Row): IdealSchedule => ({
   staffId: r.staff_id,
   scope: r.scope,
   content: r.content ?? "",
+  image: r.image ?? "",
   updatedAt: new Date(r.updated_at),
+});
+
+const mapSchedulePreset = (r: Row): SchedulePreset => ({
+  id: r.id,
+  label: r.label,
+  sortOrder: r.sort_order ?? 0,
 });
 
 const mapBroadcast = (r: Row): Broadcast => ({
@@ -1304,17 +1315,20 @@ class SupabaseStore implements DataStore {
   }
 
   async createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesDone">
+    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
   ): Promise<Meeting> {
     const { data, error } = await this.sb
       .from("meetings")
       .insert({
         meeting_type: input.meetingType,
+        committee: input.committee,
         title: input.title,
+        agenda: input.agenda,
         meeting_date: input.meetingDate,
         start_time: input.startTime,
         host_staff_id: input.hostStaffId,
         guest_staff_id: input.guestStaffId,
+        participants: input.participants,
         created_by: input.createdBy,
       })
       .select()
@@ -1351,14 +1365,14 @@ class SupabaseStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
+    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
   ): Promise<Meeting> {
     const { data, error } = await this.sb
       .from("meetings")
       .update({
-        minutes_url: patch.minutesUrl,
         minutes_text: patch.minutesText,
         minutes_photo: patch.minutesPhoto,
+        minutes_ai: patch.minutesAi,
         minutes_done: patch.minutesDone,
       })
       .eq("id", id)
@@ -1491,21 +1505,39 @@ class SupabaseStore implements DataStore {
     return must(data, error, "理想スケジュール取得").map(mapIdealSchedule);
   }
 
-  async upsertIdealSchedule(
-    staffId: string,
-    scope: "week" | "month",
-    content: string
-  ): Promise<void> {
+  async upsertIdealSchedule(input: {
+    staffId: string;
+    scope: string;
+    content: string;
+    image: string;
+  }): Promise<void> {
     const { error } = await this.sb.from("ideal_schedules").upsert(
       {
-        staff_id: staffId,
-        scope,
-        content,
+        staff_id: input.staffId,
+        scope: input.scope,
+        content: input.content,
+        image: input.image,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "staff_id,scope" }
     );
     if (error) throw new Error(`[supabase] 理想スケジュール保存: ${error.message}`);
+  }
+
+  async listSchedulePresets(): Promise<SchedulePreset[]> {
+    const { data, error } = await this.sb
+      .from("schedule_presets")
+      .select("*")
+      .order("sort_order")
+      .order("label");
+    return must(data, error, "項目一覧").map(mapSchedulePreset);
+  }
+
+  async addSchedulePreset(label: string): Promise<void> {
+    const { error } = await this.sb
+      .from("schedule_presets")
+      .upsert({ label, sort_order: 500 }, { onConflict: "label" });
+    if (error) throw new Error(`[supabase] 項目登録: ${error.message}`);
   }
 }
 

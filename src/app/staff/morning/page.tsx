@@ -6,15 +6,16 @@ import { formatDateJa, thisMonthJst, todayJst, weekdayOf } from "@/lib/date";
 import { formatWorkTime, resolveScheduleDay } from "@/lib/schedule";
 import { PageHeader } from "@/components/ui";
 import { PhotoInput } from "@/components/photo-input";
+import { TimetableGrid, TimetableView } from "@/components/timetable-grid";
 import type { DailyPlan } from "@/lib/data/types";
-import { markPlanSeenAction, saveDailyPlanAction } from "./actions";
+import { addSchedulePresetAction, markPlanSeenAction, saveDailyPlanAction } from "./actions";
 
 // 今日のスケジュール（朝礼ボード）：目標／ホウレンソウ／やること／タイムテーブルを入力するか、
 // スケジュール帳の写真を貼る。ペアの先輩は「見ました」マークをつけられる。
 export default async function MorningBoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; seen?: string }>;
+  searchParams: Promise<{ saved?: string; seen?: string; preset?: string }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
@@ -22,7 +23,7 @@ export default async function MorningBoardPage({
   const wd = weekdayOf(today);
 
   const db = getDataStore();
-  const [staffList, plans, patterns, dayoffs, overrides, myIdeals, pairs] = await Promise.all([
+  const [staffList, plans, patterns, dayoffs, overrides, myIdeals, pairs, presets] = await Promise.all([
     db.listStaff(),
     db.listDailyPlans(today),
     db.listWorkPatterns(),
@@ -30,16 +31,18 @@ export default async function MorningBoardPage({
     db.listScheduleOverrides({ from: today, to: today }),
     db.listIdealSchedules(session.staffId),
     db.listPracticePairs(thisMonthJst()),
+    db.listSchedulePresets(),
   ]);
   const members = staffList.filter((s) => s.isActive && s.jobType !== "");
   const staffMap = new Map(staffList.map((s) => [s.id, s.name]));
   const myPlan = plans.find((p) => p.staffId === session.staffId);
-  const idealWeek = myIdeals.find((s) => s.scope === "week")?.content ?? "";
+  const goalMonth = myIdeals.find((s) => s.scope === "month_goal")?.content ?? "";
   const isExec = session.role === "admin" || (staffList.find((s) => s.id === session.staffId)?.isExecutive ?? false);
   // 自分がペアの先輩になっている相手（memberStaffId の一覧）
   const myMentees = new Set(pairs.filter((p) => p.partnerStaffId === session.staffId).map((p) => p.memberStaffId));
 
   const f = myPlan?.fields;
+  const presetLabels = presets.map((p) => p.label);
 
   return (
     <div>
@@ -55,6 +58,13 @@ export default async function MorningBoardPage({
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
           「見ました」を記録しました
         </p>
+      )}
+
+      {goalMonth && (
+        <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">
+          <p className="text-xs font-bold text-brand-700 mb-1">今月の目標</p>
+          <p className="text-sm whitespace-pre-wrap text-ink-800">{goalMonth}</p>
+        </div>
       )}
 
       {/* 自分の予定の入力（フォーム or 写真） */}
@@ -73,15 +83,17 @@ export default async function MorningBoardPage({
           <textarea id="todo" name="todo" rows={2} defaultValue={f?.todo ?? ""} className="input min-h-16" placeholder="例）入客アシスト、閉店後に練習1h" />
         </div>
         <div>
-          <label className="label" htmlFor="timetable">タイムテーブル（5:00〜24:00）</label>
-          <textarea
-            id="timetable"
-            name="timetable"
-            rows={6}
-            defaultValue={f?.timetable ?? ""}
-            className="input min-h-32"
-            placeholder={"例）\n10:00 開店準備\n11:00 入客アシスト\n14:00 モデル施術\n19:00 練習\n20:30 退勤"}
+          <p className="label !mb-2">タイムテーブル（予約表のように、時間ごとに内容を入力）</p>
+          <TimetableGrid
+            name="timetable_rows"
+            initial={f?.timetableRows ?? []}
+            presets={presetLabels}
+            startHour={8}
+            endHour={22}
           />
+          <p className="text-[11px] text-stone-400 mt-1">
+            「MTG」「練習」などの候補から選べます（手入力もOK）。
+          </p>
         </div>
         <div>
           <p className="label !mb-2">スケジュール帳の写真（貼る場合）</p>
@@ -92,14 +104,16 @@ export default async function MorningBoardPage({
         </button>
       </form>
 
-      {idealWeek && (
-        <details className="card mb-4">
-          <summary className="text-sm font-bold text-stone-500 cursor-pointer">
-            自分の理想のスケジュール（週）を見る
-          </summary>
-          <p className="whitespace-pre-wrap text-sm mt-2 text-ink-700">{idealWeek}</p>
-        </details>
+      {isExec && (
+        <form action={addSchedulePresetAction} className="card flex items-end gap-2 mb-4">
+          <div className="flex-1">
+            <label className="label" htmlFor="preset_label">よくある項目を登録（幹部）</label>
+            <input id="preset_label" name="label" className="input !min-h-10 !py-2 text-sm" placeholder="例）朝礼、撮影、ロープレ" />
+          </div>
+          <button type="submit" className="btn-secondary !min-h-10 !py-2 !px-4 text-sm">登録</button>
+        </form>
       )}
+
 
       {/* みんなの今日 */}
       <section className="space-y-3">
@@ -163,13 +177,20 @@ export default async function MorningBoardPage({
 
 function PlanView({ plan }: { plan: DailyPlan }) {
   const f = plan.fields;
-  const hasFields = f.goal || f.horenso || f.todo || f.timetable;
+  const rows = f.timetableRows ?? [];
+  const hasFields = f.goal || f.horenso || f.todo || rows.length > 0 || f.timetable;
   return (
     <div className="mt-2 space-y-1.5 text-sm">
       {f.goal && <p><span className="text-xs font-bold text-brand-700">目標：</span>{f.goal}</p>}
       {f.horenso && <p><span className="text-xs font-bold text-brand-700">ホウレンソウ：</span>{f.horenso}</p>}
       {f.todo && <p><span className="text-xs font-bold text-brand-700">やること：</span>{f.todo}</p>}
-      {f.timetable && (
+      {rows.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-brand-700 mb-1">タイムテーブル</p>
+          <TimetableView rows={rows} />
+        </div>
+      )}
+      {rows.length === 0 && f.timetable && (
         <div>
           <p className="text-xs font-bold text-brand-700">タイムテーブル</p>
           <p className="whitespace-pre-wrap text-ink-700">{f.timetable}</p>

@@ -34,6 +34,7 @@ import type {
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
+  SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
   ShiftRequest,
@@ -72,6 +73,7 @@ interface MockDb {
   orderRequests: OrderRequest[];
   dailyPlans: DailyPlan[];
   idealSchedules: IdealSchedule[];
+  schedulePresets: SchedulePreset[];
 }
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -473,14 +475,17 @@ function seed(): MockDb {
     {
       id: randomUUID(),
       meetingType: "1on1",
+      committee: "",
       title: "",
+      agenda: "",
       meetingDate: addDays(today, -3),
       startTime: "13:00",
       hostStaffId: "staff-3",
       guestStaffId: "staff-5",
-      minutesUrl: "",
+      participants: [],
       minutesText: "",
       minutesPhoto: "",
+      minutesAi: false,
       minutesDone: false, // 議事録が未提出のデモ（一覧で赤く出る）
       createdBy: "staff-3",
       createdAt: jstAt(addDays(today, -5), 10),
@@ -488,14 +493,17 @@ function seed(): MockDb {
     {
       id: randomUUID(),
       meetingType: "all",
+      committee: "all",
       title: "月初 全体ミーティング",
+      agenda: "・幹部mtgの共有事項\n・理念の再浸透\n・各チームが話したいこと",
       meetingDate: addDays(today, 4),
       startTime: "09:30",
       hostStaffId: "staff-3",
       guestStaffId: null,
-      minutesUrl: "",
+      participants: ["staff-3", "staff-4", "staff-5", "staff-6"],
       minutesText: "",
       minutesPhoto: "",
+      minutesAi: false,
       minutesDone: false,
       createdBy: "staff-4",
       createdAt: jstAt(addDays(today, -2), 12),
@@ -547,11 +555,24 @@ function seed(): MockDb {
     {
       id: randomUUID(),
       staffId: "staff-5",
-      scope: "week",
-      content: "月：休み\n火〜金：営業＋閉店後練習1h\n土日：営業（モデル施術を週1回入れる）",
+      scope: "month_goal",
+      content: "デビューに向けてワインディングとカラー塗布を安定させる。モデルを月4名。",
+      image: "",
       updatedAt: jstAt(addDays(today, -7), 22),
     },
   ];
+  const schedulePresets: SchedulePreset[] = [
+    ["朝礼", 10],
+    ["入客アシスト", 20],
+    ["施術", 30],
+    ["練習", 40],
+    ["MTG", 50],
+    ["休憩", 60],
+    ["事務", 70],
+    ["撮影", 80],
+    ["掃除", 90],
+    ["退勤", 100],
+  ].map(([label, sortOrder]) => ({ id: randomUUID(), label: label as string, sortOrder: sortOrder as number }));
 
   // ---- シフト管理のデモデータ ----
   const shiftRules: ShiftRules = {
@@ -688,6 +709,7 @@ function seed(): MockDb {
     orderRequests,
     dailyPlans,
     idealSchedules,
+    schedulePresets,
   };
 }
 
@@ -1451,14 +1473,14 @@ class MockStore implements DataStore {
   }
 
   async createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesPhoto" | "minutesDone">
+    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
   ): Promise<Meeting> {
     const created: Meeting = {
       id: randomUUID(),
       createdAt: new Date(),
-      minutesUrl: "",
       minutesText: "",
       minutesPhoto: "",
+      minutesAi: false,
       minutesDone: false,
       ...input,
     };
@@ -1487,13 +1509,13 @@ class MockStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
+    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
   ): Promise<Meeting> {
     const found = this.db.meetings.find((m) => m.id === id);
     if (!found) throw new Error("ミーティングが見つかりません");
-    found.minutesUrl = patch.minutesUrl;
     found.minutesText = patch.minutesText;
     found.minutesPhoto = patch.minutesPhoto;
+    found.minutesAi = patch.minutesAi;
     found.minutesDone = patch.minutesDone;
     return found;
   }
@@ -1604,17 +1626,40 @@ class MockStore implements DataStore {
     return this.db.idealSchedules.filter((s) => s.staffId === staffId);
   }
 
-  async upsertIdealSchedule(
-    staffId: string,
-    scope: "week" | "month",
-    content: string
-  ): Promise<void> {
-    const found = this.db.idealSchedules.find((s) => s.staffId === staffId && s.scope === scope);
+  async upsertIdealSchedule(input: {
+    staffId: string;
+    scope: string;
+    content: string;
+    image: string;
+  }): Promise<void> {
+    const found = this.db.idealSchedules.find(
+      (s) => s.staffId === input.staffId && s.scope === input.scope
+    );
     if (found) {
-      found.content = content;
+      found.content = input.content;
+      found.image = input.image;
       found.updatedAt = new Date();
     } else {
-      this.db.idealSchedules.push({ id: randomUUID(), staffId, scope, content, updatedAt: new Date() });
+      this.db.idealSchedules.push({
+        id: randomUUID(),
+        staffId: input.staffId,
+        scope: input.scope,
+        content: input.content,
+        image: input.image,
+        updatedAt: new Date(),
+      });
+    }
+  }
+
+  async listSchedulePresets(): Promise<SchedulePreset[]> {
+    return [...this.db.schedulePresets].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)
+    );
+  }
+
+  async addSchedulePreset(label: string): Promise<void> {
+    if (!this.db.schedulePresets.some((p) => p.label === label)) {
+      this.db.schedulePresets.push({ id: randomUUID(), label, sortOrder: 500 });
     }
   }
 }

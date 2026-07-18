@@ -265,18 +265,21 @@ export interface PracticePair {
 
 export type MeetingType = "1on1" | "all" | "other";
 
-/** ミーティング（1on1・全体など）＋議事録の提出管理 */
+/** ミーティング（1on1・会議体・全体など）＋議事録の提出管理 */
 export interface Meeting {
   id: string;
   meetingType: MeetingType;
-  title: string; // 全体・その他のときの題名（1on1は空でよい）
+  committee: string; // 会議体（幹部会議・教育チーム 等。テンプレのキー。1on1等は空）
+  title: string; // 題名（1on1は空でよい）
+  agenda: string; // アジェンダ・事前確認事項
   meetingDate: string; // "YYYY-MM-DD"
   startTime: string; // "14:00"（空文字は時間未定）
-  hostStaffId: string; // 実施する人（スタイリスト等）
+  hostStaffId: string; // 実施する人・司会
   guestStaffId: string | null; // 相手（1on1の相手）
-  minutesUrl: string; // 議事録リンク（Notion等）
-  minutesText: string; // 議事録の直接記入
+  participants: string[]; // 参加者（会議体の複数参加者。staffIdの配列）
+  minutesText: string; // 議事録（整形済みMarkdown）
   minutesPhoto: string; // 議事録の写真（データURL）
+  minutesAi: boolean; // AIで整形したか
   minutesDone: boolean; // 議事録の提出済みフラグ
   createdBy: string;
   createdAt: Date;
@@ -317,7 +320,8 @@ export interface DailyPlanFields {
   goal: string; // 今日の目標
   horenso: string; // ホウレンソウすること
   todo: string; // やること
-  timetable: string; // 5:00〜24:00のタイムテーブル
+  timetable: string; // 旧・自由記入のタイムテーブル（後方互換）
+  timetableRows?: { t: string; a: string }[]; // 予約表風グリッド（時間×内容）
 }
 
 /** 毎朝のスケジュール（1人1日1件）。フォーム入力またはスケジュール帳の写真 */
@@ -332,13 +336,21 @@ export interface DailyPlan {
   seenAt: Date | null;
 }
 
-/** 理想のスケジュール（週／月。1人につき各1件） */
+/** 理想のスケジュール（scope: month_goal＝今月の目標 / week1〜week4＝各週の理想） */
 export interface IdealSchedule {
   id: string;
   staffId: string;
-  scope: "week" | "month";
-  content: string;
+  scope: string;
+  content: string; // 週グリッドのJSON、または目標のテキスト
+  image: string; // 貼り付け画像（データURL）
   updatedAt: Date;
+}
+
+/** タイムテーブルのよくある項目（datalist候補） */
+export interface SchedulePreset {
+  id: string;
+  label: string;
+  sortOrder: number;
 }
 
 // ---- 入力用 ----
@@ -546,7 +558,7 @@ export interface DataStore {
 
   // ミーティング＋議事録
   createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesUrl" | "minutesText" | "minutesPhoto" | "minutesDone">
+    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
   ): Promise<Meeting>;
   getMeeting(id: string): Promise<Meeting | null>;
   listMeetings(filter: { from: string; to: string }): Promise<Meeting[]>;
@@ -554,7 +566,7 @@ export interface DataStore {
   listMeetingsMissingMinutes(until: string): Promise<Meeting[]>;
   updateMeetingMinutes(
     id: string,
-    patch: { minutesUrl: string; minutesText: string; minutesPhoto: string; minutesDone: boolean }
+    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
   ): Promise<Meeting>;
   deleteMeeting(id: string): Promise<void>;
 
@@ -580,7 +592,16 @@ export interface DataStore {
   markDailyPlanSeen(staffId: string, planDate: string, seenBy: string): Promise<void>;
   listDailyPlans(planDate: string): Promise<DailyPlan[]>;
   listIdealSchedules(staffId: string): Promise<IdealSchedule[]>;
-  upsertIdealSchedule(staffId: string, scope: "week" | "month", content: string): Promise<void>;
+  upsertIdealSchedule(input: {
+    staffId: string;
+    scope: string;
+    content: string;
+    image: string;
+  }): Promise<void>;
+
+  // タイムテーブルのよくある項目（プリセット）
+  listSchedulePresets(): Promise<SchedulePreset[]>;
+  addSchedulePreset(label: string): Promise<void>;
 
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
   /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */

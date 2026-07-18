@@ -272,22 +272,31 @@ create table if not exists practice_pairs (
   unique (target_month, member_staff_id)
 );
 
--- ミーティング（1on1・全体など）＋議事録の提出管理
+-- ミーティング（1on1・会議体・全体など）＋議事録の提出管理
 create table if not exists meetings (
   id uuid primary key default gen_random_uuid(),
   meeting_type text not null default '1on1' check (meeting_type in ('1on1', 'all', 'other')),
+  committee text not null default '',          -- 会議体（幹部会議・教育チーム 等のテンプレキー）
   title text not null default '',
+  agenda text not null default '',             -- アジェンダ・事前確認事項
   meeting_date date not null,
   start_time text not null default '',
   host_staff_id uuid not null references staff(id),
   guest_staff_id uuid references staff(id),
-  minutes_url text not null default '',
-  minutes_text text not null default '',
+  participants jsonb not null default '[]',     -- 会議体の複数参加者（staff_idの配列）
+  minutes_text text not null default '',       -- 議事録（整形済みMarkdown）
   minutes_photo text not null default '',      -- 議事録の写真（データURL）
+  minutes_ai boolean not null default false,   -- AIで整形したか
   minutes_done boolean not null default false,
   created_by uuid not null references staff(id),
   created_at timestamptz not null default now()
 );
+
+-- 既存DBに後から列を足す場合（本番に meetings が既にある場合）に実行：
+--   alter table meetings add column if not exists committee text not null default '';
+--   alter table meetings add column if not exists agenda text not null default '';
+--   alter table meetings add column if not exists participants jsonb not null default '[]';
+--   alter table meetings add column if not exists minutes_ai boolean not null default false;
 
 -- 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ）
 create table if not exists absence_reports (
@@ -328,14 +337,28 @@ create table if not exists daily_plans (
   unique (staff_id, plan_date)
 );
 
--- 理想のスケジュール（週／月。1人につき各1件）
+-- 理想のスケジュール（scope: month_goal=今月の目標 / week1〜week4=各週の理想。旧week/monthも許容）
+-- content は週グリッドのJSONまたはテキスト。image は貼り付け画像（データURL）。
 create table if not exists ideal_schedules (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id) on delete cascade,
-  scope text not null check (scope in ('week', 'month')),
+  scope text not null,
   content text not null default '',
+  image text not null default '',
   updated_at timestamptz not null default now(),
   unique (staff_id, scope)
+);
+
+-- 既存DBに後から列を足す/制約を緩める場合に実行：
+--   alter table ideal_schedules add column if not exists image text not null default '';
+--   alter table ideal_schedules drop constraint if exists ideal_schedules_scope_check;
+
+-- タイムテーブルのよくある項目（「MTG」「練習」等）。datalistの候補に使う
+create table if not exists schedule_presets (
+  id uuid primary key default gen_random_uuid(),
+  label text not null unique,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
 );
 
 -- ---- インデックス ----
@@ -389,6 +412,7 @@ alter table absence_reports enable row level security;
 alter table order_requests enable row level security;
 alter table daily_plans enable row level security;
 alter table ideal_schedules enable row level security;
+alter table schedule_presets enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。
@@ -404,6 +428,12 @@ where not exists (select 1 from stores);
 -- シフトルールの初期値（連勤上限5日・各店舗2名・締切は前月25日）
 insert into shift_rules (id) values (1)
 on conflict (id) do nothing;
+
+-- タイムテーブルのよくある項目の初期値（重複しないよう on conflict do nothing）
+insert into schedule_presets (label, sort_order)
+values ('朝礼', 10), ('入客アシスト', 20), ('施術', 30), ('練習', 40), ('MTG', 50),
+       ('休憩', 60), ('事務', 70), ('撮影', 80), ('掃除', 90), ('退勤', 100)
+on conflict (label) do nothing;
 
 -- 初期管理者アカウント
 --   ログインID: admin ／ パスワード: admin1234

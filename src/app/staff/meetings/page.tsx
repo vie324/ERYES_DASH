@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import {
@@ -12,17 +13,16 @@ import {
   weekdayOf,
 } from "@/lib/date";
 import { isExecutive } from "@/lib/eni/access";
+import { MEETING_TEMPLATES, findTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
-import { PhotoInput } from "@/components/photo-input";
+import { Markdown } from "@/lib/markdown";
+import { MinutesEditor } from "@/components/minutes-editor";
 import type { Meeting, Staff } from "@/lib/data/types";
-import {
-  createMeetingAction,
-  deleteMeetingAction,
-  saveMeetingMinutesAction,
-} from "./actions";
+import { MeetingCreateForm } from "./create-form";
+import { deleteMeetingAction } from "./actions";
 
-// ミーティング・1on1：月カレンダーで「いつ誰と誰が」を一目で確認。
-// 実施後は議事録（リンク・本文・写真）を提出。未提出は赤く表示＋ホームにバッジ。
+// ミーティング・1on1・会議体：月カレンダーで一目確認。会議体はテンプレから作成（参加者複数・アジェンダ・事前チェック）。
+// 議事録は生メモをAIで整形→PDF出力。
 export default async function MeetingsPage({
   searchParams,
 }: {
@@ -65,21 +65,23 @@ export default async function MeetingsPage({
 
   const shortName = (id: string | null) => (id ? (staffMap.get(id)?.name.split(" ")[0] ?? "？") : "");
   const chipClass = (m: Meeting) =>
-    m.meetingType === "1on1"
+    m.committee
       ? "bg-brand-100 text-brand-800"
-      : m.meetingType === "all"
-        ? "bg-amber-100 text-amber-800"
-        : "bg-stone-100 text-stone-700";
+      : m.meetingType === "1on1"
+        ? "bg-sky-100 text-sky-800"
+        : m.meetingType === "all"
+          ? "bg-amber-100 text-amber-800"
+          : "bg-stone-100 text-stone-700";
   const chipLabel = (m: Meeting) =>
-    m.meetingType === "1on1"
-      ? `${shortName(m.hostStaffId)}×${shortName(m.guestStaffId)}`
-      : m.meetingType === "all"
-        ? "全体"
+    m.committee
+      ? (findTemplate(m.committee)?.name.slice(0, 4) ?? "会議")
+      : m.meetingType === "1on1"
+        ? `${shortName(m.hostStaffId)}×${shortName(m.guestStaffId)}`
         : m.title || "MTG";
 
   return (
     <div>
-      <PageHeader title="ミーティング・1on1" backHref="/staff" />
+      <PageHeader title="ミーティング・議事録" backHref="/staff" />
 
       {savedMsg && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">{savedMsg}</p>
@@ -96,9 +98,7 @@ export default async function MeetingsPage({
 
       {missingMinutes.length > 0 && (
         <div className="rounded-2xl bg-red-50 border border-red-200 p-4 mb-4">
-          <p className="text-sm font-bold text-red-700 mb-1">
-            議事録が未提出のミーティング（{missingMinutes.length}件）
-          </p>
+          <p className="text-sm font-bold text-red-700 mb-1">議事録が未提出（{missingMinutes.length}件）</p>
           <ul className="text-xs font-bold text-red-600 space-y-0.5">
             {missingMinutes.slice(0, 8).map((m) => (
               <li key={m.id}>・{formatDateJa(m.meetingDate)}：{meetingLabel(m, staffMap)}</li>
@@ -107,52 +107,8 @@ export default async function MeetingsPage({
         </div>
       )}
 
-      <details className="card mb-4">
-        <summary className="font-bold text-sm text-brand-700 cursor-pointer">＋ ミーティングを登録する</summary>
-        <form action={createMeetingAction} className="space-y-3 mt-3 pt-3 border-t border-stone-100">
-          <div>
-            <p className="label !mb-2">種類</p>
-            <div className="flex gap-2">
-              {[["1on1", "1on1"], ["all", "全体"], ["other", "その他"]].map(([v, label]) => (
-                <label key={v} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
-                  <input type="radio" name="meeting_type" value={v} defaultChecked={v === "1on1"} className="h-4 w-4 accent-brand-500" />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="label" htmlFor="title">題名（全体・その他のとき）</label>
-            <input id="title" name="title" className="input" placeholder="例）月初 全体ミーティング" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="meeting_date">日付</label>
-              <input id="meeting_date" name="meeting_date" type="date" defaultValue={today} className="input" required />
-            </div>
-            <div>
-              <label className="label" htmlFor="start_time">開始時間（任意）</label>
-              <input id="start_time" name="start_time" type="time" className="input" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="host_staff_id">実施する人</label>
-              <select id="host_staff_id" name="host_staff_id" className="input" defaultValue={session.staffId}>
-                {activeStaff.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="guest_staff_id">相手（1on1のとき）</label>
-              <select id="guest_staff_id" name="guest_staff_id" className="input" defaultValue="">
-                <option value="">（なし）</option>
-                {activeStaff.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-              </select>
-            </div>
-          </div>
-          <button type="submit" className="btn-primary w-full">登録する</button>
-        </form>
-      </details>
+      {/* 登録（会議体テンプレ／1on1／その他） */}
+      <MeetingCreateForm staff={activeStaff} defaultHostId={session.staffId} templates={MEETING_TEMPLATES} today={today} />
 
       <MonthNav
         month={month}
@@ -161,7 +117,7 @@ export default async function MeetingsPage({
         nextHref={`/staff/meetings?month=${addMonths(month, 1)}`}
       />
 
-      {/* カレンダー（誰と誰かを一目で） */}
+      {/* カレンダー */}
       <section className="card mb-4">
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-stone-500 mb-1">
           {["日", "月", "火", "水", "木", "金", "土"].map((w, i) => (
@@ -174,38 +130,23 @@ export default async function MeetingsPage({
             const wd = weekdayOf(date);
             const dayMeetings = byDate.get(date) ?? [];
             return (
-              <div
-                key={date}
-                className={`min-h-[3.5rem] rounded-lg border p-0.5 ${
-                  date === today ? "border-brand-400 bg-brand-50/60" : "border-stone-100"
-                }`}
-              >
+              <div key={date} className={`min-h-[3.5rem] rounded-lg border p-0.5 ${date === today ? "border-brand-400 bg-brand-50/60" : "border-stone-100"}`}>
                 <div className={`text-[10px] font-bold text-right pr-0.5 ${wd === 0 ? "text-red-400" : wd === 6 ? "text-blue-400" : "text-stone-400"}`}>
                   {Number(date.slice(8))}
                 </div>
                 <div className="space-y-0.5">
                   {dayMeetings.slice(0, 3).map((m) => (
-                    <a
-                      key={m.id}
-                      href={`#m-${m.id}`}
-                      className={`block truncate rounded px-1 py-0.5 text-[9px] font-bold leading-tight ${chipClass(m)} ${
-                        m.meetingDate <= today && !m.minutesDone ? "ring-1 ring-red-300" : ""
-                      }`}
-                    >
+                    <a key={m.id} href={`#m-${m.id}`} className={`block truncate rounded px-1 py-0.5 text-[9px] font-bold leading-tight ${chipClass(m)} ${m.meetingDate <= today && !m.minutesDone ? "ring-1 ring-red-300" : ""}`}>
                       {chipLabel(m)}
                     </a>
                   ))}
-                  {dayMeetings.length > 3 && (
-                    <span className="block text-[9px] text-stone-400 pl-1">+{dayMeetings.length - 3}</span>
-                  )}
+                  {dayMeetings.length > 3 && <span className="block text-[9px] text-stone-400 pl-1">+{dayMeetings.length - 3}</span>}
                 </div>
               </div>
             );
           })}
         </div>
-        <p className="text-[11px] text-stone-400 mt-2">
-          青枠＝1on1／黄＝全体。赤枠は議事録が未提出です。タップで下の詳細へ。
-        </p>
+        <p className="text-[11px] text-stone-400 mt-2">紫＝会議体／青＝1on1／黄＝全体。赤枠は議事録が未提出です。</p>
       </section>
 
       {/* 詳細リスト */}
@@ -222,6 +163,10 @@ export default async function MeetingsPage({
                 {byDate.get(date)!.map((m) => {
                   const canEdit = m.hostStaffId === session.staffId || m.createdBy === session.staffId || isExec;
                   const isPast = m.meetingDate <= today;
+                  const template = findTemplate(m.committee);
+                  const partNames = [...(m.guestStaffId ? [m.guestStaffId] : []), ...m.participants]
+                    .map((id) => staffMap.get(id)?.name ?? "")
+                    .filter((v, i, arr) => v && arr.indexOf(v) === i);
                   return (
                     <details key={m.id} id={`m-${m.id}`} className="card scroll-mt-20">
                       <summary className="cursor-pointer list-none">
@@ -241,36 +186,50 @@ export default async function MeetingsPage({
                       </summary>
 
                       <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+                        {partNames.length > 0 && (
+                          <p className="text-xs text-stone-500">参加者：{partNames.join("、")}</p>
+                        )}
+                        {m.agenda && (
+                          <div>
+                            <p className="text-xs font-bold text-brand-700">アジェンダ</p>
+                            <p className="whitespace-pre-wrap text-sm text-ink-700">{m.agenda}</p>
+                          </div>
+                        )}
+                        {/* 事前チェック（会議前にシステムで見ておく項目） */}
+                        {template && template.prechecks.length > 0 && !m.minutesDone && (
+                          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                            <p className="text-xs font-bold text-amber-800 mb-1">会議前にシステムで確認</p>
+                            <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+                              {template.prechecks.map((c) => <li key={c}>{c}</li>)}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* 議事録：表示＋PDF、または編集（AI整形） */}
                         {m.minutesDone && (
-                          <div className="text-sm space-y-2">
-                            {m.minutesUrl && (
-                              <p>
-                                <a href={m.minutesUrl} target="_blank" rel="noreferrer" className="font-bold text-brand-700 underline break-all">
-                                  議事録を開く（リンク）
-                                </a>
-                              </p>
-                            )}
-                            {m.minutesText && <p className="whitespace-pre-wrap text-ink-700">{m.minutesText}</p>}
+                          <div className="rounded-xl border border-stone-200 p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs font-bold text-stone-500">議事録{m.minutesAi && "（AI整形）"}</p>
+                              <Link href={`/staff/meetings/${m.id}`} className="text-xs font-bold text-brand-700 underline">
+                                PDFで見る・印刷
+                              </Link>
+                            </div>
+                            {m.minutesText && <Markdown text={m.minutesText} />}
                             {m.minutesPhoto && (
-                              <img src={m.minutesPhoto} alt="議事録の写真" className="w-full max-h-80 object-contain rounded-lg border border-stone-200 bg-white" />
+                              <img src={m.minutesPhoto} alt="議事録の写真" className="w-full max-h-80 object-contain rounded-lg border border-stone-200 bg-white mt-2" />
                             )}
                           </div>
                         )}
 
                         {canEdit && (
-                          <form action={saveMeetingMinutesAction} className="space-y-2">
-                            <input type="hidden" name="id" value={m.id} />
-                            <input type="hidden" name="month" value={month} />
-                            <label className="label" htmlFor={`url-${m.id}`}>議事録リンク（Notion等）</label>
-                            <input id={`url-${m.id}`} name="minutes_url" type="url" defaultValue={m.minutesUrl} placeholder="https://…" className="input" />
-                            <label className="label" htmlFor={`text-${m.id}`}>または内容を直接記入</label>
-                            <textarea id={`text-${m.id}`} name="minutes_text" rows={3} defaultValue={m.minutesText} className="input min-h-20" />
-                            <p className="label !mb-1">議事録の写真（ホワイトボード等）</p>
-                            <PhotoInput name="minutes_photo" initial={m.minutesPhoto} label="議事録を撮影・選択" />
-                            <button type="submit" className="btn-secondary w-full">
-                              議事録を保存（保存すると提出済みになります）
-                            </button>
-                          </form>
+                          <details className="rounded-xl border border-brand-200">
+                            <summary className="cursor-pointer text-sm font-bold text-brand-700 px-3 py-2">
+                              {m.minutesDone ? "議事録を編集する" : "議事録を作成する（AI整形）"}
+                            </summary>
+                            <div className="p-3 pt-0">
+                              <MinutesEditor meetingId={m.id} month={month} initialText={m.minutesText} initialPhoto={m.minutesPhoto} />
+                            </div>
+                          </details>
                         )}
 
                         {(m.createdBy === session.staffId || isExec) && (
@@ -294,6 +253,8 @@ export default async function MeetingsPage({
 }
 
 function meetingLabel(m: Meeting, staffMap: Map<string, Staff>): string {
+  const t = findTemplate(m.committee);
+  if (t) return t.name;
   const host = staffMap.get(m.hostStaffId)?.name ?? "？";
   if (m.meetingType === "1on1") {
     const guest = m.guestStaffId ? (staffMap.get(m.guestStaffId)?.name ?? "？") : "";
