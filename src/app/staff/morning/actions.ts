@@ -5,21 +5,9 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst } from "@/lib/date";
+import { parseBlocks } from "@/lib/eni/schedule-blocks";
 
-function parseRows(raw: string): { t: string; a: string }[] {
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((r) => ({ t: String(r?.t ?? "").slice(0, 5), a: String(r?.a ?? "").trim().slice(0, 100) }))
-      .filter((r) => r.t && r.a)
-      .slice(0, 40);
-  } catch {
-    return [];
-  }
-}
-
-/** 今日のスケジュール（自分の分）を保存：フォーム＋タイムテーブルグリッド＋写真 */
+/** 今日のスケジュール（自分の分）を保存：フォーム＋予約表（タイムテーブル）＋写真 */
 export async function saveDailyPlanAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const photoRaw = String(formData.get("photo") ?? "");
@@ -33,7 +21,7 @@ export async function saveDailyPlanAction(formData: FormData): Promise<void> {
       horenso: String(formData.get("horenso") ?? "").trim().slice(0, 500),
       todo: String(formData.get("todo") ?? "").trim().slice(0, 1000),
       timetable: "",
-      timetableRows: parseRows(String(formData.get("timetable_rows") ?? "[]")),
+      timetableBlocks: parseBlocks(String(formData.get("timetable_blocks") ?? "[]"), 1),
     },
     photo,
   });
@@ -53,15 +41,24 @@ export async function markPlanSeenAction(formData: FormData): Promise<void> {
   redirect("/staff/morning?seen=1");
 }
 
-/** タイムテーブルのよくある項目を登録（幹部・管理者のみ） */
+/** タイムテーブルのよくある項目を登録（全員。みんなで使う候補リストを育てる） */
 export async function addSchedulePresetAction(formData: FormData): Promise<void> {
+  await requireSession();
+  const label = String(formData.get("label") ?? "").trim().slice(0, 20);
+  if (label) await getDataStore().addSchedulePreset(label);
+  revalidatePath("/staff/morning");
+  revalidatePath("/staff/ideal");
+  redirect("/staff/morning?preset=added");
+}
+
+/** よくある項目の削除（幹部・管理者のみ。候補が増えすぎたときの整理用） */
+export async function deleteSchedulePresetAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const me = await getDataStore().getStaff(session.staffId);
   const canManage = session.role === "admin" || (me?.isExecutive ?? false);
-  const label = String(formData.get("label") ?? "").trim().slice(0, 20);
-  if (canManage && label) {
-    await getDataStore().addSchedulePreset(label);
-  }
+  const id = String(formData.get("id") ?? "");
+  if (canManage && id) await getDataStore().deleteSchedulePreset(id);
   revalidatePath("/staff/morning");
-  redirect("/staff/morning?preset=1");
+  revalidatePath("/staff/ideal");
+  redirect("/staff/morning?preset=deleted");
 }

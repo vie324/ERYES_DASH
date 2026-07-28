@@ -1,4 +1,4 @@
-// 議事録のAI整形：生メモ → 整形済み議事録（Markdown）を返す（保存はしない）。
+// 議事録のAI整形：生メモ →「整形済み議事録（Markdown）＋タスク一覧」を返す（保存はしない）。
 // Anthropic APIキー未設定時はテンプレ整形にフォールバック（デモでも動く）。
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,6 +9,8 @@ import { generateMinutes } from "@/lib/anthropic";
 import { findTemplate } from "@/lib/eni/meetings-templates";
 
 export const dynamic = "force-dynamic";
+// AI整形は数十秒かかることがあるため、実行時間の上限を延ばす（Vercelの既定は短い）
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getSession();
@@ -51,13 +53,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const template = findTemplate(meeting.committee);
   const meetingName = template?.name || meeting.title || (meeting.meetingType === "1on1" ? "1on1" : "ミーティング");
 
-  const { markdown, ai } = await generateMinutes({
+  const { markdown, tasks, ai } = await generateMinutes({
     meetingName,
     dateLabel: formatDateJa(meeting.meetingDate, true),
+    meetingDate: meeting.meetingDate,
     participants: participantNames.join("、"),
     agenda: meeting.agenda,
     rawNotes,
   });
 
-  return NextResponse.json({ ok: true, markdown, ai });
+  return NextResponse.json({ ok: true, markdown, tasks, ai });
 }

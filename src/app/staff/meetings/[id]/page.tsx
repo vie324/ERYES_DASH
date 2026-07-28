@@ -9,14 +9,22 @@ import { PageHeader } from "@/components/ui";
 import { PrintButton } from "@/components/print-button";
 
 // 議事録の清書ページ（PDF出力用）。ブラウザの「印刷 → PDFで保存」でそのままPDFになる。
-export default async function MinutesPrintPage({ params }: { params: Promise<{ id: string }> }) {
+// ?print=1 で開くと、自動で印刷ダイアログを出す。
+export default async function MinutesPrintPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ print?: string }>;
+}) {
   await requireSession();
   const { id } = await params;
+  const query = await searchParams;
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
   if (!meeting) notFound();
 
-  const staffList = await db.listStaff();
+  const [staffList, tasks] = await Promise.all([db.listStaff(), db.listMeetingTasks([id])]);
   const nameOf = (sid: string | null) => (sid ? (staffList.find((s) => s.id === sid)?.name ?? "") : "");
   const template = findTemplate(meeting!.committee);
   const meetingName = template?.name || meeting!.title || (meeting!.meetingType === "1on1" ? "1on1ミーティング" : "ミーティング");
@@ -52,6 +60,35 @@ export default async function MinutesPrintPage({ params }: { params: Promise<{ i
           <p className="text-sm text-stone-400">議事録はまだ作成されていません。</p>
         )}
 
+        {/* タスク一覧（誰が・何を・いつまでに） */}
+        {tasks.length > 0 && (
+          <section className="mt-5">
+            <p className="font-display text-base font-bold text-ink-900 mb-1.5">タスク一覧</p>
+            <div className="overflow-x-auto">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>タスク</th>
+                    <th>担当</th>
+                    <th>期限</th>
+                    <th>状態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((t) => (
+                    <tr key={t.id}>
+                      <td className="whitespace-normal">{t.title}</td>
+                      <td>{t.assigneeName || "未定"}</td>
+                      <td>{t.dueDate ? formatDateJa(t.dueDate) : "未定"}</td>
+                      <td>{t.done ? "完了" : "未完了"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {meeting!.minutesPhoto && (
           <img
             src={meeting!.minutesPhoto}
@@ -66,7 +103,7 @@ export default async function MinutesPrintPage({ params }: { params: Promise<{ i
       </article>
 
       <div className="mt-4 print:hidden">
-        <PrintButton />
+        <PrintButton auto={query.print === "1"} />
         <p className="text-xs text-stone-400 mt-2 text-center">
           印刷ダイアログで「PDFで保存」を選ぶとPDFになります（スマホは共有→プリント）。
         </p>
