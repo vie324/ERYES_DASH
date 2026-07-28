@@ -48,7 +48,7 @@ export async function createMeetingAction(formData: FormData): Promise<void> {
   redirect(`/staff/meetings?month=${month}&saved=created`);
 }
 
-/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／写真 */
+/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／タスク／写真 */
 export async function saveMeetingMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
@@ -67,14 +67,75 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
     (await isExecutive(session));
   if (!canEdit) redirect(`/staff/meetings?month=${month}&error=forbidden`);
 
+  // タスク（誰が・何を・いつまでに）。担当は名前で入ってくるのでスタッフに紐付ける
+  const staffList = await db.listStaff();
+  const tasks = parseTasks(String(formData.get("tasks") ?? "[]")).map((t) => {
+    const matched = staffList.find((s) => s.name === t.assignee || s.name.replace(/\s+/g, "") === t.assignee.replace(/\s+/g, ""));
+    return {
+      title: t.title,
+      assigneeStaffId: matched?.id ?? null,
+      assigneeName: matched?.name ?? t.assignee,
+      dueDate: t.due,
+      done: false,
+    };
+  });
+
   await db.updateMeetingMinutes(id, {
     minutesText,
     minutesPhoto,
     minutesAi: aiFlag || meeting!.minutesAi,
     minutesDone: Boolean(minutesText || minutesPhoto),
   });
+  await db.replaceMeetingTasks(id, tasks);
   revalidatePath("/staff/meetings");
   redirect(`/staff/meetings?month=${month}&saved=minutes`);
+}
+
+/** 議事録タスクの完了チェック（会議の関係者・幹部・管理者、または担当者本人） */
+export async function toggleMeetingTaskAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const taskId = String(formData.get("task_id") ?? "");
+  const meetingId = String(formData.get("meeting_id") ?? "");
+  const month = String(formData.get("month") ?? "");
+  const done = String(formData.get("done") ?? "") === "1";
+
+  const db = getDataStore();
+  const meeting = await db.getMeeting(meetingId);
+  if (!meeting) redirect(`/staff/meetings?month=${month}`);
+  const task = (await db.listMeetingTasks([meetingId])).find((t) => t.id === taskId);
+  if (!task) redirect(`/staff/meetings?month=${month}`);
+
+  const canToggle =
+    task!.assigneeStaffId === session.staffId ||
+    meeting!.hostStaffId === session.staffId ||
+    meeting!.createdBy === session.staffId ||
+    meeting!.participants.includes(session.staffId) ||
+    (await isExecutive(session));
+  if (!canToggle) redirect(`/staff/meetings?month=${month}&error=forbidden`);
+
+  await db.setMeetingTaskDone(taskId, done);
+  revalidatePath("/staff/meetings");
+  redirect(`/staff/meetings?month=${month}&saved=task#m-${meetingId}`);
+}
+
+function parseTasks(raw: string): { title: string; assignee: string; due: string }[] {
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((t) => {
+        const due = String(t?.due ?? "").trim();
+        return {
+          title: String(t?.title ?? "").trim().slice(0, 200),
+          assignee: String(t?.assignee ?? "").trim().slice(0, 40),
+          due: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : "",
+        };
+      })
+      .filter((t) => t.title)
+      .slice(0, 30);
+  } catch {
+    return [];
+  }
 }
 
 /** ミーティングの削除（登録者・幹部・管理者のみ） */

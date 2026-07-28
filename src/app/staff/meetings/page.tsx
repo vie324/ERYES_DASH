@@ -17,9 +17,9 @@ import { MEETING_TEMPLATES, findTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Markdown } from "@/lib/markdown";
 import { MinutesEditor } from "@/components/minutes-editor";
-import type { Meeting, Staff } from "@/lib/data/types";
+import type { Meeting, MeetingTask, Staff } from "@/lib/data/types";
 import { MeetingCreateForm } from "./create-form";
-import { deleteMeetingAction } from "./actions";
+import { deleteMeetingAction, toggleMeetingTaskAction } from "./actions";
 
 // ミーティング・1on1・会議体：月カレンダーで一目確認。会議体はテンプレから作成（参加者複数・アジェンダ・事前チェック）。
 // 議事録は生メモをAIで整形→PDF出力。
@@ -36,13 +36,31 @@ export default async function MeetingsPage({
   const isExec = await isExecutive(session);
 
   const db = getDataStore();
-  const [meetings, missingMinutes, staffList] = await Promise.all([
+  const [meetings, missingMinutes, staffList, openTasks, orgMembers] = await Promise.all([
     db.listMeetings({ from, to }),
     db.listMeetingsMissingMinutes(today),
     db.listStaff(),
+    db.listOpenMeetingTasks(),
+    db.listOrgMembers(),
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
   const activeStaff = staffList.filter((s) => s.isActive);
+  // 組織図のチーム所属（会議体を選んだときの参加者の初期選択に使う）
+  const teamMembers: Record<string, string[]> = {};
+  for (const m of orgMembers) {
+    if (!staffMap.get(m.staffId)?.isActive) continue;
+    (teamMembers[m.teamKey] ??= []).push(m.staffId);
+  }
+  const allTasks = await db.listMeetingTasks(meetings.map((m) => m.id));
+  const tasksByMeeting = new Map<string, MeetingTask[]>();
+  for (const t of allTasks) {
+    const list = tasksByMeeting.get(t.meetingId) ?? [];
+    list.push(t);
+    tasksByMeeting.set(t.meetingId, list);
+  }
+  // 自分あて or 期限切れの未完了タスクを先頭に出す（会議で決めたことを流さない）
+  const myOpenTasks = openTasks.filter((t) => t.assigneeStaffId === session.staffId);
+  const overdueTasks = openTasks.filter((t) => t.dueDate && t.dueDate < today);
 
   const byDate = new Map<string, Meeting[]>();
   for (const m of meetings) {
@@ -58,10 +76,12 @@ export default async function MeetingsPage({
     params.saved === "created"
       ? "ミーティングを登録しました"
       : params.saved === "minutes"
-        ? "議事録を保存しました"
+        ? "議事録とタスクを保存しました"
         : params.saved === "deleted"
           ? "ミーティングを削除しました"
-          : "";
+          : params.saved === "task"
+            ? "タスクの状態を更新しました"
+            : "";
 
   const shortName = (id: string | null) => (id ? (staffMap.get(id)?.name.split(" ")[0] ?? "？") : "");
   const chipClass = (m: Meeting) =>
@@ -82,6 +102,15 @@ export default async function MeetingsPage({
   return (
     <div>
       <PageHeader title="ミーティング・議事録" backHref="/staff" />
+
+      <div className="flex gap-2 mb-4">
+        <Link href="/staff/meetings/committees" className="flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border border-brand-300 text-brand-700">
+          会議体の一覧を見る
+        </Link>
+        <Link href="/staff/org" className="flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border border-brand-300 text-brand-700">
+          組織図（シナジーマップ）
+        </Link>
+      </div>
 
       {savedMsg && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">{savedMsg}</p>
@@ -107,8 +136,40 @@ export default async function MeetingsPage({
         </div>
       )}
 
-      {/* 登録（会議体テンプレ／1on1／その他） */}
-      <MeetingCreateForm staff={activeStaff} defaultHostId={session.staffId} templates={MEETING_TEMPLATES} today={today} />
+      {/* 会議で決まったタスク（誰が・何を・いつまでに）の未完了 */}
+      {(myOpenTasks.length > 0 || overdueTasks.length > 0) && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-4 space-y-3">
+          {myOpenTasks.length > 0 && (
+            <div>
+              <p className="text-sm font-bold text-amber-800 mb-1">自分のタスク（{myOpenTasks.length}件）</p>
+              <ul className="text-xs text-amber-800 space-y-0.5">
+                {myOpenTasks.slice(0, 8).map((t) => (
+                  <li key={t.id}>
+                    ・{t.title}
+                    <span className={`ml-1 font-bold ${t.dueDate && t.dueDate < today ? "text-red-600" : ""}`}>
+                      {t.dueDate ? `（〜${formatDateJa(t.dueDate)}）` : "（期限未定）"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {overdueTasks.length > 0 && (
+            <p className="text-xs font-bold text-red-600">
+              期限を過ぎた未完了タスクが全体で {overdueTasks.length} 件あります
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 登録（会議体テンプレ／1on1／その他）。会議体を選ぶと組織図のチームメンバーが参加者に入る */}
+      <MeetingCreateForm
+        staff={activeStaff}
+        defaultHostId={session.staffId}
+        templates={MEETING_TEMPLATES}
+        today={today}
+        teamMembers={teamMembers}
+      />
 
       <MonthNav
         month={month}
@@ -205,13 +266,51 @@ export default async function MeetingsPage({
                           </div>
                         )}
 
+                        {/* タスク（誰が・何を・いつまでに）。関係者はチェックで完了にできる */}
+                        {(tasksByMeeting.get(m.id) ?? []).length > 0 && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                            <p className="text-xs font-bold text-amber-800 mb-1.5">タスク（誰が・何を・いつまでに）</p>
+                            <ul className="space-y-1.5">
+                              {(tasksByMeeting.get(m.id) ?? []).map((t) => (
+                                <li key={t.id} className="flex items-start gap-2">
+                                  <form action={toggleMeetingTaskAction} className="shrink-0 pt-0.5">
+                                    <input type="hidden" name="task_id" value={t.id} />
+                                    <input type="hidden" name="meeting_id" value={m.id} />
+                                    <input type="hidden" name="month" value={month} />
+                                    <input type="hidden" name="done" value={t.done ? "0" : "1"} />
+                                    <button
+                                      type="submit"
+                                      aria-label={t.done ? `${t.title}を未完了に戻す` : `${t.title}を完了にする`}
+                                      className={`w-5 h-5 rounded border-2 text-xs font-bold leading-none ${
+                                        t.done ? "bg-emerald-500 border-emerald-500 text-white" : "border-stone-300 text-transparent"
+                                      }`}
+                                    >
+                                      ✓
+                                    </button>
+                                  </form>
+                                  <span className="flex-1 min-w-0 text-sm">
+                                    <span className={t.done ? "line-through text-stone-400" : "text-ink-800"}>{t.title}</span>
+                                    <span className="block text-[11px] text-stone-500">
+                                      {t.assigneeName || "未定"}
+                                      {" ／ "}
+                                      <span className={!t.done && t.dueDate && t.dueDate < today ? "text-red-600 font-bold" : ""}>
+                                        {t.dueDate ? `〜${formatDateJa(t.dueDate)}` : "期限未定"}
+                                      </span>
+                                    </span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
                         {/* 議事録：表示＋PDF、または編集（AI整形） */}
                         {m.minutesDone && (
                           <div className="rounded-xl border border-stone-200 p-3">
                             <div className="flex items-center justify-between mb-1">
                               <p className="text-xs font-bold text-stone-500">議事録{m.minutesAi && "（AI整形）"}</p>
-                              <Link href={`/staff/meetings/${m.id}`} className="text-xs font-bold text-brand-700 underline">
-                                PDFで見る・印刷
+                              <Link href={`/staff/meetings/${m.id}?print=1`} className="text-xs font-bold text-brand-700 underline">
+                                PDFにする・印刷
                               </Link>
                             </div>
                             {m.minutesText && <Markdown text={m.minutesText} />}
@@ -227,7 +326,18 @@ export default async function MeetingsPage({
                               {m.minutesDone ? "議事録を編集する" : "議事録を作成する（AI整形）"}
                             </summary>
                             <div className="p-3 pt-0">
-                              <MinutesEditor meetingId={m.id} month={month} initialText={m.minutesText} initialPhoto={m.minutesPhoto} />
+                              <MinutesEditor
+                                meetingId={m.id}
+                                month={month}
+                                initialText={m.minutesText}
+                                initialPhoto={m.minutesPhoto}
+                                initialTasks={(tasksByMeeting.get(m.id) ?? []).map((t) => ({
+                                  title: t.title,
+                                  assignee: t.assigneeName,
+                                  due: t.dueDate,
+                                }))}
+                                staff={activeStaff}
+                              />
                             </div>
                           </details>
                         )}

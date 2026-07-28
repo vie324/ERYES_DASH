@@ -25,10 +25,12 @@ import type {
   EniReport,
   IdealSchedule,
   Meeting,
+  MeetingTask,
   NewShiftAssignment,
   NextAppointment,
   OrderRequest,
   OrderStatus,
+  OrgMember,
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
@@ -214,6 +216,26 @@ const mapMeeting = (r: Row): Meeting => ({
   minutesDone: r.minutes_done ?? false,
   createdBy: r.created_by,
   createdAt: new Date(r.created_at),
+});
+
+const mapMeetingTask = (r: Row): MeetingTask => ({
+  id: r.id,
+  meetingId: r.meeting_id,
+  title: r.title ?? "",
+  assigneeStaffId: r.assignee_staff_id ?? null,
+  assigneeName: r.assignee_name ?? "",
+  dueDate: r.due_date ?? "",
+  done: r.done ?? false,
+  sortOrder: r.sort_order ?? 0,
+  createdAt: new Date(r.created_at),
+});
+
+const mapOrgMember = (r: Row): OrgMember => ({
+  id: r.id,
+  teamKey: r.team_key,
+  staffId: r.staff_id,
+  roleLabel: r.role_label ?? "",
+  sortOrder: r.sort_order ?? 0,
 });
 
 const mapAbsenceReport = (r: Row): AbsenceReport => ({
@@ -1386,6 +1408,94 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] ミーティング削除: ${error.message}`);
   }
 
+  async replaceMeetingTasks(
+    meetingId: string,
+    tasks: {
+      title: string;
+      assigneeStaffId: string | null;
+      assigneeName: string;
+      dueDate: string;
+      done: boolean;
+    }[]
+  ): Promise<void> {
+    // 同じ内容のタスクが残っている場合は完了状態を引き継いでから入れ替える
+    const { data: before } = await this.sb
+      .from("meeting_tasks")
+      .select("*")
+      .eq("meeting_id", meetingId);
+    const doneTitles = new Set(
+      (before ?? []).filter((r: Row) => r.done).map((r: Row) => String(r.title ?? ""))
+    );
+
+    const { error: delError } = await this.sb
+      .from("meeting_tasks")
+      .delete()
+      .eq("meeting_id", meetingId);
+    if (delError) throw new Error(`[supabase] 議事録タスク削除: ${delError.message}`);
+    if (tasks.length === 0) return;
+
+    const { error } = await this.sb.from("meeting_tasks").insert(
+      tasks.map((t, i) => ({
+        meeting_id: meetingId,
+        title: t.title,
+        assignee_staff_id: t.assigneeStaffId,
+        assignee_name: t.assigneeName,
+        due_date: t.dueDate || null,
+        done: t.done || doneTitles.has(t.title),
+        sort_order: i,
+      }))
+    );
+    if (error) throw new Error(`[supabase] 議事録タスク保存: ${error.message}`);
+  }
+
+  async listMeetingTasks(meetingIds: string[]): Promise<MeetingTask[]> {
+    if (meetingIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("meeting_tasks")
+      .select("*")
+      .in("meeting_id", meetingIds)
+      .order("sort_order");
+    return must(data, error, "議事録タスク一覧").map(mapMeetingTask);
+  }
+
+  async listOpenMeetingTasks(): Promise<MeetingTask[]> {
+    const { data, error } = await this.sb
+      .from("meeting_tasks")
+      .select("*")
+      .eq("done", false)
+      .order("due_date", { nullsFirst: false })
+      .order("sort_order");
+    return must(data, error, "未完了タスク一覧").map(mapMeetingTask);
+  }
+
+  async setMeetingTaskDone(id: string, done: boolean): Promise<void> {
+    const { error } = await this.sb.from("meeting_tasks").update({ done }).eq("id", id);
+    if (error) throw new Error(`[supabase] タスク完了更新: ${error.message}`);
+  }
+
+  async listOrgMembers(): Promise<OrgMember[]> {
+    const { data, error } = await this.sb.from("org_members").select("*").order("sort_order");
+    return must(data, error, "組織図メンバー一覧").map(mapOrgMember);
+  }
+
+  async setOrgTeamMembers(
+    teamKey: string,
+    members: { staffId: string; roleLabel: string }[]
+  ): Promise<void> {
+    const { error: delError } = await this.sb.from("org_members").delete().eq("team_key", teamKey);
+    if (delError) throw new Error(`[supabase] 組織図メンバー削除: ${delError.message}`);
+    if (members.length === 0) return;
+    const { error } = await this.sb.from("org_members").insert(
+      members.map((m, i) => ({
+        team_key: teamKey,
+        staff_id: m.staffId,
+        role_label: m.roleLabel,
+        sort_order: i,
+      }))
+    );
+    if (error) throw new Error(`[supabase] 組織図メンバー保存: ${error.message}`);
+  }
+
   async createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport> {
     const { data, error } = await this.sb
       .from("absence_reports")
@@ -1538,6 +1648,11 @@ class SupabaseStore implements DataStore {
       .from("schedule_presets")
       .upsert({ label, sort_order: 500 }, { onConflict: "label" });
     if (error) throw new Error(`[supabase] 項目登録: ${error.message}`);
+  }
+
+  async deleteSchedulePreset(id: string): Promise<void> {
+    const { error } = await this.sb.from("schedule_presets").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 項目削除: ${error.message}`);
   }
 }
 

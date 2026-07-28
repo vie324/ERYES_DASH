@@ -229,6 +229,12 @@ async function EniMenu({
         badge={myMissingMinutes}
       />
       <BigMenuLink
+        href="/staff/org"
+        icon="sparkles"
+        title="組織図（シナジーマップ）"
+        description="チームの役割・メンバー・会議体のつながりを見る"
+      />
+      <BigMenuLink
         href="/staff/schedule"
         icon="calendar"
         title="出勤スケジュール"

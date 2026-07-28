@@ -12,16 +12,24 @@ export function MeetingCreateForm({
   defaultHostId,
   templates,
   today,
+  teamMembers,
 }: {
   staff: Staff[];
   defaultHostId: string;
   templates: MeetingTemplate[];
   today: string;
+  /** 組織図のチームキー → 所属スタッフID。会議体を選ぶと参加者が自動で入る */
+  teamMembers: Record<string, string[]>;
 }) {
+  const membersOf = (key: string) => {
+    const t = templates.find((x) => x.key === key);
+    return new Set((t?.orgTeams ?? []).flatMap((teamKey) => teamMembers[teamKey] ?? []));
+  };
+
   const [mode, setMode] = useState<Mode>("committee");
   const [committee, setCommittee] = useState(templates[0]?.key ?? "");
   const [agenda, setAgenda] = useState(templates[0]?.agenda ?? "");
-  const [participants, setParticipants] = useState<Set<string>>(new Set());
+  const [participants, setParticipants] = useState<Set<string>>(() => membersOf(templates[0]?.key ?? ""));
 
   const template = templates.find((t) => t.key === committee);
 
@@ -29,6 +37,7 @@ export function MeetingCreateForm({
     setCommittee(key);
     const t = templates.find((x) => x.key === key);
     setAgenda(t?.agenda ?? "");
+    setParticipants(membersOf(key)); // 組織図のチームメンバーを初期選択にする
   };
 
   const toggleParticipant = (id: string) =>
@@ -68,9 +77,12 @@ export function MeetingCreateForm({
                 ))}
               </select>
               {template && (
-                <p className="text-[11px] text-stone-500 mt-1">
-                  {template.cadence} ／ 目安：{template.participantsHint}
-                </p>
+                <>
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    {template.cadence} ／ 目安：{template.participantsHint}
+                  </p>
+                  <p className="text-[11px] text-ink-600 mt-0.5">{template.purpose}</p>
+                </>
               )}
             </div>
           </>

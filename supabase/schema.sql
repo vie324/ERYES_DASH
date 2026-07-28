@@ -298,6 +298,29 @@ create table if not exists meetings (
 --   alter table meetings add column if not exists participants jsonb not null default '[]';
 --   alter table meetings add column if not exists minutes_ai boolean not null default false;
 
+-- 議事録から整理したタスク（誰が・何を・いつまでに）。議事録の保存ごとに入れ替える
+create table if not exists meeting_tasks (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references meetings(id) on delete cascade,
+  title text not null,                          -- 何を
+  assignee_staff_id uuid references staff(id) on delete set null,  -- 誰が（一致した場合）
+  assignee_name text not null default '',       -- 誰が（表示名。未一致でも残す）
+  due_date date,                                -- いつまでに（未定はnull）
+  done boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- 組織図（シナジーマップ）のチーム所属。team_key は src/lib/eni/org.ts の定義キー
+create table if not exists org_members (
+  id uuid primary key default gen_random_uuid(),
+  team_key text not null,
+  staff_id uuid not null references staff(id) on delete cascade,
+  role_label text not null default '',          -- 'リーダー' など（空文字はメンバー）
+  sort_order integer not null default 0,
+  unique (team_key, staff_id)
+);
+
 -- 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ）
 create table if not exists absence_reports (
   id uuid primary key default gen_random_uuid(),
@@ -377,6 +400,9 @@ create index if not exists idx_eni_reports_period on eni_reports (kind, period_k
 create index if not exists idx_practice_records_date on practice_records (practice_date);
 create index if not exists idx_practice_records_staff on practice_records (staff_id, practice_date);
 create index if not exists idx_meetings_date on meetings (meeting_date);
+create index if not exists idx_meeting_tasks_meeting on meeting_tasks (meeting_id);
+create index if not exists idx_meeting_tasks_open on meeting_tasks (done, due_date);
+create index if not exists idx_org_members_team on org_members (team_key);
 create index if not exists idx_absence_reports_date on absence_reports (absence_date);
 create index if not exists idx_order_requests_created on order_requests (created_at);
 create index if not exists idx_daily_plans_date on daily_plans (plan_date);
@@ -408,6 +434,8 @@ alter table eni_reports enable row level security;
 alter table practice_records enable row level security;
 alter table practice_pairs enable row level security;
 alter table meetings enable row level security;
+alter table meeting_tasks enable row level security;
+alter table org_members enable row level security;
 alter table absence_reports enable row level security;
 alter table order_requests enable row level security;
 alter table daily_plans enable row level security;

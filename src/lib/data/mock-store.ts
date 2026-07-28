@@ -27,10 +27,12 @@ import type {
   EniReport,
   IdealSchedule,
   Meeting,
+  MeetingTask,
   NewShiftAssignment,
   NextAppointment,
   OrderRequest,
   OrderStatus,
+  OrgMember,
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
@@ -69,6 +71,8 @@ interface MockDb {
   practiceRecords: PracticeRecord[];
   practicePairs: PracticePair[];
   meetings: Meeting[];
+  meetingTasks: MeetingTask[];
+  orgMembers: OrgMember[];
   absenceReports: AbsenceReport[];
   orderRequests: OrderRequest[];
   dailyPlans: DailyPlan[];
@@ -509,6 +513,42 @@ function seed(): MockDb {
       createdAt: jstAt(addDays(today, -2), 12),
     },
   ];
+  // 議事録から整理したタスク（デモ：全体MTGの宿題を1件だけ入れておく）
+  const meetingTasks: MeetingTask[] = [
+    {
+      id: randomUUID(),
+      meetingId: meetings[1].id,
+      title: "秋のキャンペーンPOPのラフを作る",
+      assigneeStaffId: "staff-4",
+      assigneeName: "中島 結菜",
+      dueDate: addDays(today, 7),
+      done: false,
+      sortOrder: 0,
+      createdAt: jstAt(addDays(today, -2), 12),
+    },
+  ];
+  // 組織図（シナジーマップ）のチーム所属。キーは lib/eni/org.ts の ORG_TEAMS と対応
+  const orgMembers: OrgMember[] = (
+    [
+      ["exec", "staff-3", "リーダー"],
+      ["exec", "staff-4", ""],
+      ["education", "staff-3", "リーダー"],
+      ["education", "staff-4", ""],
+      ["pr_sns", "staff-4", "リーダー"],
+      ["pr_sns", "staff-6", ""],
+      ["pr_recruit", "staff-3", "リーダー"],
+      ["materials", "staff-4", "リーダー"],
+      ["materials", "staff-5", ""],
+      ["assistant", "staff-5", "リーダー"],
+      ["assistant", "staff-6", ""],
+    ] as [string, string, string][]
+  ).map(([teamKey, staffId, roleLabel], i) => ({
+    id: randomUUID(),
+    teamKey,
+    staffId,
+    roleLabel,
+    sortOrder: i,
+  }));
   const absenceReports: AbsenceReport[] = [
     {
       id: randomUUID(),
@@ -544,7 +584,14 @@ function seed(): MockDb {
         goal: "ワインディングを時間内に巻き切る",
         horenso: "モデルさんの来店時間を先輩に共有",
         todo: "レイヤーのシャンプー入客、閉店後に練習1h",
-        timetable: "10:00 開店準備\n11:00〜 入客アシスト\n14:00 モデル施術（カラー）\n19:00 ワインディング練習\n20:30 片付け・退勤",
+        timetable: "",
+        timetableBlocks: [
+          { d: 0, s: "09:30", e: "10:00", a: "朝礼" },
+          { d: 0, s: "10:00", e: "14:00", a: "入客アシスト" },
+          { d: 0, s: "14:00", e: "15:00", a: "休憩" },
+          { d: 0, s: "15:00", e: "18:30", a: "施術（モデル・カラー）" },
+          { d: 0, s: "19:00", e: "20:00", a: "練習" },
+        ],
       },
       photo: "",
       seenBy: null,
@@ -705,6 +752,8 @@ function seed(): MockDb {
     practiceRecords,
     practicePairs,
     meetings,
+    meetingTasks,
+    orgMembers,
     absenceReports,
     orderRequests,
     dailyPlans,
@@ -1522,6 +1571,74 @@ class MockStore implements DataStore {
 
   async deleteMeeting(id: string): Promise<void> {
     this.db.meetings = this.db.meetings.filter((m) => m.id !== id);
+    this.db.meetingTasks = this.db.meetingTasks.filter((t) => t.meetingId !== id);
+  }
+
+  async replaceMeetingTasks(
+    meetingId: string,
+    tasks: {
+      title: string;
+      assigneeStaffId: string | null;
+      assigneeName: string;
+      dueDate: string;
+      done: boolean;
+    }[]
+  ): Promise<void> {
+    const before = this.db.meetingTasks.filter((t) => t.meetingId === meetingId);
+    this.db.meetingTasks = this.db.meetingTasks.filter((t) => t.meetingId !== meetingId);
+    tasks.forEach((t, i) => {
+      // 同じ内容のタスクが残っている場合は完了状態を引き継ぐ
+      const prev = before.find((p) => p.title === t.title);
+      this.db.meetingTasks.push({
+        id: randomUUID(),
+        meetingId,
+        title: t.title,
+        assigneeStaffId: t.assigneeStaffId,
+        assigneeName: t.assigneeName,
+        dueDate: t.dueDate,
+        done: t.done || (prev?.done ?? false),
+        sortOrder: i,
+        createdAt: prev?.createdAt ?? new Date(),
+      });
+    });
+  }
+
+  async listMeetingTasks(meetingIds: string[]): Promise<MeetingTask[]> {
+    const ids = new Set(meetingIds);
+    return this.db.meetingTasks
+      .filter((t) => ids.has(t.meetingId))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async listOpenMeetingTasks(): Promise<MeetingTask[]> {
+    return this.db.meetingTasks
+      .filter((t) => !t.done)
+      .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+  }
+
+  async setMeetingTaskDone(id: string, done: boolean): Promise<void> {
+    const found = this.db.meetingTasks.find((t) => t.id === id);
+    if (found) found.done = done;
+  }
+
+  async listOrgMembers(): Promise<OrgMember[]> {
+    return [...this.db.orgMembers].sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async setOrgTeamMembers(
+    teamKey: string,
+    members: { staffId: string; roleLabel: string }[]
+  ): Promise<void> {
+    this.db.orgMembers = this.db.orgMembers.filter((m) => m.teamKey !== teamKey);
+    members.forEach((m, i) => {
+      this.db.orgMembers.push({
+        id: randomUUID(),
+        teamKey,
+        staffId: m.staffId,
+        roleLabel: m.roleLabel,
+        sortOrder: i,
+      });
+    });
   }
 
   async createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport> {
@@ -1661,6 +1778,10 @@ class MockStore implements DataStore {
     if (!this.db.schedulePresets.some((p) => p.label === label)) {
       this.db.schedulePresets.push({ id: randomUUID(), label, sortOrder: 500 });
     }
+  }
+
+  async deleteSchedulePreset(id: string): Promise<void> {
+    this.db.schedulePresets = this.db.schedulePresets.filter((p) => p.id !== id);
   }
 }
 

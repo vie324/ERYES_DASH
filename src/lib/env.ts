@@ -17,7 +17,7 @@ export const env = {
 
   // 議事録のAI整形（Anthropic）。未設定時はテンプレ整形にフォールバック
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
-  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-opus-5",
 };
 
 /** 議事録のAI整形が使えるか（Anthropic APIキーが設定済みか） */

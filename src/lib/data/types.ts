@@ -285,6 +285,28 @@ export interface Meeting {
   createdAt: Date;
 }
 
+/** 議事録から整理されたタスク（誰が・何を・いつまでに） */
+export interface MeetingTask {
+  id: string;
+  meetingId: string;
+  title: string; // 何を（動詞から始まる短い文）
+  assigneeStaffId: string | null; // 誰が（スタッフと一致した場合）
+  assigneeName: string; // 誰が（表示名。一致しない場合もそのまま残す）
+  dueDate: string; // いつまでに（"YYYY-MM-DD"。未定は空文字）
+  done: boolean;
+  sortOrder: number;
+  createdAt: Date;
+}
+
+/** 組織図（シナジーマップ）のチーム所属。teamKey は lib/eni/org.ts の定義キー */
+export interface OrgMember {
+  id: string;
+  teamKey: string;
+  staffId: string;
+  roleLabel: string; // "リーダー" など（空文字はメンバー）
+  sortOrder: number;
+}
+
 export type AbsenceKind = "absence" | "early_leave" | "late";
 
 /** 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ） */
@@ -315,13 +337,22 @@ export interface OrderRequest {
   updatedAt: Date;
 }
 
+/** 予約表（タイムテーブル）の1件。d=曜日index（1日だけの場合は0）、s/e="HH:mm" */
+export interface ScheduleBlock {
+  d: number;
+  s: string;
+  e: string;
+  a: string; // 内容（「MTG」「練習」など）
+}
+
 /** 今日のスケジュールの構造化フォーム */
 export interface DailyPlanFields {
   goal: string; // 今日の目標
   horenso: string; // ホウレンソウすること
   todo: string; // やること
   timetable: string; // 旧・自由記入のタイムテーブル（後方互換）
-  timetableRows?: { t: string; a: string }[]; // 予約表風グリッド（時間×内容）
+  timetableRows?: { t: string; a: string }[]; // 旧・1時間ごとのグリッド（後方互換）
+  timetableBlocks?: ScheduleBlock[]; // 予約表（開始〜終了の帯）
 }
 
 /** 毎朝のスケジュール（1人1日1件）。フォーム入力またはスケジュール帳の写真 */
@@ -570,6 +601,22 @@ export interface DataStore {
   ): Promise<Meeting>;
   deleteMeeting(id: string): Promise<void>;
 
+  // 議事録から整理したタスク（誰が・何を・いつまでに）
+  /** 対象ミーティングのタスクを入れ替える（議事録の保存時に呼ぶ）。完了状態は同じ内容なら引き継ぐ */
+  replaceMeetingTasks(
+    meetingId: string,
+    tasks: { title: string; assigneeStaffId: string | null; assigneeName: string; dueDate: string; done: boolean }[]
+  ): Promise<void>;
+  listMeetingTasks(meetingIds: string[]): Promise<MeetingTask[]>;
+  /** 未完了タスクの一覧（期限の早い順） */
+  listOpenMeetingTasks(): Promise<MeetingTask[]>;
+  setMeetingTaskDone(id: string, done: boolean): Promise<void>;
+
+  // 組織図（シナジーマップ）のチーム所属
+  listOrgMembers(): Promise<OrgMember[]>;
+  /** チームの所属を入れ替える（幹部のみ操作する想定） */
+  setOrgTeamMembers(teamKey: string, members: { staffId: string; roleLabel: string }[]): Promise<void>;
+
   // 欠勤・早退の報告
   createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport>;
   listAbsenceReports(filter: { staffId?: string; from: string; to: string }): Promise<AbsenceReport[]>;
@@ -602,6 +649,7 @@ export interface DataStore {
   // タイムテーブルのよくある項目（プリセット）
   listSchedulePresets(): Promise<SchedulePreset[]>;
   addSchedulePreset(label: string): Promise<void>;
+  deleteSchedulePreset(id: string): Promise<void>;
 
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
   /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */
