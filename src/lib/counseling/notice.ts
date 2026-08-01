@@ -4,7 +4,7 @@
 export const CONSENT_NOTICE_TITLE = "施術に関する注意事項・同意事項";
 
 export const CONSENT_NOTICE_INTRO =
-  "安全に施術をお受けいただくため、下記の内容を必ずお読みいただき、ご同意のうえご署名をお願いいたします。";
+  "安全に施術をお受けいただくため、下記の内容を必ずお読みいただき、ご確認のうえチェックをお願いいたします。";
 
 export const CONSENT_NOTICE_SECTIONS: { heading: string; items: string[] }[] = [
   {
@@ -49,4 +49,4 @@ export const CONSENT_NOTICE_SECTIONS: { heading: string; items: string[] }[] = [
 ];
 
 export const CONSENT_AGREE_LABEL =
-  "上記の注意事項を確認し、内容に同意のうえ施術を受けることに同意します。";
+  "上記の注意事項を確認しました（内容に同意し施術を受けます）。";
