@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 // カウンセリング入力フォーム（顧客がスマホで入力する画面）
 // 項目定義は src/lib/counseling/items.ts にあり、コード修正だけで増減できる。
-// 入力後は「注意事項・署名」ステップに進み、お名前と手書き署名をいただいてから送信する。
+// 入力後は「注意事項の確認」ステップに進み、「確認しました」にチェックしてから送信する。
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -49,10 +49,8 @@ export function CounselingForm({
   const [menus, setMenus] = useState<string[]>([]); // 選択中のメニュー（セクションの表示切替に使う）
   const [mockUserId, setMockUserId] = useState("mock-user-1");
   const [inLineApp, setInLineApp] = useState(false);
-  // 同意書（注意事項への同意・お名前・手書き署名）
-  const [signName, setSignName] = useState("");
+  // 注意事項への同意（「確認しました」チェックのみ）
   const [agree, setAgree] = useState(false);
-  const [signature, setSignature] = useState("");
   const accessTokenRef = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -96,7 +94,7 @@ export function CounselingForm({
     }
   }, [liffId, loadProfile]);
 
-  // カウンセリング入力 → 注意事項・署名へ
+  // カウンセリング入力 → 注意事項の確認へ
   const goConsent = () => {
     if (!formRef.current) return;
     // ご希望メニューはチェックボックスのため標準バリデーションが効かない → 個別に確認
@@ -107,7 +105,6 @@ export function CounselingForm({
     }
     if (!formRef.current.reportValidity()) return; // 必須項目の未入力チェック（ブラウザ標準）
     setErrors([]);
-    setSignName((prev) => prev || fullName);
     setStep("consent");
     window.scrollTo(0, 0);
   };
@@ -122,13 +119,9 @@ export function CounselingForm({
     e.preventDefault();
     if (step !== "consent" || phase === "submitting") return;
 
-    // 同意書の検証
-    const ve: string[] = [];
-    if (!signName.trim()) ve.push("お名前をご記入ください");
-    if (!agree) ve.push("注意事項へのご同意が必要です");
-    if (!signature) ve.push("ご署名をお願いいたします");
-    if (ve.length > 0) {
-      setErrors(ve);
+    // 注意事項の確認チェック
+    if (!agree) {
+      setErrors(["注意事項をご確認のうえ、チェックを入れてください"]);
       window.scrollTo(0, 0);
       return;
     }
@@ -160,7 +153,7 @@ export function CounselingForm({
           accessToken: accessTokenRef.current ?? undefined,
           mockUserId: isMock ? mockUserId : undefined,
           answers,
-          consent: { name: signName.trim(), signature, agreed: agree },
+          consent: { agreed: agree },
         }),
       });
       const data = (await res.json()) as { ok: boolean; errors?: string[] };
@@ -190,7 +183,7 @@ export function CounselingForm({
       <header className="bg-white/90 backdrop-blur border-b border-brand-200 py-5 text-center">
         <img src={logoSrc} alt="EREYS" className="h-10 w-auto mx-auto" />
         <p className="text-xs font-bold tracking-[0.25em] text-brand-600 mt-1.5">
-          {step === "consent" ? "注意事項・ご署名" : "カウンセリングシート"}
+          {step === "consent" ? "注意事項の確認" : "カウンセリングシート"}
         </p>
       </header>
 
@@ -273,11 +266,11 @@ export function CounselingForm({
               ))}
 
               <button type="button" onClick={goConsent} className="btn-primary w-full text-lg">
-                次へ（注意事項の確認・ご署名）
+                次へ（注意事項の確認）
               </button>
             </div>
 
-            {/* ステップ2：注意事項・同意・署名 */}
+            {/* ステップ2：注意事項の確認（「確認しました」チェックのみ） */}
             <div className={step === "consent" ? "space-y-4" : "hidden"}>
               <section className="card space-y-3">
                 <h2 className="font-display text-base font-bold text-ink-900">{CONSENT_NOTICE_TITLE}</h2>
@@ -296,7 +289,7 @@ export function CounselingForm({
                 </div>
               </section>
 
-              <div className="card space-y-4">
+              <div className="card">
                 <label className="flex items-start gap-3 text-sm font-bold text-stone-700">
                   <input
                     type="checkbox"
@@ -306,28 +299,6 @@ export function CounselingForm({
                   />
                   <span>{CONSENT_AGREE_LABEL}</span>
                 </label>
-
-                <div>
-                  <p className="label !mb-2">
-                    お名前（フルネーム）
-                    <span className="text-red-500 text-xs font-bold ml-1">必須</span>
-                  </p>
-                  <input
-                    type="text"
-                    value={signName}
-                    onChange={(e) => setSignName(e.target.value)}
-                    placeholder="例）山田 花子"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <p className="label !mb-2">
-                    ご署名（指でなぞってご記入ください）
-                    <span className="text-red-500 text-xs font-bold ml-1">必須</span>
-                  </p>
-                  <SignaturePad onChange={setSignature} />
-                </div>
               </div>
 
               <div className="flex gap-2">
@@ -339,86 +310,13 @@ export function CounselingForm({
                   戻る
                 </button>
                 <button type="submit" disabled={phase === "submitting"} className="btn-primary flex-1 text-lg">
-                  {phase === "submitting" ? "送信中…" : "同意して送信する"}
+                  {phase === "submitting" ? "送信中…" : "確認して送信する"}
                 </button>
               </div>
             </div>
           </form>
         )}
       </main>
-    </div>
-  );
-}
-
-/** 手書き署名パッド（指・スタイラスで描画 → PNGのデータURLを onChange で返す） */
-function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const hasDrawn = useRef(false);
-
-  const coords = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const c = canvasRef.current!;
-    const rect = c.getBoundingClientRect();
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * c.width,
-      y: ((e.clientY - rect.top) / rect.height) * c.height,
-    };
-  };
-
-  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const ctx = canvasRef.current!.getContext("2d")!;
-    drawing.current = true;
-    const { x, y } = coords(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  };
-
-  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawing.current) return;
-    e.preventDefault();
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const { x, y } = coords(e);
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#1c1917";
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    hasDrawn.current = true;
-  };
-
-  const end = () => {
-    if (!drawing.current) return;
-    drawing.current = false;
-    if (hasDrawn.current && canvasRef.current) {
-      onChange(canvasRef.current.toDataURL("image/png"));
-    }
-  };
-
-  const clear = () => {
-    const c = canvasRef.current;
-    if (!c) return;
-    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
-    hasDrawn.current = false;
-    onChange("");
-  };
-
-  return (
-    <div>
-      <canvas
-        ref={canvasRef}
-        width={600}
-        height={220}
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerLeave={end}
-        className="w-full h-44 rounded-xl border-2 border-dashed border-brand-300 bg-white touch-none"
-      />
-      <button type="button" onClick={clear} className="mt-2 text-xs font-bold text-stone-500 underline">
-        署名をやり直す
-      </button>
     </div>
   );
 }
