@@ -4,8 +4,8 @@ import { getLogoFullSrc } from "@/lib/logo";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EREYS サロン業務システム",
-  description: "EREYS のサロン業務システム（カウンセリング／日報・成績／勤怠／シフト／配信）",
+  title: "ENi サロン業務システム",
+  description: "ENi／EREYS のサロン業務システム（日報・週報／組織図・会議／カウンセリング／シフト）",
 };
 
 export const viewport: Viewport = {
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <body className="min-h-dvh text-ink-900 antialiased">
-        <Splash logoSrc={getLogoFullSrc()} />
+        <Splash logoSrc={getLogoFullSrc()} liffLogoSrc={getLogoFullSrc("eyes")} />
         {children}
       </body>
     </html>

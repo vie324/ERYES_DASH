@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="48" viewBox="0 0 150 48">
+  <!-- ENi ロゴ（ヘッダー用・横長版）。マークはEREYSと共通、ワードマークのみENi -->
+  <text x="0" y="34" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
+        font-size="30" font-weight="600" letter-spacing="5" fill="#A99668">ENi</text>
+  <g fill="none" stroke="#A99668" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="122" cy="24" r="19"/>
+    <line x1="102" y1="45" x2="134" y2="21"/>
+  </g>
+  <circle cx="134" cy="21" r="2.6" fill="#A99668"/>
+</svg>
