@@ -39,6 +39,7 @@ export interface Staff {
   jobType: JobType;
   rank: AssistantRank; // アシスタントのランク（ファースト/ミドル/ファイナル）
   isExecutive: boolean; // 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
+  mission: string; // その人の役割・担っていること（組織図に表示）
   fixedOvertimeHours: number;
   isActive: boolean;
 }
@@ -298,13 +299,36 @@ export interface MeetingTask {
   createdAt: Date;
 }
 
-/** 組織図（シナジーマップ）のチーム所属。teamKey は lib/eni/org.ts の定義キー */
+/** 組織図の部署・チーム（階層構造）。管理者が画面から追加・変更できる */
+export interface OrgUnit {
+  id: string;
+  chartKey: string; // "company"（会社組織図）/ "salon"（サロン組織図）
+  unitKey: string; // org_members.team_key と紐づくキー
+  parentKey: string; // 親のunitKey（空文字＝最上位）
+  name: string;
+  mission: string; // このチームが担うこと
+  meetingKey: string; // 対応する会議体（空文字＝なし）
+  color: string; // 図で使う色
+  sortOrder: number;
+}
+
+/** 組織図のチーム所属。teamKey は org_units.unit_key */
 export interface OrgMember {
   id: string;
   teamKey: string;
   staffId: string;
   roleLabel: string; // "リーダー" など（空文字はメンバー）
   sortOrder: number;
+}
+
+/** アシスタントの継続設定（ピラミッド・年内目標・自分との約束・デビュー設定など）。
+ *  週報の先頭に常時表示され、随時変更できる。settingKey は lib/eni/forms.ts で定義 */
+export interface AssistantSetting {
+  id: string;
+  staffId: string;
+  settingKey: string;
+  content: string;
+  updatedAt: Date;
 }
 
 export type AbsenceKind = "absence" | "early_leave" | "late";
@@ -421,6 +445,7 @@ export interface StaffInput {
   jobType?: JobType;
   rank?: AssistantRank;
   isExecutive?: boolean;
+  mission?: string;
   fixedOvertimeHours: number;
 }
 
@@ -445,7 +470,14 @@ export interface DataStore {
     patch: Partial<
       Pick<
         Staff,
-        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+        | "name"
+        | "role"
+        | "jobType"
+        | "rank"
+        | "isExecutive"
+        | "mission"
+        | "fixedOvertimeHours"
+        | "isActive"
       >
     > & {
       passwordHash?: string;
@@ -612,10 +644,19 @@ export interface DataStore {
   listOpenMeetingTasks(): Promise<MeetingTask[]>;
   setMeetingTaskDone(id: string, done: boolean): Promise<void>;
 
-  // 組織図（シナジーマップ）のチーム所属
+  // 組織図（部署・チームと所属）
+  listOrgUnits(): Promise<OrgUnit[]>;
+  /** 部署・チームの追加／更新（unitKey で判定。管理者・幹部のみ操作する想定） */
+  upsertOrgUnit(input: Omit<OrgUnit, "id">): Promise<void>;
+  /** 部署・チームの削除（所属も一緒に消える） */
+  deleteOrgUnit(unitKey: string): Promise<void>;
   listOrgMembers(): Promise<OrgMember[]>;
   /** チームの所属を入れ替える（幹部のみ操作する想定） */
   setOrgTeamMembers(teamKey: string, members: { staffId: string; roleLabel: string }[]): Promise<void>;
+
+  // アシスタントの継続設定（ピラミッド・目標・約束など）
+  listAssistantSettings(staffId: string): Promise<AssistantSetting[]>;
+  upsertAssistantSetting(staffId: string, settingKey: string, content: string): Promise<void>;
 
   // 欠勤・早退の報告
   createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport>;

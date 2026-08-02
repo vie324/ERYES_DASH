@@ -225,6 +225,16 @@ export default async function AdminSettingsPage({
                     </select>
                   </div>
                 </div>
+                <div>
+                  <label className="label">役割・担っていること（組織図に表示）</label>
+                  <textarea
+                    name="mission"
+                    rows={2}
+                    defaultValue={s.mission}
+                    placeholder="例）理念の体現者。目標の進捗と実行に責任を持ち、チームを動かす。"
+                    className="input min-h-16"
+                  />
+                </div>
                 <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
                   <input
                     type="checkbox"

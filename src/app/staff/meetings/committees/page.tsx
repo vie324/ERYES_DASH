@@ -3,7 +3,6 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { addMonths, formatDateJa, formatMonthJa, monthRange, thisMonthJst, todayJst } from "@/lib/date";
 import { MEETING_TEMPLATES } from "@/lib/eni/meetings-templates";
-import { findTeam } from "@/lib/eni/org";
 import { MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 
 // 会議体の整理：どんな会議体があって、誰が出て、何を話すのかを一枚で見る。
@@ -20,11 +19,14 @@ export default async function CommitteesPage({
   const today = todayJst();
 
   const db = getDataStore();
-  const [meetings, staffList, orgMembers] = await Promise.all([
+  const [meetings, staffList, orgMembers, orgUnits] = await Promise.all([
     db.listMeetings({ from, to }),
     db.listStaff(),
     db.listOrgMembers(),
+    db.listOrgUnits(),
   ]);
+  // 組織図の部署名（担当チームの表示に使う）
+  const unitNameOf = (key: string) => orgUnits.find((u) => u.unitKey === key)?.name ?? key;
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
 
   const heldOf = (key: string) => meetings.filter((m) => m.committee === key);
@@ -87,7 +89,7 @@ export default async function CommitteesPage({
                 )}
                 {t.orgTeams.length > 0 && (
                   <p className="text-[11px] text-stone-400 mt-1">
-                    担当チーム：{t.orgTeams.map((k) => findTeam(k)?.name ?? k).join("、")}
+                    担当チーム：{t.orgTeams.map(unitNameOf).join("、")}
                   </p>
                 )}
               </div>

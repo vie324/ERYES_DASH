@@ -30,6 +30,7 @@ create table if not exists staff (
   job_type text not null default '' check (job_type in ('', 'stylist', 'assistant')),
   rank text not null default '' check (rank in ('', 'first', 'middle', 'final')),  -- アシスタントのランク
   is_executive boolean not null default false,
+  mission text not null default '',                   -- その人の役割・担っていること（組織図に表示）
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
   created_at timestamptz not null default now()
@@ -39,6 +40,7 @@ create table if not exists staff (
 --   alter table staff add column if not exists job_type text not null default '';
 --   alter table staff add column if not exists rank text not null default '';
 --   alter table staff add column if not exists is_executive boolean not null default false;
+--   alter table staff add column if not exists mission text not null default '';
 
 -- 顧客（LINE友だち追加時に自動登録）
 create table if not exists customers (
@@ -312,13 +314,39 @@ create table if not exists meeting_tasks (
 );
 
 -- 組織図（シナジーマップ）のチーム所属。team_key は src/lib/eni/org.ts の定義キー
+-- 組織図の部署・チーム（階層構造）。管理者が画面から追加・変更できる
+-- chart_key: 'company'（会社組織図）/ 'salon'（サロン組織図）
+-- parent_key: 親の unit_key（空文字＝最上位）
+create table if not exists org_units (
+  id uuid primary key default gen_random_uuid(),
+  chart_key text not null default 'company',
+  unit_key text not null unique,
+  parent_key text not null default '',
+  name text not null,
+  mission text not null default '',
+  meeting_key text not null default '',         -- 対応する会議体（空文字＝なし）
+  color text not null default '#94815a',
+  sort_order integer not null default 0
+);
+
 create table if not exists org_members (
   id uuid primary key default gen_random_uuid(),
-  team_key text not null,
+  team_key text not null,                       -- org_units.unit_key
   staff_id uuid not null references staff(id) on delete cascade,
   role_label text not null default '',          -- 'リーダー' など（空文字はメンバー）
   sort_order integer not null default 0,
   unique (team_key, staff_id)
+);
+
+-- アシスタントの継続設定（ピラミッド・年内目標・自分との約束・デビュー設定など）
+-- 週報の先頭に常時表示され、随時変更できる
+create table if not exists assistant_settings (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  setting_key text not null,
+  content text not null default '',
+  updated_at timestamptz not null default now(),
+  unique (staff_id, setting_key)
 );
 
 -- 欠勤・早退・遅刻の報告（閲覧は幹部・管理者のみ）
@@ -403,6 +431,8 @@ create index if not exists idx_meetings_date on meetings (meeting_date);
 create index if not exists idx_meeting_tasks_meeting on meeting_tasks (meeting_id);
 create index if not exists idx_meeting_tasks_open on meeting_tasks (done, due_date);
 create index if not exists idx_org_members_team on org_members (team_key);
+create index if not exists idx_org_units_chart on org_units (chart_key, sort_order);
+create index if not exists idx_assistant_settings_staff on assistant_settings (staff_id);
 create index if not exists idx_absence_reports_date on absence_reports (absence_date);
 create index if not exists idx_order_requests_created on order_requests (created_at);
 create index if not exists idx_daily_plans_date on daily_plans (plan_date);
@@ -436,6 +466,8 @@ alter table practice_pairs enable row level security;
 alter table meetings enable row level security;
 alter table meeting_tasks enable row level security;
 alter table org_members enable row level security;
+alter table org_units enable row level security;
+alter table assistant_settings enable row level security;
 alter table absence_reports enable row level security;
 alter table order_requests enable row level security;
 alter table daily_plans enable row level security;

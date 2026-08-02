@@ -256,6 +256,7 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
     jobType: jobTypeField(formData),
     rank: rankField(formData),
     isExecutive: formData.get("is_executive") === "on",
+    mission: String(formData.get("mission") ?? "").trim().slice(0, 500),
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),
