@@ -8,6 +8,7 @@ import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { BigMenuLink } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
+import { Dashboard } from "@/components/dashboard";
 
 // スタッフのホーム：迷わないよう「やること」を大きなボタンだけにする。
 // ログイン後に選んだ業態（EREYS/ENi）に応じてメニュー（項目）を切り替える。
@@ -39,6 +40,9 @@ export default async function StaffHomePage() {
       </h1>
 
       <ShiftNoticeBanner staffId={session.staffId} />
+
+      {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
+      <Dashboard brand={brand} />
 
       {brand === "eyes" ? (
         <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />

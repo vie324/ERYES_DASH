@@ -40,6 +40,72 @@
   }
 }
 
+/* ---- ダッシュボードのチャート（伸びる動き）---- */
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes bar-slide {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes ring-draw {
+  from {
+    stroke-dashoffset: var(--ring-circ);
+  }
+}
+
+@keyframes line-draw {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 棒は下端から、横棒は左端から伸びる */
+.chart-bar {
+  transform-origin: bottom;
+  animation: bar-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chart-bar-h {
+  transform-origin: left;
+  animation: bar-slide 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chart-ring {
+  animation: ring-draw 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chart-draw {
+  animation: line-draw 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 動きを減らす設定の端末では、アニメーションを止める */
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar,
+  .chart-bar-h,
+  .chart-ring,
+  .chart-draw,
+  .animate-fade-up {
+    animation: none !important;
+  }
+}
+
 @keyframes splash-logo {
   0% {
     opacity: 0;
