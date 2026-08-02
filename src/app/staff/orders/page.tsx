@@ -54,7 +54,7 @@ export default async function OrdersPage({
     );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="発注・購入申請" backHref="/staff" />
 
       {params.saved && (
@@ -70,14 +70,14 @@ export default async function OrdersPage({
 
       {/* 申請フォーム */}
       <form action={createOrderRequestAction} className="card space-y-3 mb-4">
-        <p className="font-bold text-sm text-stone-500">申請する</p>
+        <p className="section-title !mb-0">申請する</p>
         <div>
           <p className="label !mb-2">種類</p>
           <div className="flex gap-2">
             {(Object.keys(CATEGORY_LABEL) as OrderCategory[]).map((c) => (
               <label
                 key={c}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50"
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50"
               >
                 <input
                   type="radio"
@@ -139,7 +139,7 @@ export default async function OrdersPage({
       />
 
       <section className="card">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">
+        <h2 className="section-title">
           {isExec ? `みんなの申請（${formatMonthJa(month)}・幹部メニュー）` : `自分の申請（${formatMonthJa(month)}）`}
         </h2>
         {visibleOrders.length === 0 ? (
@@ -147,9 +147,9 @@ export default async function OrdersPage({
         ) : (
           <div className="space-y-3">
             {visibleOrders.map((o) => (
-              <div key={o.id} className="rounded-xl border border-stone-200 p-3">
+              <div key={o.id} className="rounded-xl border border-ink-200 p-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold rounded-full bg-stone-100 text-stone-600 px-2 py-0.5">
+                  <span className="text-xs font-bold rounded-full bg-ink-100 text-ink-600 px-2 py-0.5">
                     {CATEGORY_LABEL[o.category]}
                   </span>
                   <span className="font-bold text-sm">
@@ -157,7 +157,7 @@ export default async function OrdersPage({
                   </span>
                   <span className="ml-auto">{statusBadge(o.status)}</span>
                 </div>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-ink-500 mt-1">
                   {staffMap.get(o.staffId) ?? "（不明）"} ／ {formatDateJa(jstDateOf(o.createdAt))}
                   {o.note && <span className="block mt-0.5">メモ：{o.note}</span>}
                 </p>

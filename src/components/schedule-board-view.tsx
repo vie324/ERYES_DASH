@@ -16,7 +16,7 @@ export function ScheduleBoardView({
   endHour?: number;
 }) {
   if (blocks.length === 0) {
-    return <p className="text-xs text-stone-400">（予定は入っていません）</p>;
+    return <p className="text-xs text-ink-400">（予定は入っていません）</p>;
   }
   const range = fitHourRange(blocks, startHour, endHour);
   const hours = Array.from({ length: range.endHour - range.startHour }, (_, i) => range.startHour + i);
@@ -32,7 +32,7 @@ export function ScheduleBoardView({
               <div
                 key={label}
                 className={`flex-1 min-w-0 text-center text-xs font-bold py-1.5 ${
-                  d === 5 ? "text-blue-500" : d === 6 ? "text-red-400" : "text-stone-600"
+                  d === 5 ? "text-blue-500" : d === 6 ? "text-red-400" : "text-ink-600"
                 }`}
               >
                 {label}
@@ -45,7 +45,7 @@ export function ScheduleBoardView({
               {hours.map((h, i) => (
                 <div
                   key={h}
-                  className="absolute left-0 right-0 text-[10px] font-bold text-stone-400 text-center"
+                  className="absolute left-0 right-0 text-[10px] font-bold text-ink-400 text-center"
                   style={{ top: i * PX_PER_HOUR - 6 }}
                 >
                   {i === 0 ? "" : `${h}:00`}
@@ -102,10 +102,10 @@ export function ScheduleBoardView({
 export function ScheduleList({ blocks }: { blocks: ScheduleBlock[] }) {
   if (blocks.length === 0) return null;
   return (
-    <ul className="rounded-xl border border-stone-200 overflow-hidden">
+    <ul className="rounded-xl border border-ink-200 overflow-hidden">
       {blocks.map((b, i) => (
-        <li key={`${b.s}-${i}`} className={`flex items-center gap-2 ${i > 0 ? "border-t border-stone-100" : ""}`}>
-          <span className="w-24 shrink-0 text-[11px] font-bold text-stone-400 bg-stone-50 py-1.5 text-center">
+        <li key={`${b.s}-${i}`} className={`flex items-center gap-2 ${i > 0 ? "border-t border-ink-100" : ""}`}>
+          <span className="w-24 shrink-0 text-[11px] font-bold text-ink-400 bg-ink-50 py-1.5 text-center">
             {b.s}〜{b.e}
           </span>
           <span className="flex-1 min-w-0 px-2 py-1.5 text-sm text-ink-700 truncate">{b.a}</span>

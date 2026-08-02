@@ -37,7 +37,7 @@ export default async function WeeklyReportPage({
   for (const s of settings) settingValues[s.settingKey] = s.content;
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="週報を入力（アシスタント）" backHref="/staff" />
 
       {params.saved === "settings" ? (
@@ -93,7 +93,7 @@ export default async function WeeklyReportPage({
             →
           </Link>
         ) : (
-          <span className="px-4 py-2 text-stone-300 text-lg">→</span>
+          <span className="px-4 py-2 text-ink-300 text-lg">→</span>
         )}
       </div>
 

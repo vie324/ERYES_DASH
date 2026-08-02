@@ -56,14 +56,14 @@ export function CounselingDetail({
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-lg font-bold">{customer?.fullName ?? "（顧客情報なし）"} 様</p>
-            <p className="text-xs text-stone-500 mt-0.5">
+            <p className="text-xs text-ink-500 mt-0.5">
               送信：{formatDateTimeJa(response.submittedAt, true)}
             </p>
           </div>
           <CounselingStatusBadge status={response.status} />
         </div>
         {response.status === "confirmed" && response.confirmedAt && (
-          <p className="text-xs text-stone-500 mt-2">
+          <p className="text-xs text-ink-500 mt-2">
             確認：{formatDateTimeJa(response.confirmedAt, true)}
             {confirmedByName ? `（${confirmedByName}）` : ""}
           </p>
@@ -84,7 +84,7 @@ export function CounselingDetail({
         </div>
       )}
 
-      <div className="card divide-y divide-stone-100">
+      <div className="card divide-y divide-ink-100">
         {shownItems.map((item) => {
           const value = response.answers[item.key];
           let display = formatAnswer(item, value);
@@ -101,21 +101,21 @@ export function CounselingDetail({
           }
           return (
             <div key={item.key} className="py-3 first:pt-0 last:pb-0">
-              <p className="text-xs font-bold text-stone-500">{item.label}</p>
+              <p className="text-xs font-bold text-ink-500">{item.label}</p>
               <p className="text-base mt-0.5 whitespace-pre-wrap">{display}</p>
             </div>
           );
         })}
         {extraKeys.map((key) => (
           <div key={key} className="py-3">
-            <p className="text-xs font-bold text-stone-500">{key}</p>
+            <p className="text-xs font-bold text-ink-500">{key}</p>
             <p className="text-base mt-0.5 whitespace-pre-wrap">{String(response.answers[key])}</p>
           </div>
         ))}
       </div>
 
       <div className="card">
-        <p className="text-xs font-bold text-stone-500">注意事項</p>
+        <p className="text-xs font-bold text-ink-500">注意事項</p>
         <p className="text-sm mt-0.5">
           {consentAgreed ? "お客様が「確認しました」にチェック済み" : "未チェック"}
         </p>

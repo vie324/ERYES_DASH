@@ -50,16 +50,16 @@ export default async function CashReportPage({
           placeholder="0"
           className="input pr-12 text-right text-lg font-bold"
         />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-stone-400 font-bold">
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-400 font-bold">
           円
         </span>
       </div>
-      {note && <p className="text-xs text-stone-400 mt-1">{note}</p>}
+      {note && <p className="text-xs text-ink-400 mt-1">{note}</p>}
     </div>
   );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="レジ締め・現金管理" backHref="/staff" />
 
       {params.saved && (
@@ -92,7 +92,7 @@ export default async function CashReportPage({
             →
           </Link>
         ) : (
-          <span className="px-4 py-2 text-stone-300 text-lg">→</span>
+          <span className="px-4 py-2 text-ink-300 text-lg">→</span>
         )}
       </div>
 
@@ -105,7 +105,7 @@ export default async function CashReportPage({
             className={`text-sm font-bold rounded-full px-4 py-2.5 border ${
               s.id === storeId
                 ? "bg-brand-600 text-white border-brand-600"
-                : "border-brand-300 text-stone-600 bg-white"
+                : "border-brand-300 text-ink-600 bg-white"
             }`}
           >
             {enteredStoreIds.has(s.id) ? "✓ " : ""}
@@ -131,7 +131,7 @@ export default async function CashReportPage({
         <input type="hidden" name="report_date" value={date} />
 
         <div className="card space-y-3">
-          <p className="font-bold text-sm text-stone-500">本日の現金</p>
+          <p className="section-title !mb-0">本日の現金</p>
           {yenInput("cash_sales", "本日の現金売上高", existing?.cashSales)}
           {yenInput(
             "register_balance",
@@ -141,7 +141,7 @@ export default async function CashReportPage({
         </div>
 
         <div className="card space-y-3">
-          <p className="font-bold text-sm text-stone-500">レジから金庫へ</p>
+          <p className="section-title !mb-0">レジから金庫へ</p>
           {yenInput("moved_to_safe", "金庫へ移動額", existing?.movedToSafe)}
           {yenInput(
             "change_fund",
@@ -152,7 +152,7 @@ export default async function CashReportPage({
         </div>
 
         <div className="card space-y-3">
-          <p className="font-bold text-sm text-stone-500">金庫・銀行</p>
+          <p className="section-title !mb-0">金庫・銀行</p>
           {yenInput("safe_balance", "金庫現金残高", existing?.safeBalance)}
           {yenInput("bank_deposit", "銀行への預入額（ない日は空欄）", existing?.bankDeposit)}
         </div>

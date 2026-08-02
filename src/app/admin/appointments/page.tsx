@@ -57,9 +57,9 @@ export default async function AdminAppointmentsPage({
       )}
 
       <section className="card mb-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-3">次回予約を登録</h2>
+        <h2 className="section-title">次回予約を登録</h2>
         {customers.length === 0 ? (
-          <p className="text-sm text-stone-400">
+          <p className="text-sm text-ink-400">
             顧客がまだ登録されていません（LINE友だち追加で自動登録されます）
           </p>
         ) : (
@@ -115,12 +115,12 @@ export default async function AdminAppointmentsPage({
         )}
       </section>
 
-      <p className="text-xs text-stone-500 mb-4">
+      <p className="text-xs text-ink-500 mb-4">
         今月のLINE送信数：{pushCount} / {LINE_FREE_QUOTA}通（リマインドも1通として消費します）
       </p>
 
       <section>
-        <h2 className="font-bold text-sm text-stone-500 mb-2">今後の予約（{upcoming.length}件）</h2>
+        <h2 className="section-title">今後の予約（{upcoming.length}件）</h2>
         {upcoming.length === 0 ? (
           <EmptyState message="今後の予約はありません" />
         ) : (
@@ -140,12 +140,12 @@ export default async function AdminAppointmentsPage({
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className={`font-bold ${a.status === "cancelled" ? "line-through text-stone-400" : ""}`}>
+                      <p className={`font-bold ${a.status === "cancelled" ? "line-through text-ink-400" : ""}`}>
                         {formatDateTimeJa(a.scheduledAt, true)}
                       </p>
                       <p className="text-sm mt-0.5 truncate">
                         {customer?.fullName ?? "（不明）"} 様
-                        <span className="text-stone-400 text-xs ml-2">
+                        <span className="text-ink-400 text-xs ml-2">
                           担当：{a.staffId ? (staffMap.get(a.staffId)?.name ?? "（不明）") : "指定なし"}
                         </span>
                       </p>
@@ -209,7 +209,7 @@ export default async function AdminAppointmentsPage({
                   )}
 
                   {a.status === "cancelled" && a.changeNote && (
-                    <p className="text-xs text-stone-500">お客様メモ：{a.changeNote}</p>
+                    <p className="text-xs text-ink-500">お客様メモ：{a.changeNote}</p>
                   )}
                 </div>
               );

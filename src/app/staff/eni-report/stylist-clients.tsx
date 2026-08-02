@@ -50,20 +50,20 @@ export function StylistClients({
 
   return (
     <div className="card space-y-3">
-      <p className="font-bold text-sm text-stone-500">来店ごとの時間（稼働率・施術時間の自動計算）</p>
+      <p className="section-title !mb-0">来店ごとの時間（稼働率・施術時間の自動計算）</p>
 
       {/* 集計サマリー */}
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-xl bg-brand-50 border border-brand-100 py-2">
-          <p className="text-[11px] font-bold text-stone-500">客数</p>
+          <p className="text-[11px] font-bold text-ink-500">客数</p>
           <p className="font-display text-lg font-bold text-ink-900">{calc.clientCount}</p>
         </div>
         <div className="rounded-xl bg-brand-50 border border-brand-100 py-2">
-          <p className="text-[11px] font-bold text-stone-500">稼働率</p>
+          <p className="text-[11px] font-bold text-ink-500">稼働率</p>
           <p className="font-display text-lg font-bold text-brand-700">{calc.utilization}%</p>
         </div>
         <div className="rounded-xl bg-brand-50 border border-brand-100 py-2">
-          <p className="text-[11px] font-bold text-stone-500">施術時間の合計±</p>
+          <p className="text-[11px] font-bold text-ink-500">施術時間の合計±</p>
           <p
             className={`font-display text-sm font-bold ${
               calc.timeDiff > 0 ? "text-red-500" : calc.timeDiff < 0 ? "text-emerald-600" : "text-ink-900"
@@ -93,7 +93,7 @@ export function StylistClients({
 
       {/* 来店行 */}
       <div className="space-y-2">
-        <div className="grid grid-cols-[1.2rem_1fr_1fr_1.5rem] gap-2 items-center text-[11px] font-bold text-stone-400 px-0.5">
+        <div className="grid grid-cols-[1.2rem_1fr_1fr_1.5rem] gap-2 items-center text-[11px] font-bold text-ink-400 px-0.5">
           <span></span>
           <span>予約時間(分)</span>
           <span>実施術(分)</span>
@@ -101,7 +101,7 @@ export function StylistClients({
         </div>
         {rows.map((r, i) => (
           <div key={i} className="grid grid-cols-[1.2rem_1fr_1fr_1.5rem] gap-2 items-center">
-            <span className="text-xs font-bold text-stone-400 text-center">{i + 1}</span>
+            <span className="text-xs font-bold text-ink-400 text-center">{i + 1}</span>
             <input
               type="number"
               inputMode="numeric"
@@ -128,7 +128,7 @@ export function StylistClients({
               type="button"
               onClick={() => removeRow(i)}
               aria-label="この行を削除"
-              className="text-stone-300 hover:text-red-500 font-bold"
+              className="text-ink-300 hover:text-red-500 font-bold"
             >
               ×
             </button>
@@ -144,7 +144,7 @@ export function StylistClients({
         ＋ 来店を追加
       </button>
 
-      <p className="text-[11px] text-stone-400">
+      <p className="text-[11px] text-ink-400">
         稼働率＝各予約の前後30分（受付・仕上げ・お会計＝アシスタント対応分）を除いた時間 ÷ 勤務時間
       </p>
 

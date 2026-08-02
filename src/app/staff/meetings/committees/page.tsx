@@ -60,7 +60,7 @@ export default async function CommitteesPage({
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <h2 className="font-bold">{t.name}</h2>
-                  <p className="text-[11px] text-stone-500">{t.cadence}</p>
+                  <p className="text-[11px] text-ink-500">{t.cadence}</p>
                 </div>
                 {status === "done" ? (
                   <StatusBadge label="今月 実施済み" tone="ok" />
@@ -79,16 +79,16 @@ export default async function CommitteesPage({
                 {teamMemberIds.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {teamMemberIds.map((id) => (
-                      <span key={id} className="text-xs font-bold rounded-full px-3 py-1 border border-stone-300 text-stone-600">
+                      <span key={id} className="text-xs font-bold rounded-full px-3 py-1 border border-ink-300 text-ink-600">
                         {staffMap.get(id)?.name ?? "？"}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-stone-500 mt-0.5">目安：{t.participantsHint}</p>
+                  <p className="text-xs text-ink-500 mt-0.5">目安：{t.participantsHint}</p>
                 )}
                 {t.orgTeams.length > 0 && (
-                  <p className="text-[11px] text-stone-400 mt-1">
+                  <p className="text-[11px] text-ink-400 mt-1">
                     担当チーム：{t.orgTeams.map(unitNameOf).join("、")}
                   </p>
                 )}
@@ -98,7 +98,7 @@ export default async function CommitteesPage({
                 <summary className="cursor-pointer text-xs font-bold text-brand-700">アジェンダ・事前チェックを見る</summary>
                 <div className="mt-2 space-y-2">
                   <div>
-                    <p className="text-xs font-bold text-stone-500">アジェンダ</p>
+                    <p className="text-xs font-bold text-ink-500">アジェンダ</p>
                     <p className="whitespace-pre-wrap text-sm text-ink-700">{t.agenda}</p>
                   </div>
                   {t.prechecks.length > 0 && (
@@ -113,7 +113,7 @@ export default async function CommitteesPage({
               </details>
 
               {held.length > 0 && (
-                <p className="text-[11px] text-stone-500 mt-2">
+                <p className="text-[11px] text-ink-500 mt-2">
                   今月の開催：
                   {held.map((m) => `${formatDateJa(m.meetingDate)}${m.minutesDone ? "（議事録あり）" : m.meetingDate <= today ? "（議事録なし）" : "（予定）"}`).join("、")}
                 </p>
@@ -124,7 +124,7 @@ export default async function CommitteesPage({
       </div>
 
       <div className="mt-4 space-y-2">
-        <p className="text-xs text-stone-400">
+        <p className="text-xs text-ink-400">
           ※ 参加メンバーは組織図（シナジーマップ）のチーム登録から自動で出ます。未登録の会議体は「目安」の名前を表示します。
         </p>
         <p className="text-center">

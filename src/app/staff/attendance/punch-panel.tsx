@@ -70,7 +70,7 @@ export function PunchPanel() {
       </div>
 
       {status.kind === "locating" && (
-        <p className="card text-center text-sm font-bold text-stone-600 animate-pulse">
+        <p className="card text-center text-sm font-bold text-ink-600 animate-pulse">
           位置情報を確認しています…
         </p>
       )}

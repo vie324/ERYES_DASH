@@ -55,7 +55,7 @@ export default async function AbsencePage({
     );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="欠勤・早退の報告" backHref="/staff" />
 
       {params.saved && (
@@ -71,7 +71,7 @@ export default async function AbsencePage({
 
       {/* 報告フォーム */}
       <form action={createAbsenceReportAction} className="card space-y-3 mb-4">
-        <p className="font-bold text-sm text-stone-500">報告する</p>
+        <p className="section-title !mb-0">報告する</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label" htmlFor="staff_id">
@@ -105,7 +105,7 @@ export default async function AbsencePage({
             {(Object.keys(KIND_LABEL) as AbsenceKind[]).map((k) => (
               <label
                 key={k}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50"
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50"
               >
                 <input
                   type="radio"
@@ -161,7 +161,7 @@ export default async function AbsencePage({
       />
 
       <section className="card">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">
+        <h2 className="section-title">
           {isExec ? `全員の報告（${formatMonthJa(month)}・幹部メニュー）` : `自分の報告（${formatMonthJa(month)}）`}
         </h2>
         {visible.length === 0 ? (
@@ -169,23 +169,23 @@ export default async function AbsencePage({
         ) : (
           <div className="space-y-2">
             {visible.map((r) => (
-              <div key={r.id} className="rounded-xl border border-stone-200 p-3">
+              <div key={r.id} className="rounded-xl border border-ink-200 p-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-sm">{formatDateJa(r.absenceDate)}</span>
                   <span className="font-bold text-sm">{staffMap.get(r.staffId) ?? "（不明）"}</span>
                   {kindBadge(r.kind)}
-                  {r.hours > 0 && <span className="text-sm font-bold text-stone-600">{r.hours}時間</span>}
+                  {r.hours > 0 && <span className="text-sm font-bold text-ink-600">{r.hours}時間</span>}
                 </div>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-ink-500 mt-1">
                   理由:{r.reason}
-                  <span className="text-stone-400 ml-2">（報告:{staffMap.get(r.reportedBy) ?? "？"}）</span>
+                  <span className="text-ink-400 ml-2">（報告:{staffMap.get(r.reportedBy) ?? "？"}）</span>
                 </p>
               </div>
             ))}
           </div>
         )}
         {!isExec && (
-          <p className="text-xs text-stone-400 mt-2">※ 全員分の一覧は幹部・管理者のみ見られます</p>
+          <p className="text-xs text-ink-400 mt-2">※ 全員分の一覧は幹部・管理者のみ見られます</p>
         )}
       </section>
     </div>

@@ -49,13 +49,13 @@ export default async function StaffShiftPage({
             <span className="block font-bold">
               {formatMonthJa(targetMonth)}の希望を{submitted ? "修正する" : "提出する"}
             </span>
-            <span className="block text-xs text-stone-500 mt-0.5">
+            <span className="block text-xs text-ink-500 mt-0.5">
               締切：{deadlineLabel(targetMonth, rules)}
               {submitted ? "（提出済み）" : "（未提出）"}
             </span>
           </span>
           {!submitted && <StatusBadge label="未提出" tone="pending" />}
-          <span className="text-stone-300 text-xl">›</span>
+          <span className="text-ink-300 text-xl">›</span>
         </Link>
       )}
 
@@ -78,13 +78,13 @@ export default async function StaffShiftPage({
         <>
           <section className="card mb-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="font-bold text-sm text-stone-500">あなたのシフト</h2>
+              <h2 className="section-title !mb-0">あなたのシフト</h2>
               <span className="text-sm font-bold text-brand-700">出勤 {own.length}日</span>
             </div>
             {own.length === 0 ? (
-              <p className="text-sm text-stone-400">この月の出勤はありません</p>
+              <p className="text-sm text-ink-400">この月の出勤はありません</p>
             ) : (
-              <ul className="divide-y divide-stone-100">
+              <ul className="divide-y divide-ink-100">
                 {own.map((a) => (
                   <li key={a.id} className="py-2.5 flex items-center gap-3 text-sm">
                     <span className="font-bold w-24">{formatDateJa(a.date)}</span>

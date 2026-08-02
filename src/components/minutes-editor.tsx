@@ -99,15 +99,15 @@ export function MinutesEditor({
           {generating ? "整形中…（30秒ほどかかります）" : "AIで議事録に整える（タスク整理つき）"}
         </button>
         {notice && <p className="text-xs font-bold text-brand-700">{notice}</p>}
-        <p className="text-[11px] text-stone-500">
+        <p className="text-[11px] text-ink-500">
           「いつまでに・何を・誰がやるのか」を自動で表と一覧に整理します。
         </p>
       </div>
 
       {/* プレビュー */}
       {minutesText && (
-        <div className="rounded-xl border border-stone-200 p-3">
-          <p className="text-[11px] font-bold text-stone-400 mb-1">プレビュー</p>
+        <div className="rounded-xl border border-ink-200 p-3">
+          <p className="text-[11px] font-bold text-ink-400 mb-1">プレビュー</p>
           <Markdown text={minutesText} />
         </div>
       )}
@@ -134,7 +134,7 @@ export function MinutesEditor({
         </div>
 
         {/* タスク（誰が・何を・いつまでに） */}
-        <div className="rounded-xl border border-stone-200 p-3 space-y-2">
+        <div className="rounded-xl border border-ink-200 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="label !mb-0">タスク（誰が・何を・いつまでに）</p>
             <button
@@ -146,10 +146,10 @@ export function MinutesEditor({
             </button>
           </div>
           {tasks.length === 0 && (
-            <p className="text-xs text-stone-400">（タスクはありません。AI整形するか「＋追加」で入れられます）</p>
+            <p className="text-xs text-ink-400">（タスクはありません。AI整形するか「＋追加」で入れられます）</p>
           )}
           {tasks.map((t, i) => (
-            <div key={i} className="rounded-lg border border-stone-200 p-2 space-y-2">
+            <div key={i} className="rounded-lg border border-ink-200 p-2 space-y-2">
               <div className="flex items-start gap-2">
                 <input
                   type="text"

@@ -91,7 +91,7 @@ export default async function MeetingsPage({
         ? "bg-sky-100 text-sky-800"
         : m.meetingType === "all"
           ? "bg-amber-100 text-amber-800"
-          : "bg-stone-100 text-stone-700";
+          : "bg-ink-100 text-ink-700";
   const chipLabel = (m: Meeting) =>
     m.committee
       ? (findTemplate(m.committee)?.name.slice(0, 4) ?? "会議")
@@ -104,10 +104,10 @@ export default async function MeetingsPage({
       <PageHeader title="ミーティング・議事録" backHref="/staff" />
 
       <div className="flex gap-2 mb-4">
-        <Link href="/staff/meetings/committees" className="flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border border-brand-300 text-brand-700">
+        <Link href="/staff/meetings/committees" className="chip flex-1 justify-center !text-sm !py-2">
           会議体の一覧を見る
         </Link>
-        <Link href="/staff/org" className="flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border border-brand-300 text-brand-700">
+        <Link href="/staff/org" className="chip flex-1 justify-center !text-sm !py-2">
           組織図（シナジーマップ）
         </Link>
       </div>
@@ -180,7 +180,7 @@ export default async function MeetingsPage({
 
       {/* カレンダー */}
       <section className="card mb-4">
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-stone-500 mb-1">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-ink-500 mb-1">
           {["日", "月", "火", "水", "木", "金", "土"].map((w, i) => (
             <div key={w} className={i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : ""}>{w}</div>
           ))}
@@ -191,8 +191,8 @@ export default async function MeetingsPage({
             const wd = weekdayOf(date);
             const dayMeetings = byDate.get(date) ?? [];
             return (
-              <div key={date} className={`min-h-[3.5rem] rounded-lg border p-0.5 ${date === today ? "border-brand-400 bg-brand-50/60" : "border-stone-100"}`}>
-                <div className={`text-[10px] font-bold text-right pr-0.5 ${wd === 0 ? "text-red-400" : wd === 6 ? "text-blue-400" : "text-stone-400"}`}>
+              <div key={date} className={`min-h-[3.5rem] rounded-lg border p-0.5 ${date === today ? "border-brand-400 bg-brand-50/60" : "border-ink-100"}`}>
+                <div className={`text-[10px] font-bold text-right pr-0.5 ${wd === 0 ? "text-red-400" : wd === 6 ? "text-blue-400" : "text-ink-400"}`}>
                   {Number(date.slice(8))}
                 </div>
                 <div className="space-y-0.5">
@@ -201,13 +201,13 @@ export default async function MeetingsPage({
                       {chipLabel(m)}
                     </a>
                   ))}
-                  {dayMeetings.length > 3 && <span className="block text-[9px] text-stone-400 pl-1">+{dayMeetings.length - 3}</span>}
+                  {dayMeetings.length > 3 && <span className="block text-[9px] text-ink-400 pl-1">+{dayMeetings.length - 3}</span>}
                 </div>
               </div>
             );
           })}
         </div>
-        <p className="text-[11px] text-stone-400 mt-2">紫＝会議体／青＝1on1／黄＝全体。赤枠は議事録が未提出です。</p>
+        <p className="text-[11px] text-ink-400 mt-2">紫＝会議体／青＝1on1／黄＝全体。赤枠は議事録が未提出です。</p>
       </section>
 
       {/* 詳細リスト */}
@@ -217,7 +217,7 @@ export default async function MeetingsPage({
         <div className="space-y-4">
           {dates.map((date) => (
             <section key={date}>
-              <h2 className={`font-bold text-sm mb-2 ${date === today ? "text-brand-700" : "text-stone-500"}`}>
+              <h2 className={`font-bold text-sm mb-2 ${date === today ? "text-brand-700" : "text-ink-500"}`}>
                 {formatDateJa(date)}{date === today && "（今日）"}
               </h2>
               <div className="space-y-2">
@@ -246,9 +246,9 @@ export default async function MeetingsPage({
                         </div>
                       </summary>
 
-                      <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+                      <div className="mt-3 pt-3 border-t border-ink-100 space-y-3">
                         {partNames.length > 0 && (
-                          <p className="text-xs text-stone-500">参加者：{partNames.join("、")}</p>
+                          <p className="text-xs text-ink-500">参加者：{partNames.join("、")}</p>
                         )}
                         {m.agenda && (
                           <div>
@@ -282,15 +282,15 @@ export default async function MeetingsPage({
                                       type="submit"
                                       aria-label={t.done ? `${t.title}を未完了に戻す` : `${t.title}を完了にする`}
                                       className={`w-5 h-5 rounded border-2 text-xs font-bold leading-none ${
-                                        t.done ? "bg-emerald-500 border-emerald-500 text-white" : "border-stone-300 text-transparent"
+                                        t.done ? "bg-emerald-500 border-emerald-500 text-white" : "border-ink-300 text-transparent"
                                       }`}
                                     >
                                       ✓
                                     </button>
                                   </form>
                                   <span className="flex-1 min-w-0 text-sm">
-                                    <span className={t.done ? "line-through text-stone-400" : "text-ink-800"}>{t.title}</span>
-                                    <span className="block text-[11px] text-stone-500">
+                                    <span className={t.done ? "line-through text-ink-400" : "text-ink-800"}>{t.title}</span>
+                                    <span className="block text-[11px] text-ink-500">
                                       {t.assigneeName || "未定"}
                                       {" ／ "}
                                       <span className={!t.done && t.dueDate && t.dueDate < today ? "text-red-600 font-bold" : ""}>
@@ -306,16 +306,16 @@ export default async function MeetingsPage({
 
                         {/* 議事録：表示＋PDF、または編集（AI整形） */}
                         {m.minutesDone && (
-                          <div className="rounded-xl border border-stone-200 p-3">
+                          <div className="rounded-xl border border-ink-200 p-3">
                             <div className="flex items-center justify-between mb-1">
-                              <p className="text-xs font-bold text-stone-500">議事録{m.minutesAi && "（AI整形）"}</p>
+                              <p className="text-xs font-bold text-ink-500">議事録{m.minutesAi && "（AI整形）"}</p>
                               <Link href={`/staff/meetings/${m.id}?print=1`} className="text-xs font-bold text-brand-700 underline">
                                 PDFにする・印刷
                               </Link>
                             </div>
                             {m.minutesText && <Markdown text={m.minutesText} />}
                             {m.minutesPhoto && (
-                              <img src={m.minutesPhoto} alt="議事録の写真" className="w-full max-h-80 object-contain rounded-lg border border-stone-200 bg-white mt-2" />
+                              <img src={m.minutesPhoto} alt="議事録の写真" className="w-full max-h-80 object-contain rounded-lg border border-ink-200 bg-white mt-2" />
                             )}
                           </div>
                         )}

@@ -10,7 +10,7 @@ export default async function AdminHelpPage() {
   await requireAdmin();
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="使い方ガイド（管理者）" backHref="/admin" />
 
       <p className="text-sm text-ink-500 mb-2">

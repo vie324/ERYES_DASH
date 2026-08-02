@@ -33,7 +33,7 @@ export default async function ShiftRequestPage({
   for (const r of requests) initialDays[r.date] = r.preference;
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader
         title={`${formatMonthJa(month)}の希望提出`}
         backHref="/staff/shift"
@@ -51,7 +51,7 @@ export default async function ShiftRequestPage({
         </p>
       )}
 
-      <div className="rounded-xl bg-stone-100 text-stone-600 text-xs font-bold px-4 py-3 mb-4 space-y-0.5">
+      <div className="rounded-xl bg-ink-100 text-ink-600 text-xs font-bold px-4 py-3 mb-4 space-y-0.5">
         <p>締切：{deadlineLabel(month, rules)}　{editable ? "（提出・修正できます）" : "（締切済みのため閲覧のみ）"}</p>
         {requestMonth && <p>前回の提出：{formatDateTimeJa(requestMonth.updatedAt, true)}</p>}
         <p>提出内容はあなたと管理者だけが見られます。</p>

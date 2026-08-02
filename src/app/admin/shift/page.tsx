@@ -100,7 +100,7 @@ export default async function AdminShiftPage({
         ルール設定（連勤上限・最低人数・締切日）
       </Link>
 
-      <h2 className="font-bold text-sm text-stone-500 mb-2">提出された希望（本人と管理者のみ閲覧可）</h2>
+      <h2 className="section-title">提出された希望（本人と管理者のみ閲覧可）</h2>
       {requestMonths.length === 0 ? (
         <EmptyState message="まだ希望の提出はありません" />
       ) : (
@@ -121,12 +121,12 @@ export default async function AdminShiftPage({
                     <p className="font-bold flex-1">{staff.name}</p>
                     <StatusBadge label="提出済み" tone="ok" />
                   </div>
-                  <p className="text-xs text-stone-400 mt-0.5">
+                  <p className="text-xs text-ink-400 mt-0.5">
                     {formatDateTimeJa(rm.updatedAt, true)} 提出
                   </p>
                   <dl className="text-sm mt-2 space-y-1">
                     <div className="flex gap-2">
-                      <dt className="text-stone-500 shrink-0 w-24">勤務可能店舗</dt>
+                      <dt className="text-ink-500 shrink-0 w-24">勤務可能店舗</dt>
                       <dd className="font-bold">{storeNames || "（選択なし＝割当不可）"}</dd>
                     </div>
                     <div className="flex gap-2">
@@ -147,7 +147,7 @@ export default async function AdminShiftPage({
                     )}
                     {rm.note && (
                       <div className="flex gap-2">
-                        <dt className="text-stone-500 shrink-0 w-24">備考</dt>
+                        <dt className="text-ink-500 shrink-0 w-24">備考</dt>
                         <dd className="whitespace-pre-wrap">{rm.note}</dd>
                       </div>
                     )}

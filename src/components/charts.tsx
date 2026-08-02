@@ -59,16 +59,32 @@ export function StatTile({
             ? "text-red-700"
             : "text-ink-900";
 
+  const accentBar =
+    tone === "accent"
+      ? "from-brand-400 to-brand-600"
+      : tone === "good"
+        ? "from-emerald-300 to-emerald-500"
+        : tone === "warning"
+          ? "from-amber-300 to-amber-500"
+          : tone === "critical"
+            ? "from-red-300 to-red-500"
+            : "from-ink-200 to-ink-300";
+
   return (
-    <div className="card !p-3.5 flex flex-col justify-between animate-fade-up">
+    <div className="card relative overflow-hidden !p-3.5 flex flex-col justify-between animate-fade-up">
+      <span className={`absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r ${accentBar}`} />
       <p className="text-[11px] font-bold text-ink-500 leading-tight">{label}</p>
-      <div className="mt-1 flex items-end gap-1.5">
+      <div className="mt-1.5 flex items-end gap-1.5">
         <span className={`font-display text-2xl leading-none font-bold ${valueColor}`}>{value}</span>
         {unit && <span className="text-[11px] font-bold text-ink-500 mb-0.5">{unit}</span>}
         {delta !== undefined && delta !== null && (
           <span
-            className={`ml-auto text-[11px] font-bold mb-0.5 ${
-              delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-700" : "text-ink-500"
+            className={`ml-auto inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold mb-0.5 ${
+              delta > 0
+                ? "text-emerald-700 bg-emerald-50"
+                : delta < 0
+                  ? "text-red-700 bg-red-50"
+                  : "text-ink-500 bg-ink-50"
             }`}
           >
             {delta > 0 ? "▲" : delta < 0 ? "▼" : "±"}
@@ -77,7 +93,7 @@ export function StatTile({
         )}
       </div>
       {spark && spark.length > 1 && <Sparkline values={spark} />}
-      {sub && <p className="text-[10px] text-ink-500 mt-1 leading-tight">{sub}</p>}
+      {sub && <p className="text-[10px] text-ink-400 mt-1 leading-tight">{sub}</p>}
     </div>
   );
 }
@@ -132,7 +148,8 @@ export function ColumnChart({
     return <p className="text-xs text-ink-500 py-8 text-center">データがまだありません</p>;
   }
   const max = peak;
-  const barW = Math.min(24, 260 / data.length - 8); // 24px上限。余りは余白にする
+  // 棒は「枠の6割・最大44px」。画面幅が広がっても間延びせず、狭くても潰れない
+  const barW = "min(2.75rem, 60%)";
   const slot = 100 / data.length;
   const fmt = (v: number) => (format === "yen" ? yen(v) : format === "hour" ? `${v}h` : String(v));
 
@@ -407,9 +424,8 @@ export function ChartCard({
   return (
     <section className="card animate-fade-up">
       <div className="flex items-center gap-2 mb-3">
-        <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
-        <h2 className="font-bold text-sm text-ink-700">{title}</h2>
-        {action && <div className="ml-auto">{action}</div>}
+        <h2 className="section-title !mb-0">{title}</h2>
+        {action && <div className="ml-auto shrink-0">{action}</div>}
       </div>
       {children}
     </section>

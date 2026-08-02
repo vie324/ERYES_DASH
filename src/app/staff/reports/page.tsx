@@ -47,13 +47,13 @@ export default async function StaffReportsHistoryPage({
                     修正する
                   </Link>
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-600">
                   <span>新規 {r.newClients}・既存 {r.repeatClients}</span>
                   <span>次回予約 {r.nextBookings}</span>
                   <span className="font-bold text-ink-900">売上 {formatYen(total)}</span>
                 </div>
                 {hasComment && (
-                  <dl className="space-y-2 text-sm border-t border-stone-100 pt-2">
+                  <dl className="space-y-2 text-sm border-t border-ink-100 pt-2">
                     {r.goodPoint && (
                       <div>
                         <dt className="text-xs font-bold text-brand-700">喜んでいただけたこと</dt>
@@ -74,8 +74,8 @@ export default async function StaffReportsHistoryPage({
                     )}
                     {r.memo && (
                       <div>
-                        <dt className="text-xs font-bold text-stone-400">メモ</dt>
-                        <dd className="whitespace-pre-wrap text-stone-500">{r.memo}</dd>
+                        <dt className="text-xs font-bold text-ink-400">メモ</dt>
+                        <dd className="whitespace-pre-wrap text-ink-500">{r.memo}</dd>
                       </div>
                     )}
                   </dl>

@@ -51,13 +51,13 @@ export function MeetingCreateForm({
   return (
     <details className="card mb-4">
       <summary className="font-bold text-sm text-brand-700 cursor-pointer">＋ ミーティングを登録する</summary>
-      <form action={createMeetingAction} className="space-y-3 mt-3 pt-3 border-t border-stone-100">
+      <form action={createMeetingAction} className="space-y-3 mt-3 pt-3 border-t border-ink-100">
         {/* 種類 */}
         <div>
           <p className="label !mb-2">種類</p>
           <div className="flex gap-2">
             {([["committee", "会議体"], ["1on1", "1on1"], ["other", "その他"]] as [Mode, string][]).map(([v, label]) => (
-              <label key={v} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-stone-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
+              <label key={v} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
                 <input type="radio" name="_mode" value={v} checked={mode === v} onChange={() => setMode(v)} className="h-4 w-4 accent-brand-500" />
                 {label}
               </label>
@@ -78,7 +78,7 @@ export function MeetingCreateForm({
               </select>
               {template && (
                 <>
-                  <p className="text-[11px] text-stone-500 mt-1">
+                  <p className="text-[11px] text-ink-500 mt-1">
                     {template.cadence} ／ 目安：{template.participantsHint}
                   </p>
                   <p className="text-[11px] text-ink-600 mt-0.5">{template.purpose}</p>
@@ -133,7 +133,7 @@ export function MeetingCreateForm({
               {staff.map((s) => {
                 const on = participants.has(s.id);
                 return (
-                  <label key={s.id} className={`text-xs font-bold rounded-full px-3 py-1.5 border cursor-pointer ${on ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"}`}>
+                  <label key={s.id} className={`chip cursor-pointer ${on ? "chip-active" : ""}`}>
                     <input type="checkbox" name="participants" value={s.id} checked={on} onChange={() => toggleParticipant(s.id)} className="hidden" />
                     {s.name}
                   </label>

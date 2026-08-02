@@ -64,8 +64,8 @@ export default async function EniReportsViewPage({
         {canSeeStylist && (
           <a
             href={`/staff/eni-reports?month=${month}&tab=stylist`}
-            className={`flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border ${
-              tab === "stylist" ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"
+            className={`chip flex-1 justify-center !text-sm !py-2 ${
+              tab === "stylist" ? "chip-active" : ""
             }`}
           >
             スタイリスト日報（{stylistReports.length}）
@@ -74,8 +74,8 @@ export default async function EniReportsViewPage({
         {canSeeWeekly && (
           <a
             href={`/staff/eni-reports?month=${month}&tab=weekly`}
-            className={`flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border ${
-              tab === "weekly" ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"
+            className={`chip flex-1 justify-center !text-sm !py-2 ${
+              tab === "weekly" ? "chip-active" : ""
             }`}
           >
             アシスタント週報（{weeklyReports.length}）
@@ -96,7 +96,7 @@ export default async function EniReportsViewPage({
         <div className="space-y-3">
           {reports.map((r) => (
             <div key={r.id} className="card">
-              <p className="text-xs font-bold text-stone-500 mb-2">
+              <p className="text-xs font-bold text-ink-500 mb-2">
                 {tab === "stylist" ? formatDateJa(r.periodKey, true) : formatWeekJa(r.periodKey)} ／{" "}
                 <span className="text-ink-900 text-sm">{staffMap.get(r.staffId) ?? "（不明）"}</span>
                 {tab === "weekly" && typeof r.answers._rank === "string" && r.answers._rank && (
@@ -111,7 +111,7 @@ export default async function EniReportsViewPage({
               )}
 
               {/* 上司からのコメント（表示＋入力） */}
-              <div className="mt-3 pt-3 border-t border-stone-100">
+              <div className="mt-3 pt-3 border-t border-ink-100">
                 {r.comment && (
                   <div className="rounded-xl bg-brand-50 border border-brand-100 p-3 mb-2">
                     <p className="text-[11px] font-bold text-brand-700">
@@ -155,14 +155,14 @@ function StylistView({ answers }: { answers: Record<string, unknown> }) {
     <div className="space-y-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {clients !== null && (
-          <span><span className="text-xs text-stone-500">客数</span> <span className="font-bold">{clients}人</span></span>
+          <span><span className="text-xs text-ink-500">客数</span> <span className="font-bold">{clients}人</span></span>
         )}
         {util !== null && (
-          <span><span className="text-xs text-stone-500">稼働率</span> <span className="font-bold text-brand-700">{util}%</span></span>
+          <span><span className="text-xs text-ink-500">稼働率</span> <span className="font-bold text-brand-700">{util}%</span></span>
         )}
         {diff !== null && (
           <span>
-            <span className="text-xs text-stone-500">施術時間±</span>{" "}
+            <span className="text-xs text-ink-500">施術時間±</span>{" "}
             <span className={`font-bold ${diff > 0 ? "text-red-500" : diff < 0 ? "text-emerald-600" : ""}`}>
               {diff > 0 ? `+${diff}` : diff}分
             </span>
@@ -170,7 +170,7 @@ function StylistView({ answers }: { answers: Record<string, unknown> }) {
         )}
         {STYLIST_REPORT_NUMBERS.map((item) => (
           <span key={item.key}>
-            <span className="text-xs text-stone-500">{item.label}</span>{" "}
+            <span className="text-xs text-ink-500">{item.label}</span>{" "}
             <span className="font-bold">{formatEniAnswer(item, answers[item.key])}</span>
           </span>
         ))}

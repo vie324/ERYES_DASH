@@ -46,7 +46,7 @@ export default async function StylistReportPage({
   const initialWorkMinutes = typeof answers.work_minutes === "number" ? answers.work_minutes : 0;
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="日報を入力（スタイリスト）" backHref="/staff" />
 
       {params.saved && (
@@ -101,16 +101,16 @@ export default async function StylistReportPage({
 
       {recent.length > 0 && (
         <section className="card mt-5">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">直近の入力（2週間）</h2>
+          <h2 className="section-title">直近の入力（2週間）</h2>
           <div className="flex flex-wrap gap-1.5">
             {recent.map((r) => (
               <a
                 key={r.id}
                 href={`/staff/eni-report?date=${r.periodKey}`}
-                className={`text-xs font-bold rounded-full px-3 py-1.5 border ${
+                className={`chip ${
                   r.periodKey === date
-                    ? "bg-brand-600 text-white border-brand-600"
-                    : "border-stone-300 text-stone-600"
+                    ? "chip-active"
+                    : ""
                 }`}
               >
                 {formatDateJa(r.periodKey)}

@@ -17,7 +17,7 @@ export function EniFormFields({
     <>
       {numberItems.length > 0 && (
         <div className="card">
-          <p className="font-bold text-sm text-stone-500 mb-3">数字の報告</p>
+          <p className="section-title">数字の報告</p>
           <div className="grid grid-cols-2 gap-3">
             {numberItems.map((item) => (
               <div key={item.key}>
@@ -40,7 +40,7 @@ export function EniFormFields({
                     placeholder="0"
                     className="input pr-10 text-right text-lg font-bold"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400 font-bold">
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-400 font-bold">
                     {item.unit}
                   </span>
                 </div>
@@ -61,7 +61,7 @@ export function EniFormFields({
               {item.options?.map((opt) => (
                 <label
                   key={opt}
-                  className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
+                  className="flex items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
                 >
                   <input
                     type="radio"
@@ -96,7 +96,7 @@ export function EniFormFields({
               className="input"
             />
           )}
-          {item.note && <p className="text-xs text-stone-400 mt-2">{item.note}</p>}
+          {item.note && <p className="text-xs text-ink-400 mt-2">{item.note}</p>}
         </div>
       ))}
     </>
@@ -119,7 +119,7 @@ export function EniAnswersView({
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {numberItems.map((item) => (
             <span key={item.key}>
-              <span className="text-xs text-stone-500">{item.label}</span>{" "}
+              <span className="text-xs text-ink-500">{item.label}</span>{" "}
               <span className="font-bold">{formatEniAnswer(item, answers[item.key])}</span>
             </span>
           ))}

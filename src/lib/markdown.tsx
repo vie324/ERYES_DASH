@@ -62,7 +62,7 @@ export function Markdown({ text }: { text: string }) {
       const cls =
         level <= 2
           ? "font-display text-base font-bold text-ink-900 mt-4 mb-1.5 flex items-center gap-2"
-          : "font-bold text-sm text-stone-700 mt-3 mb-1";
+          : "font-bold text-sm text-ink-700 mt-3 mb-1";
       blocks.push(
         <p key={key++} className={cls}>
           {level <= 2 && <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />}
@@ -93,7 +93,7 @@ export function Markdown({ text }: { text: string }) {
     // 引用
     if (/^\s*>\s?/.test(line)) {
       blocks.push(
-        <p key={key++} className="text-xs text-stone-500 border-l-2 border-stone-200 pl-3 my-2">
+        <p key={key++} className="text-xs text-ink-500 border-l-2 border-ink-200 pl-3 my-2">
           {inline(line.replace(/^\s*>\s?/, ""), `q${key}`)}
         </p>
       );

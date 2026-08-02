@@ -68,11 +68,11 @@ export default async function AdminAttendancePage({
       />
 
       <section className="card mb-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">月次集計（{formatMonthJa(month)}）</h2>
-        <p className="text-xs text-stone-400 mb-2">
+        <h2 className="section-title">月次集計（{formatMonthJa(month)}）</h2>
+        <p className="text-xs text-ink-400 mb-2">
           残業＝1日8時間を超えた分の合計（仮ルール）。固定残業時間の80%で「注意」、超過で「超過」表示。
         </p>
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="table-base">
             <thead>
               <tr>
@@ -105,7 +105,7 @@ export default async function AdminAttendancePage({
                       <StatusBadge label="OK" tone="ok" />
                     )}
                     {invalidCount > 0 && (
-                      <span className="text-xs text-stone-400 ml-1">不成立{invalidCount}件</span>
+                      <span className="text-xs text-ink-400 ml-1">不成立{invalidCount}件</span>
                     )}
                   </td>
                 </tr>
@@ -117,13 +117,13 @@ export default async function AdminAttendancePage({
 
       {selected && (
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">
+          <h2 className="section-title">
             日別の打刻（{selected.staff.name}）
           </h2>
           {selected.agg.days.length === 0 ? (
             <EmptyState message="この月の打刻はありません" />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -150,7 +150,7 @@ export default async function AdminAttendancePage({
               </table>
             </div>
           )}
-          <p className="text-xs text-stone-400 mt-2">
+          <p className="text-xs text-ink-400 mt-2">
             ※ 勤怠は任意運用のため、打刻が無い日があっても問題ありません。
           </p>
         </section>

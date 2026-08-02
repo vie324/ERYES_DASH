@@ -43,10 +43,10 @@ export default async function ScheduleDayEditPage({
 
       <div className="card mb-4">
         <p className="font-bold text-lg">{staff.name}</p>
-        <p className="text-sm text-stone-500 mt-0.5">{formatDateJa(date, true)}</p>
+        <p className="text-sm text-ink-500 mt-0.5">{formatDateJa(date, true)}</p>
         <p className="text-sm mt-2">
           現在の予定：<span className="font-bold">{formatWorkTime(current)}</span>
-          <span className="text-xs text-stone-400 ml-2">
+          <span className="text-xs text-ink-400 ml-2">
             {current.source === "override"
               ? "（個別調整）"
               : current.source === "dayoff"
@@ -63,7 +63,7 @@ export default async function ScheduleDayEditPage({
         <div>
           <p className="label !mb-2">この日の勤務</p>
           <div className="space-y-2">
-            <label className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
+            <label className="flex items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
               <input
                 type="radio"
                 name="working"
@@ -73,7 +73,7 @@ export default async function ScheduleDayEditPage({
               />
               出勤
             </label>
-            <label className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
+            <label className="flex items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 font-bold has-checked:border-brand-400 has-checked:bg-brand-50">
               <input
                 type="radio"
                 name="working"
@@ -99,7 +99,7 @@ export default async function ScheduleDayEditPage({
               className="input"
             />
           </div>
-          <span className="text-stone-400 mt-5">〜</span>
+          <span className="text-ink-400 mt-5">〜</span>
           <div className="flex-1">
             <label className="label" htmlFor="end_time">
               終了
@@ -113,7 +113,7 @@ export default async function ScheduleDayEditPage({
             />
           </div>
         </div>
-        <p className="text-xs text-stone-400 -mt-2">※「休み」を選んだ場合、時間は保存されません</p>
+        <p className="text-xs text-ink-400 -mt-2">※「休み」を選んだ場合、時間は保存されません</p>
 
         <div>
           <label className="label" htmlFor="note">
@@ -138,10 +138,10 @@ export default async function ScheduleDayEditPage({
         <form action={clearScheduleOverrideAction} className="card mt-4 space-y-2">
           <input type="hidden" name="staff_id" value={staffId} />
           <input type="hidden" name="date" value={date} />
-          <p className="text-xs text-stone-500">
+          <p className="text-xs text-ink-500">
             この日は個別調整で上書きされています。取り消すと基本パターン・希望休どおりに戻ります。
           </p>
-          <button type="submit" className="w-full rounded-2xl border-2 border-stone-300 px-4 py-3 font-bold text-stone-600">
+          <button type="submit" className="w-full rounded-2xl border-2 border-ink-300 px-4 py-3 font-bold text-ink-600">
             個別調整を取り消す
           </button>
         </form>

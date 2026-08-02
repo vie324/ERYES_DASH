@@ -49,10 +49,10 @@ export default async function AdminCounselingPage({
           <Link
             key={f.key}
             href={`/admin/counseling${f.key === "all" ? "" : `?status=${f.key}`}`}
-            className={`text-sm font-bold rounded-full px-4 py-2 border ${
+            className={`chip !text-sm !px-4 !py-2 ${
               filter === f.key
-                ? "bg-brand-600 text-white border-brand-600"
-                : "border-stone-300 text-stone-600"
+                ? "chip-active"
+                : ""
             }`}
           >
             {f.label}
@@ -76,7 +76,7 @@ export default async function AdminCounselingPage({
                   <p className="font-bold truncate">
                     {customerMap.get(r.customerId)?.fullName ?? "（不明）"} 様
                   </p>
-                  <p className="text-xs text-stone-500 mt-0.5">
+                  <p className="text-xs text-ink-500 mt-0.5">
                     {formatDateTimeJa(r.submittedAt, true)}
                   </p>
                   {flags.length > 0 && (
@@ -84,7 +84,7 @@ export default async function AdminCounselingPage({
                   )}
                 </div>
                 <CounselingStatusBadge status={r.status} />
-                <span className="text-stone-300 text-xl">›</span>
+                <span className="text-ink-300 text-xl">›</span>
               </Link>
             );
           })}
