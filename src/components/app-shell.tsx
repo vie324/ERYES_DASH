@@ -1,8 +1,8 @@
 "use client";
 
 // アプリ全体の骨組み。
-//  ・PC/iPad（lg以上）… 左に固定サイドバー、右に内容。項目はグループごとにまとめて表示する。
-//  ・スマホ … 上部バーの「メニュー」から引き出し（ドロワー）で同じサイドバーを出す。
+//  ・PC/iPad横（lg以上）… 左に固定サイドバー、右に内容。項目はグループごとにまとめて表示する。
+//  ・スマホ … 親指の届く下部タブによく使う操作を置き、「メニュー」から全項目を引き出す。
 // メニューの中身は @/lib/nav の定義（役割・業態別）をそのまま並べるだけ。
 
 /* eslint-disable @next/next/no-img-element */
@@ -11,7 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { logoutAction } from "@/lib/auth/actions";
-import { findCurrent, type NavGroup } from "@/lib/nav";
+import { findCurrent, type NavGroup, type NavItem } from "@/lib/nav";
 
 export type ShellUser = {
   name: string;
@@ -24,6 +24,7 @@ export type ShellUser = {
 
 export function AppShell({
   groups,
+  tabs,
   user,
   logoSrc,
   logoAlt,
@@ -33,6 +34,8 @@ export function AppShell({
   children,
 }: {
   groups: NavGroup[];
+  /** スマホの下部タブに置く「よく使う操作」 */
+  tabs: NavItem[];
   user: ShellUser;
   logoSrc: string;
   logoAlt: string;
@@ -62,7 +65,8 @@ export function AppShell({
   }, [open]);
 
   return (
-    <div className="min-h-dvh">
+    // --tabbar-h：下部タブの高さ。フォームの固定ボタン（.form-actions）が重ならないようにする
+    <div className="min-h-dvh [--tabbar-h:3.75rem] lg:[--tabbar-h:0px]">
       {/* ---------------- PC・iPad：左に固定 ---------------- */}
       <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 w-64 z-30 print:hidden">
         <SidebarBody
@@ -102,16 +106,7 @@ export function AppShell({
         {/* ---------------- 上部バー ---------------- */}
         <header className="sticky top-0 z-20 bg-brand-50/85 backdrop-blur-md border-b border-brand-200/60 print:hidden">
           <div className="mx-auto max-w-6xl px-3 sm:px-5 h-14 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="lg:hidden -ml-1 p-2.5 rounded-xl text-ink-700 transition-colors hover:bg-brand-100 active:bg-brand-200"
-              aria-label="メニューを開く"
-            >
-              <Icon name="menu" className="w-5 h-5" />
-            </button>
-
-            <Link href={homeHref} className="lg:hidden flex items-center min-w-0">
+            <Link href={homeHref} className="lg:hidden flex items-center min-w-0 py-2 pr-2">
               <img src={logoSrc} alt={logoAlt} className="h-7 w-auto max-w-24 object-contain object-left" />
             </Link>
 
@@ -151,11 +146,85 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-16 animate-fade-up">
+        {/* 下部タブぶんの余白（スマホのみ）。iPhoneのホームバーぶんも確保する */}
+        <main className="flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16 animate-fade-up">
           {children}
         </main>
       </div>
+
+      {/* ---------------- スマホ：下部タブ ---------------- */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-brand-200/80 bg-brand-50/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] print:hidden">
+        <ul className="flex items-stretch">
+          <TabLink
+            href={homeHref}
+            icon="layoutGrid"
+            label="ホーム"
+            active={pathname === homeHref}
+          />
+          {tabs.map((t) => (
+            <TabLink
+              key={t.href}
+              href={t.href}
+              icon={t.icon}
+              label={t.short ?? t.label}
+              badge={t.badge}
+              active={current?.item.href === t.href}
+            />
+          ))}
+          <li className="flex-1">
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-label="メニューを開く"
+              className="w-full h-full flex flex-col items-center justify-center gap-1 py-2 min-h-[3.75rem] text-ink-500 transition-colors active:bg-brand-100"
+            >
+              <Icon name="menu" className="w-[22px] h-[22px]" />
+              <span className="text-[10px] font-bold leading-none">メニュー</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
     </div>
+  );
+}
+
+/** 下部タブの1つ。ラベルは2行にせず、はみ出す場合は省略する */
+function TabLink({
+  href,
+  icon,
+  label,
+  badge,
+  active,
+}: {
+  href: string;
+  icon: NavItem["icon"];
+  label: string;
+  badge?: NavItem["badge"];
+  active: boolean;
+}) {
+  return (
+    <li className="flex-1 min-w-0">
+      <Link
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={`relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 px-1 min-h-[3.75rem] transition-colors ${
+          active ? "text-brand-800" : "text-ink-500"
+        } active:bg-brand-100`}
+      >
+        {active && (
+          <span className="absolute top-0 inset-x-3 h-[3px] rounded-b-full bg-gradient-to-r from-brand-400 to-brand-600" />
+        )}
+        <span className="relative">
+          <Icon name={icon} className="w-[22px] h-[22px]" />
+          {badge != null && badge !== 0 && (
+            <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">
+              {badge}
+            </span>
+          )}
+        </span>
+        <span className="text-[10px] font-bold leading-none truncate max-w-full">{label}</span>
+      </Link>
+    </li>
   );
 }
 

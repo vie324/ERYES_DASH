@@ -265,9 +265,11 @@ export function CounselingForm({
                 </section>
               ))}
 
-              <button type="button" onClick={goConsent} className="btn-primary w-full text-lg">
-                次へ（注意事項の確認）
-              </button>
+              <div className="form-actions">
+                <button type="button" onClick={goConsent} className="btn-primary w-full text-lg">
+                  次へ（注意事項の確認）
+                </button>
+              </div>
             </div>
 
             {/* ステップ2：注意事項の確認（「確認しました」チェックのみ） */}

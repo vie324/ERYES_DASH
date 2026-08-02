@@ -84,11 +84,11 @@ export default async function AdminSettingsPage({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">緯度</label>
-                    <input name="lat" type="number" step="any" defaultValue={store.lat} className="input" required />
+                    <input name="lat" type="number" inputMode="decimal" step="any" defaultValue={store.lat} className="input" required />
                   </div>
                   <div>
                     <label className="label">経度</label>
-                    <input name="lng" type="number" step="any" defaultValue={store.lng} className="input" required />
+                    <input name="lng" type="number" inputMode="decimal" step="any" defaultValue={store.lng} className="input" required />
                   </div>
                 </div>
                 <p className="text-xs text-ink-500">
@@ -99,6 +99,7 @@ export default async function AdminSettingsPage({
                   <input
                     name="gps_radius_m"
                     type="number"
+                    inputMode="numeric"
                     min={10}
                     step={10}
                     defaultValue={store.gpsRadiusM}

@@ -8,7 +8,12 @@ export function DemoBanner({ show }: { show: boolean }) {
   if (!show) return null;
   return (
     <div className="bg-sidebar-900 text-brand-200 text-[11px] font-bold text-center px-3 py-1.5 tracking-wide print:hidden">
-      デモモードで動作中（Supabase未設定のため、データは再起動でリセットされます）
+      デモモードで動作中
+      {/* スマホでは1行に収まる短い文言にする */}
+      <span className="sm:hidden">（データは再起動でリセット）</span>
+      <span className="hidden sm:inline">
+        （Supabase未設定のため、データは再起動でリセットされます）
+      </span>
     </div>
   );
 }
@@ -238,6 +243,20 @@ export function MonthNav({
         <Icon name="chevronRight" className="w-5 h-5" />
       </Link>
     </div>
+  );
+}
+
+/** 横に長い表の下に置く案内（スマホのみ表示） */
+export function ScrollHint({
+  text = "横にスクロールすると全員分が見られます",
+}: {
+  text?: string;
+}) {
+  return (
+    <p className="scroll-hint">
+      <Icon name="chevronRight" className="w-3 h-3" />
+      {text}
+    </p>
   );
 }
 

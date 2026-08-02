@@ -145,7 +145,7 @@ export function ColumnChart({
   const peak = Math.max(...data.map((d) => d.value), 0);
   if (data.length === 0 || peak === 0) {
     // 全部0のときに目盛りだけ描いても読めないので、空の状態として出す
-    return <p className="text-xs text-ink-500 py-8 text-center">データがまだありません</p>;
+    return <p className="text-xs text-ink-500 py-6 sm:py-8 text-center">データがまだありません</p>;
   }
   const max = peak;
   // 棒は「枠の6割・最大44px」。画面幅が広がっても間延びせず、狭くても潰れない

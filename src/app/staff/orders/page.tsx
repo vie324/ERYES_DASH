@@ -126,9 +126,11 @@ export default async function OrdersPage({
           </label>
           <input id="note" name="note" className="input" placeholder="例）国家試験の練習用" />
         </div>
-        <button type="submit" className="btn-primary w-full">
-          この内容で申請する
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full">
+            この内容で申請する
+          </button>
+        </div>
       </form>
 
       <MonthNav

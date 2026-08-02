@@ -5,7 +5,7 @@
 import { getDataStore, isDemoMode } from "@/lib/data";
 import { getBrand, BRAND_INFO, type Brand } from "@/lib/brand";
 import { getBrandName, getLogoSrc } from "@/lib/logo";
-import { buildNav, type NavContext } from "@/lib/nav";
+import { buildMobileTabs, buildNav, type NavContext } from "@/lib/nav";
 import { jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { AppShell } from "@/components/app-shell";
@@ -92,18 +92,21 @@ export async function AppFrame({
     }
   }
 
-  const groups = buildNav({
+  const navContext: NavContext = {
     role: session.role === "admin" ? "admin" : "staff",
     brand,
     jobType,
     isExecutive,
     attendanceEnabled,
     badges,
-  });
+  };
+  const groups = buildNav(navContext);
+  const tabs = buildMobileTabs(navContext);
 
   return (
     <AppShell
       groups={groups}
+      tabs={tabs}
       user={{
         name: session.name,
         roleLabel: isAdmin ? "全体管理者" : "スタッフ",

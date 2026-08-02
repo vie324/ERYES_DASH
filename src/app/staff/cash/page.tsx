@@ -171,9 +171,11 @@ export default async function CashReportPage({
           />
         </div>
 
-        <button type="submit" className="btn-primary w-full text-lg">
-          {existing ? "上書き保存する" : "レジ締めを保存する"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            {existing ? "上書き保存する" : "レジ締めを保存する"}
+          </button>
+        </div>
       </form>
 
       <div className="mt-4 text-center">

@@ -13,6 +13,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   // 入力時の自動ズームを防ぎ、店頭iPadでの誤操作を減らす
   maximumScale: 1,
+  // iPhoneのノッチ・ホームバーの領域まで背景を敷き、下部タブの余白は safe-area で確保する
+  viewportFit: "cover",
   themeColor: "#faf8f2",
 };
 

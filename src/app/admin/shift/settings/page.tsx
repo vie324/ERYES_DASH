@@ -35,6 +35,7 @@ export default async function AdminShiftSettingsPage({
             id="max_consecutive_days"
             name="max_consecutive_days"
             type="number"
+            inputMode="numeric"
             min={1}
             max={30}
             defaultValue={rules.maxConsecutiveDays}
@@ -49,6 +50,7 @@ export default async function AdminShiftSettingsPage({
             id="min_staff_per_store_per_day"
             name="min_staff_per_store_per_day"
             type="number"
+            inputMode="numeric"
             min={0}
             max={20}
             defaultValue={rules.minStaffPerStoreDay}
@@ -66,6 +68,7 @@ export default async function AdminShiftSettingsPage({
             id="request_deadline_day"
             name="request_deadline_day"
             type="number"
+            inputMode="numeric"
             min={1}
             max={28}
             defaultValue={rules.requestDeadlineDay}

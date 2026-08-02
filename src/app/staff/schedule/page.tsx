@@ -18,7 +18,7 @@ import {
   formatWorkTime,
   resolveScheduleDay,
 } from "@/lib/schedule";
-import { MonthNav, PageHeader } from "@/components/ui";
+import { MonthNav, PageHeader, ScrollHint } from "@/components/ui";
 
 // 出勤スケジュール（スタッフ用）：みんなの1ヶ月の予定を一覧で確認する。
 // 基本パターン（曜日ごと）から自動で組まれ、希望休・管理者の個別調整が反映される。
@@ -40,7 +40,10 @@ export default async function StaffSchedulePage({
     db.listDayoffRequests({ from, to }),
     db.listScheduleOverrides({ from, to }),
   ]);
-  const activeStaff = staffList.filter((s) => s.isActive);
+  // 自分の列を左端（日付のすぐ隣）に。スマホで横スクロールしなくても自分の予定が見える
+  const activeStaff = staffList
+    .filter((s) => s.isActive)
+    .sort((a, b) => Number(b.id === session.staffId) - Number(a.id === session.staffId));
 
   const dates = datesOfMonth(month);
   const dayoffTarget = defaultDayoffTargetMonth(today);
@@ -126,6 +129,7 @@ export default async function StaffSchedulePage({
             </tbody>
           </table>
         </div>
+        <ScrollHint text="横にスクロールすると他のスタッフも見られます" />
         <p className="text-xs text-ink-400 mt-2">
           「休 希」＝希望休 ／ 基本パターン（曜日ごとの勤務）は管理者が設定します
         </p>

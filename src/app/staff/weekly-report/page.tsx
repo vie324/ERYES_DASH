@@ -105,9 +105,11 @@ export default async function WeeklyReportPage({
 
         <EniFormFields items={items} answers={existing?.answers ?? {}} />
 
-        <button type="submit" className="btn-primary w-full text-lg">
-          {existing ? "上書き保存する" : "週報を保存する"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            {existing ? "上書き保存する" : "週報を保存する"}
+          </button>
+        </div>
       </form>
     </div>
   );

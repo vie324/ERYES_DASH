@@ -144,9 +144,11 @@ export default async function AdminReportEditPage({
           </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full text-lg">
-          この内容で修正を保存
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            この内容で修正を保存
+          </button>
+        </div>
       </form>
 
       {/* 削除（確認チェックつき） */}
