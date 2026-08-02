@@ -6,6 +6,7 @@ import { randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
+import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import type {
   AbsenceReport,
   AppointmentPatch,
@@ -32,7 +33,9 @@ import type {
   NextAppointment,
   OrderRequest,
   OrderStatus,
+  AssistantSetting,
   OrgMember,
+  OrgUnit,
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
@@ -72,7 +75,9 @@ interface MockDb {
   practicePairs: PracticePair[];
   meetings: Meeting[];
   meetingTasks: MeetingTask[];
+  orgUnits: OrgUnit[];
   orgMembers: OrgMember[];
+  assistantSettings: AssistantSetting[];
   absenceReports: AbsenceReport[];
   orderRequests: OrderRequest[];
   dailyPlans: DailyPlan[];
@@ -133,6 +138,7 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: true,
+      mission: "",
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("admin1234"),
@@ -146,6 +152,7 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: false,
+      mission: "",
       // デモで残業超過アラートの動作が見えるよう、あえて少なめに設定している
       fixedOvertimeHours: 10,
       isActive: true,
@@ -160,6 +167,7 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: false,
+      mission: "",
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("staff1234"),
@@ -167,13 +175,37 @@ function seed(): MockDb {
     // ENi（ヘアサロン）デモ用スタッフ：スタイリスト2名（1名は幹部）＋アシスタント2名
     ...(
       [
-        ["staff-3", "山本 大輝", "daiki", "stylist", "", true],
-        ["staff-4", "中島 結菜", "yuina", "stylist", "", false],
-        ["staff-5", "小林 蒼", "aoi", "assistant", "first", false],
-        ["staff-6", "藤田 ひかり", "hikari", "assistant", "middle", false],
-      ] as [string, string, string, "stylist" | "assistant", "" | "first" | "middle" | "final", boolean][]
+        [
+          "staff-3",
+          "山本 大輝",
+          "daiki",
+          "stylist",
+          "",
+          true,
+          "理念の体現者。ENiの想いを伝え続け、幹部候補を育成する。全ての目標の進捗と実行に責任を持つ執行責任者。",
+        ],
+        [
+          "staff-4",
+          "中島 結菜",
+          "yuina",
+          "stylist",
+          "",
+          false,
+          "現場の要であるアシスタントを統括。率先垂範モデルとして、サロンワーク・接客・技術・価値観の教育と底上げを行う。",
+        ],
+        ["staff-5", "小林 蒼", "aoi", "assistant", "first", false, ""],
+        ["staff-6", "藤田 ひかり", "hikari", "assistant", "middle", false, ""],
+      ] as [
+        string,
+        string,
+        string,
+        "stylist" | "assistant",
+        "" | "first" | "middle" | "final",
+        boolean,
+        string,
+      ][]
     ).map(
-      ([id, name, loginId, jobType, rank, isExecutive]): StaffWithSecret => ({
+      ([id, name, loginId, jobType, rank, isExecutive, mission]): StaffWithSecret => ({
         id,
         storeId: store.id,
         name,
@@ -182,6 +214,7 @@ function seed(): MockDb {
         jobType,
         rank,
         isExecutive,
+        mission,
         fixedOvertimeHours: 20,
         isActive: true,
         passwordHash: hashPassword("staff1234"),
@@ -751,7 +784,9 @@ function seed(): MockDb {
     practicePairs,
     meetings,
     meetingTasks,
+    orgUnits: DEFAULT_ORG_UNITS.map((u) => ({ id: randomUUID(), ...u })),
     orgMembers,
+    assistantSettings: [],
     absenceReports,
     orderRequests,
     dailyPlans,
@@ -843,6 +878,7 @@ class MockStore implements DataStore {
       jobType: input.jobType ?? "",
       rank: input.rank ?? "",
       isExecutive: input.isExecutive ?? false,
+      mission: input.mission ?? "",
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
       passwordHash: input.passwordHash,
@@ -857,7 +893,14 @@ class MockStore implements DataStore {
     patch: Partial<
       Pick<
         Staff,
-        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+        | "name"
+        | "role"
+        | "jobType"
+        | "rank"
+        | "isExecutive"
+        | "mission"
+        | "fixedOvertimeHours"
+        | "isActive"
       >
     > & {
       passwordHash?: string;
@@ -1619,8 +1662,52 @@ class MockStore implements DataStore {
     if (found) found.done = done;
   }
 
+  async listOrgUnits(): Promise<OrgUnit[]> {
+    return [...this.db.orgUnits].sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async upsertOrgUnit(input: Omit<OrgUnit, "id">): Promise<void> {
+    const found = this.db.orgUnits.find((u) => u.unitKey === input.unitKey);
+    if (found) {
+      Object.assign(found, input);
+    } else {
+      this.db.orgUnits.push({ id: randomUUID(), ...input });
+    }
+  }
+
+  async deleteOrgUnit(unitKey: string): Promise<void> {
+    // 子は最上位へ繰り上げて残す
+    for (const u of this.db.orgUnits) {
+      if (u.parentKey === unitKey) u.parentKey = "";
+    }
+    this.db.orgUnits = this.db.orgUnits.filter((u) => u.unitKey !== unitKey);
+    this.db.orgMembers = this.db.orgMembers.filter((m) => m.teamKey !== unitKey);
+  }
+
   async listOrgMembers(): Promise<OrgMember[]> {
     return [...this.db.orgMembers].sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async listAssistantSettings(staffId: string): Promise<AssistantSetting[]> {
+    return this.db.assistantSettings.filter((s) => s.staffId === staffId);
+  }
+
+  async upsertAssistantSetting(staffId: string, settingKey: string, content: string): Promise<void> {
+    const found = this.db.assistantSettings.find(
+      (s) => s.staffId === staffId && s.settingKey === settingKey
+    );
+    if (found) {
+      found.content = content;
+      found.updatedAt = new Date();
+    } else {
+      this.db.assistantSettings.push({
+        id: randomUUID(),
+        staffId,
+        settingKey,
+        content,
+        updatedAt: new Date(),
+      });
+    }
   }
 
   async setOrgTeamMembers(

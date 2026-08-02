@@ -4,6 +4,7 @@
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
+import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import type {
   AbsenceReport,
   AppointmentPatch,
@@ -30,7 +31,9 @@ import type {
   NextAppointment,
   OrderRequest,
   OrderStatus,
+  AssistantSetting,
   OrgMember,
+  OrgUnit,
   PracticePair,
   PracticeRecord,
   ScheduleOverride,
@@ -69,6 +72,7 @@ const mapStaff = (r: Row): Staff => ({
   jobType: r.job_type ?? "",
   rank: r.rank ?? "",
   isExecutive: r.is_executive ?? false,
+  mission: r.mission ?? "",
   fixedOvertimeHours: r.fixed_overtime_hours,
   isActive: r.is_active,
 });
@@ -228,6 +232,26 @@ const mapMeetingTask = (r: Row): MeetingTask => ({
   done: r.done ?? false,
   sortOrder: r.sort_order ?? 0,
   createdAt: new Date(r.created_at),
+});
+
+const mapOrgUnit = (r: Row): OrgUnit => ({
+  id: r.id,
+  chartKey: r.chart_key ?? "company",
+  unitKey: r.unit_key,
+  parentKey: r.parent_key ?? "",
+  name: r.name,
+  mission: r.mission ?? "",
+  meetingKey: r.meeting_key ?? "",
+  color: r.color ?? "#94815a",
+  sortOrder: r.sort_order ?? 0,
+});
+
+const mapAssistantSetting = (r: Row): AssistantSetting => ({
+  id: r.id,
+  staffId: r.staff_id,
+  settingKey: r.setting_key,
+  content: r.content ?? "",
+  updatedAt: new Date(r.updated_at),
 });
 
 const mapOrgMember = (r: Row): OrgMember => ({
@@ -438,6 +462,7 @@ class SupabaseStore implements DataStore {
         job_type: input.jobType ?? "",
         rank: input.rank ?? "",
         is_executive: input.isExecutive ?? false,
+        mission: input.mission ?? "",
         fixed_overtime_hours: input.fixedOvertimeHours,
       })
       .select()
@@ -451,7 +476,14 @@ class SupabaseStore implements DataStore {
     patch: Partial<
       Pick<
         Staff,
-        "name" | "role" | "jobType" | "rank" | "isExecutive" | "fixedOvertimeHours" | "isActive"
+        | "name"
+        | "role"
+        | "jobType"
+        | "rank"
+        | "isExecutive"
+        | "mission"
+        | "fixedOvertimeHours"
+        | "isActive"
       >
     > & {
       passwordHash?: string;
@@ -463,6 +495,7 @@ class SupabaseStore implements DataStore {
     if (patch.jobType !== undefined) row.job_type = patch.jobType;
     if (patch.rank !== undefined) row.rank = patch.rank;
     if (patch.isExecutive !== undefined) row.is_executive = patch.isExecutive;
+    if (patch.mission !== undefined) row.mission = patch.mission;
     if (patch.fixedOvertimeHours !== undefined) row.fixed_overtime_hours = patch.fixedOvertimeHours;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     if (patch.passwordHash !== undefined) row.password_hash = patch.passwordHash;
@@ -1473,6 +1506,55 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] タスク完了更新: ${error.message}`);
   }
 
+  async listOrgUnits(): Promise<OrgUnit[]> {
+    const { data, error } = await this.sb.from("org_units").select("*").order("sort_order");
+    const units = must(data, error, "組織図一覧").map(mapOrgUnit);
+    if (units.length > 0) return units;
+    // 初回はお渡しいただいた組織図を投入する（以降は画面から編集）
+    const ins = await this.sb.from("org_units").insert(
+      DEFAULT_ORG_UNITS.map((u) => ({
+        chart_key: u.chartKey,
+        unit_key: u.unitKey,
+        parent_key: u.parentKey,
+        name: u.name,
+        mission: u.mission,
+        meeting_key: u.meetingKey,
+        color: u.color,
+        sort_order: u.sortOrder,
+      }))
+    );
+    if (ins.error) throw new Error(`[supabase] 組織図の初期投入: ${ins.error.message}`);
+    const retry = await this.sb.from("org_units").select("*").order("sort_order");
+    return must(retry.data, retry.error, "組織図一覧").map(mapOrgUnit);
+  }
+
+  async upsertOrgUnit(input: Omit<OrgUnit, "id">): Promise<void> {
+    const { error } = await this.sb.from("org_units").upsert(
+      {
+        chart_key: input.chartKey,
+        unit_key: input.unitKey,
+        parent_key: input.parentKey,
+        name: input.name,
+        mission: input.mission,
+        meeting_key: input.meetingKey,
+        color: input.color,
+        sort_order: input.sortOrder,
+      },
+      { onConflict: "unit_key" }
+    );
+    if (error) throw new Error(`[supabase] 組織図の保存: ${error.message}`);
+  }
+
+  async deleteOrgUnit(unitKey: string): Promise<void> {
+    // 子は親を外して残す（消えてしまわないように最上位へ繰り上げ）
+    const up = await this.sb.from("org_units").update({ parent_key: "" }).eq("parent_key", unitKey);
+    if (up.error) throw new Error(`[supabase] 組織図の親付け替え: ${up.error.message}`);
+    const delMembers = await this.sb.from("org_members").delete().eq("team_key", unitKey);
+    if (delMembers.error) throw new Error(`[supabase] 組織図メンバー削除: ${delMembers.error.message}`);
+    const { error } = await this.sb.from("org_units").delete().eq("unit_key", unitKey);
+    if (error) throw new Error(`[supabase] 組織図の削除: ${error.message}`);
+  }
+
   async listOrgMembers(): Promise<OrgMember[]> {
     const { data, error } = await this.sb.from("org_members").select("*").order("sort_order");
     return must(data, error, "組織図メンバー一覧").map(mapOrgMember);
@@ -1494,6 +1576,22 @@ class SupabaseStore implements DataStore {
       }))
     );
     if (error) throw new Error(`[supabase] 組織図メンバー保存: ${error.message}`);
+  }
+
+  async listAssistantSettings(staffId: string): Promise<AssistantSetting[]> {
+    const { data, error } = await this.sb
+      .from("assistant_settings")
+      .select("*")
+      .eq("staff_id", staffId);
+    return must(data, error, "アシスタント設定取得").map(mapAssistantSetting);
+  }
+
+  async upsertAssistantSetting(staffId: string, settingKey: string, content: string): Promise<void> {
+    const { error } = await this.sb.from("assistant_settings").upsert(
+      { staff_id: staffId, setting_key: settingKey, content, updated_at: new Date().toISOString() },
+      { onConflict: "staff_id,setting_key" }
+    );
+    if (error) throw new Error(`[supabase] アシスタント設定保存: ${error.message}`);
   }
 
   async createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport> {

@@ -4,6 +4,7 @@ import { getDataStore } from "@/lib/data";
 import { addDays, formatWeekJa, todayJst, weekStartOf } from "@/lib/date";
 import { getWeeklyItems, RANK_LABEL } from "@/lib/eni/forms";
 import { EniFormFields } from "@/components/eni-form-fields";
+import { AssistantSettingsPanel } from "@/components/assistant-settings";
 import { PageHeader } from "@/components/ui";
 import { saveWeeklyReportAction } from "./actions";
 
@@ -24,22 +25,30 @@ export default async function WeeklyReportPage({
       : thisWeek;
 
   const db = getDataStore();
-  const [me, existing] = await Promise.all([
+  const [me, existing, settings] = await Promise.all([
     db.getStaff(session.staffId),
     db.getEniReport("weekly", session.staffId, week),
+    db.listAssistantSettings(session.staffId),
   ]);
   const rank = me?.rank ?? "";
   const items = getWeeklyItems(rank);
+  // 常時表示される設定（ピラミッド・年内目標・約束・デビュー設定）
+  const settingValues: Record<string, string> = {};
+  for (const s of settings) settingValues[s.settingKey] = s.content;
 
   return (
     <div>
       <PageHeader title="週報を入力（アシスタント）" backHref="/staff" />
 
-      {params.saved && (
+      {params.saved === "settings" ? (
+        <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
+          設定を保存しました
+        </p>
+      ) : params.saved ? (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
           保存しました（{formatWeekJa(week)} の週報）
         </p>
-      )}
+      ) : null}
       {params.error === "future" && (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           未来の週には入力できません
@@ -56,6 +65,12 @@ export default async function WeeklyReportPage({
           あなたのランク：{RANK_LABEL[rank]}（この週報はランクに合わせた項目です）
         </p>
       )}
+
+      <AssistantSettingsPanel
+        rank={rank}
+        staffName={(me?.name ?? "").split(" ")[0] || "あなた"}
+        values={settingValues}
+      />
 
       {existing?.comment && (
         <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">

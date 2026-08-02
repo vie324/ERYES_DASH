@@ -74,89 +74,173 @@ export const RANK_LABEL: Record<AssistantRank, string> = {
   final: "ファイナル",
 };
 
-// 全ランク共通で末尾に付く「練習」と「来週の目標」。
-// 練習は毎日入力をやめ、週報の中でまとめて振り返る。
-const WEEKLY_PRACTICE_ITEMS: EniFormItem[] = [
+// ---- 週報の共通ブロック ----
+
+// ふりかえり部分（全ランク共通の流れ）。ランクで文言だけ少し変える
+const weeklyReflection = (doneLabel: string): EniFormItem[] => [
+  { key: "done_well", label: doneLabel, type: "textarea", required: true },
   {
-    key: "practice_minutes",
-    label: "今週の練習時間（合計）",
-    type: "number",
-    required: false,
-    unit: "分",
-    note: "だいたいの合計でOK（例：90分なら90）",
-  },
-  {
-    key: "practice_content",
-    label: "今週の練習内容・ふりかえり",
+    key: "feedback",
+    label: "フィードバックしてもらったことや教わったこと",
     type: "textarea",
     required: false,
-    placeholder: "例）ワインディング／レイヤーカット／モデル1名 など",
+  },
+  { key: "struggle", label: "苦戦していることや自分自身の課題は？", type: "textarea", required: true },
+  {
+    key: "next_improve",
+    label: "来週をさらに良くするためにはどんなことができそう？",
+    type: "textarea",
+    required: false,
+  },
+  {
+    key: "next_goal",
+    label: "来週の目標を具体的に書いてみよう",
+    type: "textarea",
+    required: true,
+    placeholder: "例）ワインディングを15分以内で3回、モデル1名",
+  },
+  {
+    key: "to_senior",
+    label: "スタイリストや幹部へ相談やサポートしてほしいこと",
+    type: "textarea",
+    required: false,
   },
 ];
 
-const WEEKLY_GOAL_REVIEW: EniFormItem = {
-  key: "goal_review",
-  label: "今週の目標のふりかえり",
-  type: "radio",
-  required: true,
-  options: ["達成できた", "一部達成できた", "達成できなかった"],
-};
+// 見てもらった人・サポートしてくれた人（全ランク共通）
+const WEEKLY_SUPPORT_ITEMS: EniFormItem[] = [
+  {
+    key: "watched_by",
+    label: "誰に何回見てもらえているのか",
+    type: "textarea",
+    required: false,
+    placeholder: "例）大輝さん3回、結菜さん1回",
+  },
+  {
+    key: "support_people",
+    label: "ミーティングなどサポートしてくれた人",
+    type: "textarea",
+    required: false,
+  },
+];
 
-const WEEKLY_NEXT_GOAL: EniFormItem = {
-  key: "next_goal",
-  label: "来週の目標",
-  type: "textarea",
-  required: true,
-  placeholder: "例）ブロー練習を週3回、モデルさん1名",
-};
+// 今週の取り組み状況（ミドル・ファイナル共通の数字）
+const WEEKLY_ACTIVITY_ITEMS: EniFormItem[] = [
+  { key: "model_count", label: "モデル", type: "number", required: false, unit: "人" },
+  { key: "wig_hours", label: "ウィッグ", type: "number", required: false, unit: "時間" },
+  { key: "sns_hours", label: "SNS", type: "number", required: false, unit: "時間" },
+  { key: "sns_posts", label: "SNS投稿", type: "number", required: false, unit: "投稿" },
+  { key: "roleplay_count", label: "ロープレ", type: "number", required: false, unit: "回" },
+  { key: "other_hours", label: "撮影・勉強など その他", type: "number", required: false, unit: "時間" },
+  {
+    key: "other_activity",
+    label: "その他の取り組み（自由記入）",
+    type: "textarea",
+    required: false,
+    placeholder: "例）撮影1本、カラー理論の勉強",
+  },
+];
 
 const WEEKLY_ITEMS_BY_RANK: Record<Exclude<AssistantRank, "">, EniFormItem[]> = {
-  // ファースト：基礎技術の習得期
+  // ファースト：基礎の習得期。練習量と、見てもらった回数を大切にする
   first: [
-    WEEKLY_GOAL_REVIEW,
-    { key: "basics_done", label: "できるようになった技術・基礎", type: "textarea", required: true, placeholder: "例）シャンプー、ワインディングの基本" },
-    { key: "struggle", label: "苦戦していること・つまずき", type: "textarea", required: true },
-    ...WEEKLY_PRACTICE_ITEMS,
-    WEEKLY_NEXT_GOAL,
-    { key: "to_senior", label: "先輩・幹部への相談や共有（任意）", type: "textarea", required: false },
-  ],
-  // ミドル：モデル施術・デビュー準備期
-  middle: [
-    WEEKLY_GOAL_REVIEW,
-    { key: "model_count", label: "今週のモデル施術数", type: "number", required: false, unit: "人" },
-    { key: "growth", label: "伸びた点・お客様/モデルの反応", type: "textarea", required: true },
-    { key: "struggle", label: "課題（スピード・仕上がり・提案 等）", type: "textarea", required: true },
-    ...WEEKLY_PRACTICE_ITEMS,
-    { key: "debut_prep", label: "デビューに向けて今必要だと思うこと", type: "textarea", required: false },
-    WEEKLY_NEXT_GOAL,
-  ],
-  // ファイナル：デビュー直前・経営/数字視点
-  final: [
-    WEEKLY_GOAL_REVIEW,
-    { key: "kpi_view", label: "数字（客数・売上・指名）の意識とふりかえり", type: "textarea", required: true },
-    { key: "strengths", label: "自分の強み・差別化できるところ", type: "textarea", required: true },
-    { key: "weakness", label: "デビューまでに克服したい弱み", type: "textarea", required: true },
-    ...WEEKLY_PRACTICE_ITEMS,
     {
-      key: "debut_ready",
-      label: "デビューの準備度（自己評価）",
-      type: "radio",
+      key: "practice_hours",
+      label: "今週の練習時間",
+      type: "number",
       required: false,
-      options: ["準備万端", "あと少し", "まだ課題が多い"],
+      unit: "時間",
+      note: "だいたいの合計でOK",
     },
-    WEEKLY_NEXT_GOAL,
+    ...WEEKLY_SUPPORT_ITEMS,
+    ...weeklyReflection("できるようになったこと・良かったこと"),
+  ],
+  // ミドル：モデル・SNS・ロープレなど取り組みの量を見える化する
+  middle: [
+    ...WEEKLY_ACTIVITY_ITEMS,
+    ...WEEKLY_SUPPORT_ITEMS,
+    ...weeklyReflection("頑張ったこと、嬉しかったこと、人に喜んでもらえたこと"),
+  ],
+  // ファイナル：ミドルと同じ取り組み＋デビュー設定（設定は週報の先頭に常時表示）
+  final: [
+    ...WEEKLY_ACTIVITY_ITEMS,
+    ...WEEKLY_SUPPORT_ITEMS,
+    ...weeklyReflection("頑張ったこと、嬉しかったこと、人に喜んでもらえたこと"),
   ],
 };
 
 // 未設定ランク（ランク付け前）のフォールバック
 const WEEKLY_ITEMS_DEFAULT: EniFormItem[] = [
-  WEEKLY_GOAL_REVIEW,
-  { key: "done_well", label: "できるようになったこと・良かったこと", type: "textarea", required: true },
-  { key: "struggle", label: "苦戦していること・課題", type: "textarea", required: true },
-  ...WEEKLY_PRACTICE_ITEMS,
-  WEEKLY_NEXT_GOAL,
-  { key: "request", label: "スタイリスト・幹部への相談（任意）", type: "textarea", required: false },
+  { key: "practice_hours", label: "今週の練習時間", type: "number", required: false, unit: "時間" },
+  ...WEEKLY_SUPPORT_ITEMS,
+  ...weeklyReflection("できるようになったこと・良かったこと"),
 ];
+
+// ---- アシスタントの継続設定（週報の先頭に常時表示。随時変更できる） ----
+
+export interface AssistantSettingDef {
+  key: string;
+  label: string;
+  note?: string;
+  placeholder?: string;
+  /** 見出しに「〇〇の」と名前を入れるか */
+  withName?: boolean;
+}
+
+/** 3段のピラミッド（下から：大切にしたい価値観 → 理想の未来像 → 目標） */
+export const PYRAMID_SETTINGS: AssistantSettingDef[] = [
+  { key: "pyramid_goal", label: "目標", placeholder: "例）来年3月にデビューして指名を10名いただく" },
+  { key: "pyramid_future", label: "理想の未来像", placeholder: "例）お客様の人生が明るくなる美容師" },
+  { key: "pyramid_value", label: "大切にしたい価値観", placeholder: "例）誠実さ・感謝・素直さ" },
+];
+
+const PROMISE_SETTING: AssistantSettingDef = {
+  key: "promise",
+  label: "自分との約束【習慣化行動目標】",
+  note: "変更は随時できます",
+  placeholder: "例）毎朝10分ウィッグに触る／営業後に必ず1回練習する",
+  withName: true,
+};
+
+/** ランクごとの「常時表示される設定」 */
+export function getAssistantSettingDefs(rank: AssistantRank): AssistantSettingDef[] {
+  if (rank === "middle") {
+    return [
+      { key: "year_goal", label: "年内の目標設定", note: "変更は随時できます", withName: true },
+      PROMISE_SETTING,
+    ];
+  }
+  if (rank === "final") {
+    return [
+      {
+        key: "debut_plan",
+        label: "デビュー／デビュー後3ヶ月の設定",
+        note: "何月何日にデビュー／デビュー後3ヶ月までに達成したい状況を細かく",
+        placeholder: "例）4月1日デビュー。3ヶ月で指名20名／客単価12,000円",
+        withName: true,
+      },
+      { key: "goal_1m", label: "1ヶ月後の目標", note: "月の頭に見直す" },
+      { key: "goal_3m", label: "3ヶ月後の目標", note: "月の頭に見直す" },
+      { key: "goal_5m", label: "5ヶ月後の目標", note: "月の頭に見直す" },
+      PROMISE_SETTING,
+    ];
+  }
+  return [];
+}
+
+/** ピラミッドを表示するランク（ミドル・ファイナル） */
+export function hasPyramid(rank: AssistantRank): boolean {
+  return rank === "middle" || rank === "final";
+}
+
+/** 設定キーの一覧（保存時の検証に使う） */
+export function allAssistantSettingKeys(): string[] {
+  const keys = new Set<string>(PYRAMID_SETTINGS.map((s) => s.key));
+  for (const rank of ["middle", "final"] as const) {
+    for (const def of getAssistantSettingDefs(rank)) keys.add(def.key);
+  }
+  return [...keys];
+}
 
 /** ランクに応じた週報の項目一覧 */
 export function getWeeklyItems(rank: AssistantRank): EniFormItem[] {
