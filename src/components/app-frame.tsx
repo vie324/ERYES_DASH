@@ -109,6 +109,7 @@ export async function AppFrame({
         roleLabel: isAdmin ? "全体管理者" : "スタッフ",
         brandLabel: BRAND_INFO[brand].label,
         brandSub: BRAND_INFO[brand].sub,
+        brandMark: brand === "eni" ? "N" : "E",
       }}
       logoSrc={getLogoSrc(brand)}
       logoAlt={getBrandName(brand)}

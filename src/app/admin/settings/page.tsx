@@ -364,9 +364,10 @@ export default async function AdminSettingsPage({
       <section className="card mt-5">
         <h2 className="section-title">ロゴ画像の差し替え</h2>
         <p className="text-xs text-ink-500">
-          ヘッダーのロゴは <code className="font-bold">public/logo.svg</code>{" "}
-          を差し替えるだけで反映されます（PNGの場合はファイル名を logo.svg のまま中身を置き換えるか、
-          src/components/app-header.tsx の参照先を変更）。正式ロゴの受領後に対応します。
+          サイドバーのロゴは、ENiは <code className="font-bold">public/logo-eni.png</code>、EREYSは{" "}
+          <code className="font-bold">public/logo.png</code>{" "}
+          を置くだけで自動的に切り替わります（未設置のときは同名のSVGを表示します）。
+          参照先を変えたい場合は <code className="font-bold">src/lib/logo.ts</code> を編集してください。
         </p>
       </section>
     </div>

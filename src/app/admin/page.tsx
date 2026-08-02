@@ -153,7 +153,7 @@ async function EyesAdminDashboard() {
       </div>
 
       <h2 className="section-title mt-6">メニュー</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/admin/reports" icon="barChart" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
         <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
@@ -216,7 +216,7 @@ async function EniAdminDashboard() {
       </div>
 
       <h2 className="section-title mt-6">メニュー</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
           description="スタイリスト日報・アシスタント週報の閲覧＋コメント" />
         <BigMenuLink href="/staff/practice" icon="sparkles" title="練習ペアの設定"

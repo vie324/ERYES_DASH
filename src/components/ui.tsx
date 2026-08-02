@@ -241,6 +241,27 @@ export function MonthNav({
   );
 }
 
+/** 画面の読み込み中に出す骨組み（切り替えたときに真っ白にしない） */
+export function PageSkeleton() {
+  return (
+    <div aria-hidden="true" className="animate-pulse">
+      <div className="skeleton h-7 w-52" />
+      <div className="skeleton h-px w-full mt-4 mb-6" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skeleton h-24" />
+        ))}
+      </div>
+      <div className="skeleton h-52 mt-3" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 mt-3">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="skeleton h-[5.25rem]" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 空状態の表示 */
 export function EmptyState({ message, action }: { message: string; action?: React.ReactNode }) {
   return (

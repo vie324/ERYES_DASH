@@ -31,7 +31,7 @@ export function SalesBreakdownCard({ kpi }: { kpi: KpiSummary }) {
   return (
     <div className="card">
       <h2 className="section-title">売上内訳</h2>
-      <dl className="text-sm space-y-2">
+      <dl className="text-sm space-y-2 max-w-xl">
         <div className="flex justify-between">
           <dt className="text-ink-500">技術売上</dt>
           <dd className="font-bold text-ink-900">{formatYen(kpi.serviceSales)}</dd>

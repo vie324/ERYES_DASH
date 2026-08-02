@@ -141,6 +141,16 @@
   }
 }
 
+/* 読み込み中の光のスイープ */
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @keyframes splash-logo {
   0% {
     opacity: 0;
@@ -328,6 +338,17 @@ body {
   }
   .note-info {
     @apply bg-brand-50 text-brand-800 border-brand-200;
+  }
+
+  /* ---- 読み込み中のプレースホルダー ---- */
+  .skeleton {
+    @apply relative overflow-hidden rounded-xl bg-brand-100/70;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    animation: shimmer 1.4s ease-in-out infinite;
   }
 
   /* ---- 左サイドバーのリンク ---- */

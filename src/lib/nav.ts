@@ -252,8 +252,29 @@ function adminNav(ctx: NavContext): NavGroup[] {
   ]);
 }
 
-/** いま開いているページが、そのメニュー項目かどうか */
-export function isCurrent(pathname: string, item: NavItem): boolean {
+/** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致） */
+function matches(pathname: string, item: NavItem): boolean {
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+/**
+ * いま開いている場所を1つだけ決める。
+ * 例：/staff/meetings/committees は「ミーティング」と「会議体の一覧」の両方に前方一致するので、
+ * より深く一致する（＝URLが長い）方だけを現在地にする。
+ */
+export function findCurrent(
+  pathname: string,
+  groups: NavGroup[]
+): { group: string; item: NavItem } | null {
+  let best: { group: string; item: NavItem } | null = null;
+  for (const g of groups) {
+    for (const item of g.items) {
+      if (!matches(pathname, item)) continue;
+      if (!best || item.href.length > best.item.href.length) {
+        best = { group: g.label, item };
+      }
+    }
+  }
+  return best;
 }

@@ -11,13 +11,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { logoutAction } from "@/lib/auth/actions";
-import { isCurrent, type NavGroup } from "@/lib/nav";
+import { findCurrent, type NavGroup } from "@/lib/nav";
 
 export type ShellUser = {
   name: string;
   roleLabel: string;
   brandLabel: string;
   brandSub: string;
+  /** 業態の頭文字（ENi＝N／EREYS＝E） */
+  brandMark: string;
 };
 
 export function AppShell({
@@ -43,6 +45,9 @@ export function AppShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  // いま開いているメニュー項目（サイドバーの強調と、上部バーの現在地表示に使う）
+  const current = findCurrent(pathname, groups);
+
   // ページを移動したらドロワーは閉じる
   useEffect(() => {
     setOpen(false);
@@ -66,7 +71,7 @@ export function AppShell({
           logoSrc={logoSrc}
           logoAlt={logoAlt}
           homeHref={homeHref}
-          pathname={pathname}
+          currentHref={current?.item.href ?? null}
         />
       </aside>
 
@@ -85,7 +90,7 @@ export function AppShell({
               logoSrc={logoSrc}
               logoAlt={logoAlt}
               homeHref={homeHref}
-              pathname={pathname}
+              currentHref={current?.item.href ?? null}
               onClose={() => setOpen(false)}
             />
           </div>
@@ -109,6 +114,15 @@ export function AppShell({
             <Link href={homeHref} className="lg:hidden flex items-center min-w-0">
               <img src={logoSrc} alt={logoAlt} className="h-7 w-auto max-w-24 object-contain object-left" />
             </Link>
+
+            {/* いま開いている場所（PCのみ） */}
+            {current && (
+              <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-400 min-w-0">
+                <span className="truncate">{current.group}</span>
+                <Icon name="chevronRight" className="w-3 h-3 shrink-0" />
+                <span className="text-ink-700 truncate">{current.item.label}</span>
+              </p>
+            )}
 
             <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
               <Link
@@ -161,7 +175,7 @@ function SidebarBody({
   logoSrc,
   logoAlt,
   homeHref,
-  pathname,
+  currentHref,
   onClose,
 }: {
   groups: NavGroup[];
@@ -169,7 +183,8 @@ function SidebarBody({
   logoSrc: string;
   logoAlt: string;
   homeHref: string;
-  pathname: string;
+  /** 現在地のメニュー項目（1つだけ強調する） */
+  currentHref: string | null;
   onClose?: () => void;
 }) {
   return (
@@ -178,7 +193,7 @@ function SidebarBody({
       <div className="flex items-center gap-2 px-4 h-16 shrink-0 border-b border-sidebar-line/60">
         <Link href={homeHref} className="flex items-center min-w-0 flex-1">
           {/* ロゴはゴールド。濃色の背景でそのまま映える */}
-          <img src={logoSrc} alt={logoAlt} className="h-8 w-auto max-w-36 object-contain object-left" />
+          <img src={logoSrc} alt={logoAlt} className="h-10 w-auto max-w-40 object-contain object-left" />
         </Link>
         {onClose && (
           <button
@@ -198,7 +213,7 @@ function SidebarBody({
         className="mx-3 mt-3 flex items-center gap-2.5 rounded-xl border border-sidebar-line bg-white/[0.04] px-3 py-2.5 transition-colors hover:bg-white/[0.08]"
       >
         <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center font-display text-sm font-bold">
-          {user.brandLabel.charAt(0)}
+          {user.brandMark}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-display text-sm font-bold text-white leading-tight">
@@ -216,7 +231,7 @@ function SidebarBody({
             <p className="nav-group-label">{group.label}</p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const current = isCurrent(pathname, item);
+                const current = item.href === currentHref;
                 return (
                   <li key={item.href}>
                     <Link

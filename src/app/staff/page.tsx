@@ -99,7 +99,7 @@ async function EyeMenu({
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <BigMenuLink
         href="/staff/counseling"
         icon="clipboard"
@@ -191,7 +191,7 @@ async function EniMenu({
   ).length;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       {showStylist && (
         <BigMenuLink
           href="/staff/eni-report"
