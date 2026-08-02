@@ -16,6 +16,7 @@ import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
 import { getBrand } from "@/lib/brand";
 import { BigMenuLink, StatCard } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Dashboard } from "@/components/dashboard";
 
 // 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える
 export default async function AdminHomePage() {
@@ -33,6 +34,9 @@ export default async function AdminHomePage() {
           {brand === "eyes" ? "EREYS" : "ENi"}
         </span>
       </h1>
+
+      {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
+      <Dashboard brand={brand} />
 
       {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
 

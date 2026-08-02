@@ -23,8 +23,8 @@ export function AppHeader({
       <div className="mx-auto max-w-3xl px-4 h-14 flex items-center justify-between gap-3">
         <Link href={homeHref} className="flex items-center gap-2.5 min-w-0">
           {/* 選択中の業態のロゴ（未選択はメインブランドのENi）。マークは共通で文字だけ変わる */}
-          <img src={getLogoSrc(brand)} alt={getBrandName(brand)} className="h-9 w-auto" />
-          <span className="text-[10px] font-bold tracking-widest text-brand-600 border border-brand-300 rounded-full px-2 py-0.5 shrink-0">
+          <img src={getLogoSrc(brand)} alt={getBrandName(brand)} className="h-9 w-auto max-w-28 object-contain object-left" />
+          <span className="hidden sm:inline-block text-[10px] font-bold tracking-widest text-brand-600 border border-brand-300 rounded-full px-2 py-0.5 shrink-0">
             {session.role === "admin" ? "管理者" : "スタッフ"}
           </span>
         </Link>
