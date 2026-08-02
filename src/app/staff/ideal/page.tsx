@@ -69,7 +69,7 @@ export default async function IdealSchedulePage({
       {/* ① 今月の目標（先頭に表示） */}
       <form action={saveMonthGoalAction} className="card space-y-2 mb-4 border-brand-300 bg-brand-50/40">
         <label className="label" htmlFor="content">
-          今月の目標<span className="ml-2 text-[11px] font-normal text-stone-400">まずここから決める</span>
+          今月の目標<span className="ml-2 text-[11px] font-normal text-ink-400">まずここから決める</span>
         </label>
         <textarea
           id="content"
@@ -91,7 +91,7 @@ export default async function IdealSchedulePage({
               key={w.scope}
               href={`/staff/ideal?week=${w.scope}`}
               className={`flex-1 text-center text-sm font-bold rounded-full px-2 py-2 border ${
-                week === w.scope ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"
+                week === w.scope ? "bg-brand-600 text-white border-brand-600" : "border-ink-300 text-ink-600"
               }`}
             >
               {w.label}
@@ -105,7 +105,7 @@ export default async function IdealSchedulePage({
       <form action={saveIdealWeekAction} className="card space-y-3">
         <input type="hidden" name="scope" value={week} />
         <div className="flex items-center justify-between gap-2">
-          <p className="font-bold text-sm text-stone-500">{weekLabel}の理想の1週間</p>
+          <p className="section-title !mb-0">{weekLabel}の理想の1週間</p>
           {goal && <p className="text-[11px] text-brand-700 font-bold truncate max-w-[50%]">目標：{goal.split("\n")[0]}</p>}
         </div>
 
@@ -141,7 +141,7 @@ export default async function IdealSchedulePage({
         </form>
       )}
 
-      <p className="text-xs text-stone-400 mt-4">
+      <p className="text-xs text-ink-400 mt-4">
         ※ 理想のスケジュールは自分だけが編集できます。今日のスケジュール画面から見返せます。
       </p>
     </div>

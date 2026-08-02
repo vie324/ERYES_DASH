@@ -21,12 +21,12 @@ export default async function AdminCsvPage() {
   );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="CSV出力" backHref="/admin" />
 
       <section className="card mb-4">
-        <h2 className="font-bold text-base mb-1">売上CSV（日報ベース）</h2>
-        <p className="text-xs text-stone-500 mb-3">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-1">売上CSV（日報ベース）</h2>
+        <p className="text-xs text-ink-500 mb-3">
           項目：日付／スタッフ名／新規人数／既存人数／技術売上／オプション売上／物販売上／合計
         </p>
         {/* GETでAPIルートへ。サーバー側で管理者セッションを確認してCSVを返す */}
@@ -40,8 +40,8 @@ export default async function AdminCsvPage() {
       </section>
 
       <section className="card">
-        <h2 className="font-bold text-base mb-1">レジ締め・現金管理CSV</h2>
-        <p className="text-xs text-stone-500 mb-3">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-1">レジ締め・現金管理CSV</h2>
+        <p className="text-xs text-ink-500 mb-3">
           項目：日付／店舗名／現金売上高／レジ現金残高／おつり準備金残高／金庫へ移動額／金庫現金残高／銀行への預入額／メモ
         </p>
         <form action="/api/admin/csv" method="GET" className="space-y-3">
@@ -53,7 +53,7 @@ export default async function AdminCsvPage() {
         </form>
       </section>
 
-      <div className="text-xs text-stone-500 mt-4 space-y-1">
+      <div className="text-xs text-ink-500 mt-4 space-y-1">
         {/* TODO: 出力項目は仮。税理士指定の項目を受領したら src/app/api/admin/csv/route.ts を修正する */}
         <p>※ 項目は仮設定です。税理士様の指定項目が決まり次第差し替えます。</p>
         <p>※ Excelでそのまま開けるよう UTF-8（BOM付き）で出力します。</p>

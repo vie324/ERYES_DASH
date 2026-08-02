@@ -68,13 +68,13 @@ export function ShiftRequestForm({
       <input type="hidden" name="days_json" value={JSON.stringify(days)} />
 
       <section className="card">
-        <p className="font-bold text-sm text-stone-500 mb-1">日ごとの希望</p>
-        <p className="text-xs text-stone-400 mb-3">
+        <p className="section-title !mb-1.5">日ごとの希望</p>
+        <p className="text-xs text-ink-400 mb-3">
           日付をタップするたびに「指定なし → 早番 → 遅番 → 休み」と切り替わります。
           指定なしの日は早番・遅番どちらでも入れる扱いです。
         </p>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-stone-400 mb-1">
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-ink-400 mb-1">
           {["日", "月", "火", "水", "木", "金", "土"].map((w) => (
             <div key={w} className={w === "日" ? "text-red-400" : w === "土" ? "text-sky-400" : ""}>
               {w}
@@ -106,7 +106,7 @@ export function ShiftRequestForm({
           })}
         </div>
 
-        <p className="text-xs text-stone-500 mt-3">
+        <p className="text-xs text-ink-500 mt-3">
           休み希望 <span className="font-bold text-brand-700">{counts.off}日</span>
           ／ 早番希望 <span className="font-bold text-sky-600">{counts.early}日</span>
           ／ 遅番希望 <span className="font-bold text-indigo-600">{counts.late}日</span>
@@ -114,8 +114,8 @@ export function ShiftRequestForm({
       </section>
 
       <section className="card">
-        <p className="font-bold text-sm text-stone-500 mb-1">この月に勤務できる店舗（複数選択可）</p>
-        <p className="text-xs text-stone-400 mb-3">選んだ店舗にだけシフトが組まれます。</p>
+        <p className="section-title !mb-1.5">この月に勤務できる店舗（複数選択可）</p>
+        <p className="text-xs text-ink-400 mb-3">選んだ店舗にだけシフトが組まれます。</p>
         <div className="space-y-2">
           {stores.map((store) => {
             const checked = storeIds.has(store.id);
@@ -123,7 +123,7 @@ export function ShiftRequestForm({
               <label
                 key={store.id}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-base font-bold ${
-                  checked ? "border-brand-400 bg-brand-50 text-brand-800" : "border-stone-200 text-stone-600"
+                  checked ? "border-brand-400 bg-brand-50 text-brand-800" : "border-ink-200 text-ink-600"
                 }`}
               >
                 <input

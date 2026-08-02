@@ -103,7 +103,7 @@ export function ScheduleBoard({
                 <div
                   key={label}
                   className={`flex-1 min-w-0 text-center text-xs font-bold py-1.5 ${
-                    d === 5 ? "text-blue-500" : d === 6 ? "text-red-400" : "text-stone-600"
+                    d === 5 ? "text-blue-500" : d === 6 ? "text-red-400" : "text-ink-600"
                   }`}
                 >
                   {label}
@@ -118,7 +118,7 @@ export function ScheduleBoard({
                 {hours.map((h, i) => (
                   <div
                     key={h}
-                    className="absolute left-0 right-0 text-[10px] font-bold text-stone-400 text-center"
+                    className="absolute left-0 right-0 text-[10px] font-bold text-ink-400 text-center"
                     style={{ top: i * PX_PER_HOUR - 6, height: PX_PER_HOUR }}
                   >
                     {i === 0 ? "" : `${h}:00`}
@@ -175,7 +175,7 @@ export function ScheduleBoard({
       </div>
 
       <div className="flex items-center justify-between gap-2 mt-2">
-        <p className="text-[11px] text-stone-400">
+        <p className="text-[11px] text-ink-400">
           空いているところをタップすると予定を追加できます（帯をタップで修正・削除）。
           {multiDay && "表は横にスクロールすると日曜まで見られます。"}
         </p>
@@ -208,8 +208,8 @@ export function ScheduleBoard({
                     onClick={() => patchDraft({ d })}
                     className={`flex-1 text-xs font-bold rounded-lg py-2 border ${
                       draft.block.d === d
-                        ? "bg-brand-600 text-white border-brand-600"
-                        : "bg-white border-stone-300 text-stone-600"
+                        ? "chip-active"
+                        : ""
                     }`}
                   >
                     {label}
@@ -257,10 +257,10 @@ export function ScheduleBoard({
                     key={p}
                     type="button"
                     onClick={() => patchDraft({ a: p })}
-                    className={`text-xs font-bold rounded-full px-3 py-1.5 border ${
+                    className={`chip ${
                       draft.block.a === p
-                        ? "bg-brand-600 text-white border-brand-600"
-                        : "bg-white border-stone-300 text-stone-600"
+                        ? "chip-active"
+                        : ""
                     }`}
                   >
                     {p}
@@ -277,7 +277,7 @@ export function ScheduleBoard({
               className="input !min-h-11 !py-2 !text-sm"
             />
             {toMin(draft.block.e) > toMin(draft.block.s) && (
-              <p className="text-[11px] text-stone-400 mt-1">所要 {durationLabel(draft.block)}</p>
+              <p className="text-[11px] text-ink-400 mt-1">所要 {durationLabel(draft.block)}</p>
             )}
           </div>
 

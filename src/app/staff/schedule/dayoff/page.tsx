@@ -59,7 +59,7 @@ export default async function DayoffRequestPage({
       {!isPastMonth && (
         <p
           className={`rounded-xl text-sm font-bold px-4 py-3 mb-4 ${
-            editable ? "bg-brand-50 text-brand-800" : "bg-stone-100 text-stone-500"
+            editable ? "bg-brand-50 text-brand-800" : "bg-ink-100 text-ink-500"
           }`}
         >
           {editable
@@ -74,8 +74,8 @@ export default async function DayoffRequestPage({
         editable={editable && !isPastMonth}
       />
 
-      <div className="card mt-4 text-xs text-stone-500 space-y-1">
-        <p className="font-bold text-stone-600">希望休のルール</p>
+      <div className="card mt-4 text-xs text-ink-500 space-y-1">
+        <p className="font-bold text-ink-600">希望休のルール</p>
         <p>・毎月1週目（7日）までに、3ヶ月後の月の希望休を申請します（次回予約を2ヶ月先まで受けるため）。</p>
         <p>・定休日・お休みの曜日は申請不要です（基本パターンで自動的にお休みになります）。</p>
         <p>・締切後の変更は、お店に直接ご相談ください（管理者が個別調整できます）。</p>

@@ -202,7 +202,7 @@ export function CounselingForm({
         )}
 
         {phase === "init" && (
-          <p className="card text-center text-sm font-bold text-stone-500 animate-pulse">
+          <p className="card text-center text-sm font-bold text-ink-500 animate-pulse">
             LINEと接続しています…
           </p>
         )}
@@ -217,7 +217,7 @@ export function CounselingForm({
           <div className="card text-center py-10 space-y-3 animate-fade-up">
             <Icon name="checkCircle" className="w-12 h-12 mx-auto text-brand-500" />
             <p className="font-display text-xl font-bold">送信ありがとうございました</p>
-            <p className="text-sm text-stone-500">
+            <p className="text-sm text-ink-500">
               スタッフが内容を確認のうえ、ご来店時にお伺いします。
               <br />
               当日お会いできるのを楽しみにしております。
@@ -274,8 +274,8 @@ export function CounselingForm({
             <div className={step === "consent" ? "space-y-4" : "hidden"}>
               <section className="card space-y-3">
                 <h2 className="font-display text-base font-bold text-ink-900">{CONSENT_NOTICE_TITLE}</h2>
-                <p className="text-xs text-stone-500">{CONSENT_NOTICE_INTRO}</p>
-                <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50/60 p-3 space-y-3">
+                <p className="text-xs text-ink-500">{CONSENT_NOTICE_INTRO}</p>
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-ink-200 bg-ink-50/60 p-3 space-y-3">
                   {CONSENT_NOTICE_SECTIONS.map((sec) => (
                     <div key={sec.heading}>
                       <p className="text-xs font-bold text-brand-700">{sec.heading}</p>
@@ -290,7 +290,7 @@ export function CounselingForm({
               </section>
 
               <div className="card">
-                <label className="flex items-start gap-3 text-sm font-bold text-stone-700">
+                <label className="flex items-start gap-3 text-sm font-bold text-ink-700">
                   <input
                     type="checkbox"
                     checked={agree}
@@ -305,7 +305,7 @@ export function CounselingForm({
                 <button
                   type="button"
                   onClick={backToForm}
-                  className="rounded-2xl border-2 border-stone-300 px-5 font-bold text-stone-600"
+                  className="rounded-2xl border-2 border-ink-300 px-5 font-bold text-ink-600"
                 >
                   戻る
                 </button>
@@ -359,7 +359,7 @@ function FormField({
   if (item.type === "agree") {
     return (
       <div className="card !bg-brand-50 border-brand-200">
-        <label className="flex items-start gap-3 text-sm font-bold text-stone-700">
+        <label className="flex items-start gap-3 text-sm font-bold text-ink-700">
           <input
             type="checkbox"
             name={item.key}
@@ -387,7 +387,7 @@ function FormField({
           {item.options?.map((opt) => (
             <label
               key={opt}
-              className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
+              className="flex items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
             >
               <input
                 type="radio"
@@ -411,7 +411,7 @@ function FormField({
             return (
               <label
                 key={opt}
-                className="flex items-center gap-3 rounded-xl border border-stone-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
+                className="flex items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 text-base has-checked:border-brand-400 has-checked:bg-brand-50"
               >
                 <input
                   type="checkbox"
@@ -472,7 +472,7 @@ function FormField({
           />
         ))}
 
-      {item.note && <p className="text-xs text-stone-400 mt-2">{item.note}</p>}
+      {item.note && <p className="text-xs text-ink-400 mt-2">{item.note}</p>}
     </div>
   );
 }

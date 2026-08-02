@@ -25,7 +25,7 @@ export default async function AdminCounselingDetailPage({
   ]);
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="カウンセリング内容" backHref="/admin/counseling" backLabel="一覧へ戻る" />
       <CounselingDetail
         response={response}

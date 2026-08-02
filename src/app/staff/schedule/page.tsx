@@ -56,7 +56,7 @@ export default async function StaffSchedulePage({
       >
         <span>
           <span className="block font-bold">希望休を申請する</span>
-          <span className="block text-xs text-stone-500 mt-0.5">
+          <span className="block text-xs text-ink-500 mt-0.5">
             {formatMonthJa(dayoffTarget)}分の締切：{formatDateJa(dayoffDeadline(dayoffTarget))}
           </span>
         </span>
@@ -71,7 +71,7 @@ export default async function StaffSchedulePage({
       />
 
       <section className="card">
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="table-base">
             <thead>
               <tr>
@@ -104,7 +104,7 @@ export default async function StaffSchedulePage({
                           key={s.id}
                           className={`whitespace-nowrap text-xs ${
                             !day.working
-                              ? "text-stone-300"
+                              ? "text-ink-300"
                               : s.id === session.staffId
                                 ? "font-bold text-brand-700"
                                 : ""
@@ -112,10 +112,10 @@ export default async function StaffSchedulePage({
                         >
                           {formatWorkTime(day)}
                           {day.source === "dayoff" && day.working === false && (
-                            <span className="text-[10px] text-stone-400 ml-0.5">希</span>
+                            <span className="text-[10px] text-ink-400 ml-0.5">希</span>
                           )}
                           {day.note && day.source === "override" && (
-                            <span className="block text-[10px] text-stone-400">{day.note}</span>
+                            <span className="block text-[10px] text-ink-400">{day.note}</span>
                           )}
                         </td>
                       );
@@ -126,13 +126,13 @@ export default async function StaffSchedulePage({
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-stone-400 mt-2">
+        <p className="text-xs text-ink-400 mt-2">
           「休 希」＝希望休 ／ 基本パターン（曜日ごとの勤務）は管理者が設定します
         </p>
       </section>
 
       <p className="mt-4 text-center">
-        <Link href="/staff/shift" className="text-xs font-bold text-stone-400 underline">
+        <Link href="/staff/shift" className="text-xs font-bold text-ink-400 underline">
           旧シフト機能（早番・遅番）はこちら
         </Link>
       </p>

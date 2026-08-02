@@ -96,8 +96,8 @@ export default async function OrgPage({
           <a
             key={c.key}
             href={`/staff/org?chart=${c.key}`}
-            className={`flex-1 text-center text-sm font-bold rounded-full px-3 py-2 border ${
-              chartKey === c.key ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"
+            className={`chip flex-1 justify-center !text-sm !py-2 ${
+              chartKey === c.key ? "chip-active" : ""
             }`}
           >
             {c.name}
@@ -107,9 +107,9 @@ export default async function OrgPage({
 
       {/* ツリー図 */}
       <section className="card mb-4">
-        <p className="text-xs text-stone-500 mb-3">{chart.note}</p>
+        <p className="text-xs text-ink-500 mb-3">{chart.note}</p>
         <OrgTree nodes={tree} membersByTeam={membersByTeam} staffMap={staffMap} leaderOf={leaderOf} />
-        <p className="text-[11px] text-stone-400 mt-3">
+        <p className="text-[11px] text-ink-400 mt-3">
           枠の下は担当者です（「長」＝リーダー）。横にスクロールすると全体が見られます。
         </p>
       </section>
@@ -117,7 +117,7 @@ export default async function OrgPage({
       {/* 一人ひとりの役割 */}
       {withMission.length > 0 && (
         <section className="card mb-4">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">一人ひとりの役割</h2>
+          <h2 className="section-title">一人ひとりの役割</h2>
           <div className="space-y-2.5">
             {withMission.map((s) => (
               <div key={s.id} className="border-l-2 border-brand-300 pl-3">
@@ -132,22 +132,22 @@ export default async function OrgPage({
       {/* 兼務＝チームをつなぐ人 */}
       {bridges.length > 0 && (
         <section className="card mb-4">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">チームをつないでいる人</h2>
+          <h2 className="section-title">チームをつないでいる人</h2>
           <ul className="space-y-1.5">
             {bridges.map(([staffId, count]) => {
               const teams = orgUnits.filter((u) => (membersByTeam.get(u.unitKey) ?? []).includes(staffId));
               return (
                 <li key={staffId} className="text-sm">
                   <span className="font-bold">{staffMap.get(staffId)?.name ?? "？"}</span>
-                  <span className="text-xs text-stone-500 ml-2">{count}チーム</span>
-                  <span className="block text-[11px] text-stone-500">
+                  <span className="text-xs text-ink-500 ml-2">{count}チーム</span>
+                  <span className="block text-[11px] text-ink-500">
                     {teams.map((t) => t.name).join(" ／ ")}
                   </span>
                 </li>
               );
             })}
           </ul>
-          <p className="text-[11px] text-stone-400 mt-2">
+          <p className="text-[11px] text-ink-400 mt-2">
             つながっているチームの組み合わせ：{links.length}通り（兼務している人が情報の橋渡しになります）
           </p>
         </section>
@@ -155,7 +155,7 @@ export default async function OrgPage({
 
       {/* 部署ごとの詳細・編集 */}
       <section className="space-y-3">
-        <h2 className="font-bold text-sm text-stone-500">部署の役割とメンバー</h2>
+        <h2 className="section-title !mb-0">部署の役割とメンバー</h2>
         {unitsInChart.map((unit) => {
           const ids = membersByTeam.get(unit.unitKey) ?? [];
           const leaderId = leaderOf.get(unit.unitKey) ?? "";
@@ -166,23 +166,23 @@ export default async function OrgPage({
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: unit.color }} />
                 <p className="font-bold">{unit.name}</p>
-                <span className="ml-auto text-xs font-bold text-stone-400">{ids.length}名</span>
+                <span className="ml-auto text-xs font-bold text-ink-400">{ids.length}名</span>
               </div>
-              {parent && <p className="text-[11px] text-stone-400 mt-0.5">上位：{parent.name}</p>}
+              {parent && <p className="text-[11px] text-ink-400 mt-0.5">上位：{parent.name}</p>}
               {unit.mission && <p className="text-xs text-ink-600 mt-1.5">{unit.mission}</p>}
               {meeting && (
-                <p className="text-[11px] text-stone-500 mt-1">
+                <p className="text-[11px] text-ink-500 mt-1">
                   会議体：{meeting.name}（{meeting.cadence}）
                 </p>
               )}
 
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {ids.length === 0 && <span className="text-xs text-stone-400">（メンバー未設定）</span>}
+                {ids.length === 0 && <span className="text-xs text-ink-400">（メンバー未設定）</span>}
                 {ids.map((id) => (
                   <span
                     key={id}
                     className={`text-xs font-bold rounded-full px-3 py-1 border ${
-                      id === leaderId ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"
+                      id === leaderId ? "chip-active" : ""
                     }`}
                   >
                     {staffMap.get(id)?.name ?? "？"}
@@ -207,7 +207,7 @@ export default async function OrgPage({
                           {activeStaff.map((s) => (
                             <label
                               key={s.id}
-                              className="text-xs font-bold rounded-full px-3 py-1.5 border border-stone-300 text-stone-600 cursor-pointer has-checked:bg-brand-600 has-checked:text-white has-checked:border-brand-600"
+                              className="chip cursor-pointer has-checked:border-brand-600 has-checked:bg-brand-600 has-checked:text-white"
                             >
                               <input
                                 type="checkbox"
@@ -242,8 +242,8 @@ export default async function OrgPage({
                   </details>
 
                   {/* 部署自体の編集 */}
-                  <details className="rounded-xl border border-stone-200">
-                    <summary className="cursor-pointer text-sm font-bold text-stone-600 px-3 py-2">
+                  <details className="rounded-xl border border-ink-200">
+                    <summary className="cursor-pointer text-sm font-bold text-ink-600 px-3 py-2">
                       この部署を編集する
                     </summary>
                     <form action={updateOrgUnitAction} className="p-3 pt-0 space-y-2">
@@ -306,7 +306,7 @@ export default async function OrgPage({
       {isExec && (
         <details className="card mt-4">
           <summary className="font-bold text-sm text-brand-700 cursor-pointer">＋ 部署・チームを追加する</summary>
-          <form action={createOrgUnitAction} className="space-y-2 mt-3 pt-3 border-t border-stone-100">
+          <form action={createOrgUnitAction} className="space-y-2 mt-3 pt-3 border-t border-ink-100">
             <input type="hidden" name="chart_key" value={chartKey} />
             <div>
               <label className="label !text-xs" htmlFor="new_unit_name">部署名</label>
@@ -332,7 +332,7 @@ export default async function OrgPage({
       {isExec && (
         <details className="card mt-4">
           <summary className="font-bold text-sm text-brand-700 cursor-pointer">一人ひとりの役割を書く</summary>
-          <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+          <div className="mt-3 pt-3 border-t border-ink-100 space-y-3">
             {activeStaff.map((s) => (
               <form key={s.id} action={saveStaffMissionAction} className="space-y-1.5">
                 <input type="hidden" name="staff_id" value={s.id} />

@@ -31,7 +31,7 @@ export function AssistantSettingsPanel({
       {/* ピラミッド（下から：価値観 → 理想の未来像 → 目標） */}
       {showPyramid && (
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-3">{staffName}のピラミッド</h2>
+          <h2 className="section-title">{staffName}のピラミッド</h2>
           <div className="space-y-1.5">
             {PYRAMID_SETTINGS.map((def, i) => {
               // 上から「目標 → 理想の未来像 → 価値観」の順に、下ほど幅広く積む
@@ -83,7 +83,7 @@ export function AssistantSettingsPanel({
                 <p className="text-sm whitespace-pre-wrap text-ink-800 mt-0.5">
                   {values[def.key] || "（未設定）"}
                 </p>
-                {def.note && <p className="text-[10px] text-stone-400 mt-0.5">{def.note}</p>}
+                {def.note && <p className="text-[10px] text-ink-400 mt-0.5">{def.note}</p>}
               </div>
             ))}
           </div>

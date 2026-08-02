@@ -45,10 +45,10 @@ export default async function MinutesPrintPage({
       </div>
 
       {/* 清書（A4想定） */}
-      <article className="bg-white rounded-2xl border border-stone-200 p-6 print:border-0 print:p-0">
+      <article className="bg-white rounded-2xl border border-ink-200 p-6 print:border-0 print:p-0">
         <header className="border-b-2 border-brand-300 pb-3 mb-4">
           <h1 className="font-display text-2xl font-bold text-ink-900">{meetingName} 議事録</h1>
-          <div className="mt-2 text-sm text-stone-600 space-y-0.5">
+          <div className="mt-2 text-sm text-ink-600 space-y-0.5">
             <p>日付：{formatDateJa(meeting!.meetingDate, true)}{meeting!.startTime && ` ${meeting!.startTime}〜`}</p>
             {participantNames.length > 0 && <p>参加者：{participantNames.join("、")}</p>}
           </div>
@@ -57,14 +57,14 @@ export default async function MinutesPrintPage({
         {meeting!.minutesText ? (
           <Markdown text={meeting!.minutesText} />
         ) : (
-          <p className="text-sm text-stone-400">議事録はまだ作成されていません。</p>
+          <p className="text-sm text-ink-400">議事録はまだ作成されていません。</p>
         )}
 
         {/* タスク一覧（誰が・何を・いつまでに） */}
         {tasks.length > 0 && (
           <section className="mt-5">
             <p className="font-display text-base font-bold text-ink-900 mb-1.5">タスク一覧</p>
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -93,18 +93,18 @@ export default async function MinutesPrintPage({
           <img
             src={meeting!.minutesPhoto}
             alt="議事録の写真"
-            className="w-full max-h-96 object-contain rounded-lg border border-stone-200 mt-4"
+            className="w-full max-h-96 object-contain rounded-lg border border-ink-200 mt-4"
           />
         )}
 
         {meeting!.minutesAi && (
-          <p className="text-[10px] text-stone-300 mt-6 print:mt-10">AI整形（要確認）／ ENi 議事録</p>
+          <p className="text-[10px] text-ink-300 mt-6 print:mt-10">AI整形（要確認）／ ENi 議事録</p>
         )}
       </article>
 
       <div className="mt-4 print:hidden">
         <PrintButton auto={query.print === "1"} />
-        <p className="text-xs text-stone-400 mt-2 text-center">
+        <p className="text-xs text-ink-400 mt-2 text-center">
           印刷ダイアログで「PDFで保存」を選ぶとPDFになります（スマホは共有→プリント）。
         </p>
       </div>

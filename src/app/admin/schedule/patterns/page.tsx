@@ -18,7 +18,7 @@ export default async function WorkPatternsPage({
   const activeStaff = staffList.filter((s) => s.isActive);
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader
         title="基本パターンの設定"
         backHref="/admin/schedule"
@@ -36,7 +36,7 @@ export default async function WorkPatternsPage({
         </p>
       )}
 
-      <p className="text-xs text-stone-500 mb-4">
+      <p className="text-xs text-ink-500 mb-4">
         曜日ごとの出勤と時間を設定すると、毎月のスケジュールが自動で組まれます（希望休・個別調整はこの上に反映）。
         定休日は全員「休み」にしてください。
       </p>
@@ -56,7 +56,7 @@ export default async function WorkPatternsPage({
                     <div key={wd} className="flex items-center gap-2">
                       <span
                         className={`w-8 shrink-0 text-sm font-bold ${
-                          wd === 0 ? "text-red-500" : wd === 6 ? "text-blue-500" : "text-stone-600"
+                          wd === 0 ? "text-red-500" : wd === 6 ? "text-blue-500" : "text-ink-600"
                         }`}
                       >
                         {weekdayJa(wd)}
@@ -77,7 +77,7 @@ export default async function WorkPatternsPage({
                         className="input !min-h-10 !py-1.5 text-sm flex-1"
                         aria-label={`${weekdayJa(wd)}曜の開始時間`}
                       />
-                      <span className="text-stone-400">〜</span>
+                      <span className="text-ink-400">〜</span>
                       <input
                         type="time"
                         name={`wd_${wd}_end`}

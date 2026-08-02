@@ -36,7 +36,7 @@ export async function ShiftNoticeBanner({ staffId }: { staffId: string }) {
         <span className={`block text-sm font-bold ${emphasized ? "text-brand-800" : "text-amber-800"}`}>
           {noticeMessage(targetMonth, rules)}
         </span>
-        <span className="block text-xs text-stone-500 mt-0.5">タップして希望を入力 ›</span>
+        <span className="block text-xs text-ink-500 mt-0.5">タップして希望を入力 ›</span>
       </span>
     </Link>
   );

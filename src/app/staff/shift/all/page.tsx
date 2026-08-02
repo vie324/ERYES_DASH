@@ -60,7 +60,7 @@ export default async function StaffShiftAllPage({
                 const wd = weekdayOf(date);
                 const dayClass = wd === 0 ? "text-red-400" : wd === 6 ? "text-sky-500" : "";
                 return (
-                  <tr key={date} className={wd === 0 || wd === 6 ? "bg-stone-50" : ""}>
+                  <tr key={date} className={wd === 0 || wd === 6 ? "bg-ink-50" : ""}>
                     <td className={`sticky left-0 bg-inherit font-bold whitespace-nowrap ${dayClass}`}>
                       {Number(date.slice(8))}({weekdayJa(wd)})
                     </td>
@@ -69,7 +69,7 @@ export default async function StaffShiftAllPage({
                       return (
                         <td key={store.id} className="align-top">
                           {cell.length === 0 ? (
-                            <span className="text-stone-300">−</span>
+                            <span className="text-ink-300">−</span>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               {cell.map((a) => (
@@ -78,11 +78,11 @@ export default async function StaffShiftAllPage({
                                   className={`text-xs whitespace-nowrap ${
                                     a.staffId === session.staffId
                                       ? "font-bold text-brand-700"
-                                      : "text-stone-600"
+                                      : "text-ink-600"
                                   }`}
                                 >
                                   {staffMap.get(a.staffId)?.name ?? "？"}
-                                  <span className="text-stone-400">
+                                  <span className="text-ink-400">
                                     ({SHIFT_TYPE_LABEL[a.shiftType]})
                                   </span>
                                 </span>
@@ -97,7 +97,7 @@ export default async function StaffShiftAllPage({
               })}
             </tbody>
           </table>
-          <p className="text-xs text-stone-400 px-2 py-2">
+          <p className="text-xs text-ink-400 px-2 py-2">
             (早)=早番 (遅)=遅番 ／ 自分の名前は<span className="text-brand-700 font-bold">ゴールドの太字</span>で表示されます
           </p>
         </div>

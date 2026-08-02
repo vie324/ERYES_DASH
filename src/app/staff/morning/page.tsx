@@ -71,7 +71,7 @@ export default async function MorningBoardPage({
   return (
     <div>
       <PageHeader title="今日のスケジュール" backHref="/staff" />
-      <p className="text-sm text-stone-500 font-bold -mt-2 mb-4">{formatDateJa(today, true)}</p>
+      <p className="text-sm text-ink-500 font-bold -mt-2 mb-4">{formatDateJa(today, true)}</p>
 
       {noticeMsg && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">{noticeMsg}</p>
@@ -86,7 +86,7 @@ export default async function MorningBoardPage({
 
       {/* 自分の予定の入力（フォーム or 写真） */}
       <form action={saveDailyPlanAction} className="card space-y-4 mb-4">
-        <p className="font-bold text-sm text-stone-500">自分の今日の予定（フォーム入力・写真どちらでもOK）</p>
+        <p className="section-title !mb-0">自分の今日の予定（フォーム入力・写真どちらでもOK）</p>
         <div>
           <label className="label" htmlFor="goal">今日の目標</label>
           <textarea id="goal" name="goal" rows={2} defaultValue={f?.goal ?? ""} className="input min-h-16" placeholder="例）ワインディングを時間内に巻き切る" />
@@ -124,7 +124,7 @@ export default async function MorningBoardPage({
         <summary className="cursor-pointer text-sm font-bold text-brand-700">
           よくある項目を登録する（{presetLabels.length}件）
         </summary>
-        <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+        <div className="mt-3 pt-3 border-t border-ink-100 space-y-3">
           <form action={addSchedulePresetAction} className="flex items-end gap-2">
             <div className="flex-1">
               <label className="label !text-xs" htmlFor="preset_label">項目名</label>
@@ -134,7 +134,7 @@ export default async function MorningBoardPage({
           </form>
           <div className="flex flex-wrap gap-1.5">
             {presets.map((p) => (
-              <span key={p.id} className="inline-flex items-center gap-1 text-xs font-bold rounded-full px-3 py-1.5 border border-stone-300 text-stone-600">
+              <span key={p.id} className="chip">
                 {p.label}
                 {isExec && (
                   <form action={deleteSchedulePresetAction} className="inline">
@@ -145,7 +145,7 @@ export default async function MorningBoardPage({
               </span>
             ))}
           </div>
-          <p className="text-[11px] text-stone-400">
+          <p className="text-[11px] text-ink-400">
             ここに登録した項目は、今日のスケジュール・理想のスケジュールの両方で選べます（手入力もできます）。
             {isExec && "削除は幹部のみできます。"}
           </p>
@@ -154,7 +154,7 @@ export default async function MorningBoardPage({
 
       {/* みんなの今日 */}
       <section className="space-y-3">
-        <h2 className="font-bold text-sm text-stone-500">みんなの今日</h2>
+        <h2 className="section-title !mb-0">みんなの今日</h2>
         {members.map((m) => {
           const plan = plans.find((p) => p.staffId === m.id);
           const work = resolveScheduleDay(m.id, today, wd, patterns, dayoffs, overrides);
@@ -164,17 +164,17 @@ export default async function MorningBoardPage({
               <div className="flex items-center justify-between gap-2">
                 <p className="font-bold">
                   {m.name}
-                  <span className="text-[10px] font-normal text-stone-400 ml-1.5">
+                  <span className="text-[10px] font-normal text-ink-400 ml-1.5">
                     {m.jobType === "stylist" ? "スタイリスト" : "アシスタント"}
                   </span>
                 </p>
-                <span className={`text-xs font-bold ${work.working ? "text-brand-700" : "text-stone-400"}`}>
+                <span className={`text-xs font-bold ${work.working ? "text-brand-700" : "text-ink-400"}`}>
                   {formatWorkTime(work)}
                 </span>
               </div>
 
               {plan ? <PlanView plan={plan} /> : (
-                <p className="text-xs text-stone-400 mt-2">（まだ入力されていません）</p>
+                <p className="text-xs text-ink-400 mt-2">（まだ入力されていません）</p>
               )}
 
               {/* 見ました マーク */}
@@ -185,7 +185,7 @@ export default async function MorningBoardPage({
                       ✓ {staffMap.get(plan.seenBy) ?? ""}さんが確認済み
                     </span>
                   ) : (
-                    <span className="text-[11px] text-stone-400">未確認</span>
+                    <span className="text-[11px] text-ink-400">未確認</span>
                   )}
                   {canMarkSeen && !plan.seenBy && (
                     <form action={markPlanSeenAction}>
@@ -234,9 +234,9 @@ function PlanView({ plan }: { plan: DailyPlan }) {
         </div>
       )}
       {plan.photo && (
-        <img src={plan.photo} alt="スケジュール帳" className="w-full max-h-72 object-contain rounded-lg border border-stone-200 bg-white" />
+        <img src={plan.photo} alt="スケジュール帳" className="w-full max-h-72 object-contain rounded-lg border border-ink-200 bg-white" />
       )}
-      {!hasFields && !plan.photo && <p className="text-xs text-stone-400">（内容なし）</p>}
+      {!hasFields && !plan.photo && <p className="text-xs text-ink-400">（内容なし）</p>}
     </div>
   );
 }

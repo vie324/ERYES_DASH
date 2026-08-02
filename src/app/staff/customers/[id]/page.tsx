@@ -25,12 +25,12 @@ export default async function StaffCustomerDetailPage({
     .sort((a, b) => a.submittedAt.getTime() - b.submittedAt.getTime());
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="お客様のカルテ" backHref="/staff/customers" backLabel="お客様一覧へ戻る" />
 
       <div className="card mb-4">
         <p className="text-lg font-bold">{customer.fullName} 様</p>
-        <div className="flex items-center gap-2 mt-1 text-xs text-stone-500">
+        <div className="flex items-center gap-2 mt-1 text-xs text-ink-500">
           <span>登録：{formatDateTimeJa(customer.createdAt, true)}</span>
           {customer.lineUserId ? (
             <StatusBadge label="LINE連携済み" tone="ok" />
@@ -40,7 +40,7 @@ export default async function StaffCustomerDetailPage({
         </div>
       </div>
 
-      <h2 className="font-bold text-sm text-stone-500 mb-2">
+      <h2 className="section-title">
         カウンセリング（カルテ）履歴（{counseling.length}件）
       </h2>
       {counseling.length === 0 ? (
@@ -69,7 +69,7 @@ export default async function StaffCustomerDetailPage({
                   )}
                 </div>
                 <CounselingStatusBadge status={r.status} />
-                <span className="text-stone-300 text-xl">›</span>
+                <span className="text-ink-300 text-xl">›</span>
               </Link>
             );
           })}

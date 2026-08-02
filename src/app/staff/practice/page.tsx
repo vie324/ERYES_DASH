@@ -88,7 +88,7 @@ export default async function PracticePage({
 
       {/* 自分の練習を記録 */}
       <form action={addPracticeRecordAction} className="card space-y-3 mb-4">
-        <p className="font-bold text-sm text-stone-500">練習を記録する</p>
+        <p className="section-title !mb-0">練習を記録する</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label" htmlFor="practice_date">
@@ -181,15 +181,15 @@ export default async function PracticePage({
 
       {/* 月間活動記録表 */}
       <section className="card">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">
+        <h2 className="section-title">
           月間活動記録（デビューまでフルスピード）
         </h2>
         {members.length === 0 ? (
-          <p className="text-sm text-stone-400">
+          <p className="text-sm text-ink-400">
             職種（スタイリスト／アシスタント）が設定されたスタッフがいません（マスタ設定から設定できます）
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="table-base">
               <thead>
                 <tr>
@@ -198,7 +198,7 @@ export default async function PracticePage({
                     <th key={m.id} className={m.id === session.staffId ? "!text-brand-700" : ""}>
                       {m.name.split(" ")[0]}
                       {m.jobType === "stylist" && (
-                        <span className="block text-[9px] font-normal text-stone-400">スタイリスト</span>
+                        <span className="block text-[9px] font-normal text-ink-400">スタイリスト</span>
                       )}
                     </th>
                   ))}
@@ -234,7 +234,7 @@ export default async function PracticePage({
                               <span key={r.id} className="block">
                                 <span className="font-bold">{formatPracticeMinutes(r.minutes)}</span>
                                 {partnerLabel(r) && (
-                                  <span className="text-stone-400 text-[10px]">
+                                  <span className="text-ink-400 text-[10px]">
                                     （{partnerLabel(r)}）
                                   </span>
                                 )}
@@ -253,7 +253,7 @@ export default async function PracticePage({
             </table>
           </div>
         )}
-        <p className="text-xs text-stone-400 mt-2">
+        <p className="text-xs text-ink-400 mt-2">
           （ ）内は見てくれた人・モデルさん ／ ×で自分の記録を削除できます
         </p>
       </section>
@@ -261,7 +261,7 @@ export default async function PracticePage({
       {/* ペア設定（幹部・管理者のみ） */}
       {isExec && (
         <section className="card mt-4 space-y-3">
-          <h2 className="font-bold text-sm text-stone-500">
+          <h2 className="section-title !mb-0">
             今月のペア設定（{formatMonthJa(month)}・幹部メニュー）
           </h2>
           {members
@@ -293,7 +293,7 @@ export default async function PracticePage({
                 </form>
               );
             })}
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-ink-400">
             ペアを設定すると、メンバーの記録フォームで「見てくれた人」が自動で選ばれます
           </p>
         </section>
@@ -311,7 +311,7 @@ function DeleteRecordButton({ id, month }: { id: string; month: string }) {
       <button
         type="submit"
         aria-label="この記録を削除"
-        className="text-stone-300 hover:text-red-500 text-[10px] font-bold px-1"
+        className="text-ink-300 hover:text-red-500 text-[10px] font-bold px-1"
       >
         ×
       </button>

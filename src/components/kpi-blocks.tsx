@@ -6,7 +6,7 @@ import { StatCard } from "@/components/ui";
 
 export function KpiCards({ kpi }: { kpi: KpiSummary }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <StatCard label="売上合計（技術＋OP＋物販）" value={formatYen(kpi.totalSales)} tone="accent" />
       <StatCard
         label="次回予約率"
@@ -30,23 +30,25 @@ export function KpiCards({ kpi }: { kpi: KpiSummary }) {
 export function SalesBreakdownCard({ kpi }: { kpi: KpiSummary }) {
   return (
     <div className="card">
-      <h2 className="font-bold text-sm text-stone-500 mb-2">売上内訳</h2>
-      <dl className="text-sm space-y-1.5">
+      <h2 className="section-title">売上内訳</h2>
+      <dl className="text-sm space-y-2 max-w-xl">
         <div className="flex justify-between">
-          <dt className="text-stone-500">技術売上</dt>
-          <dd className="font-bold">{formatYen(kpi.serviceSales)}</dd>
+          <dt className="text-ink-500">技術売上</dt>
+          <dd className="font-bold text-ink-900">{formatYen(kpi.serviceSales)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-stone-500">オプション売上</dt>
-          <dd className="font-bold">{formatYen(kpi.optionSales)}</dd>
+          <dt className="text-ink-500">オプション売上</dt>
+          <dd className="font-bold text-ink-900">{formatYen(kpi.optionSales)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-stone-500">物販売上</dt>
-          <dd className="font-bold">{formatYen(kpi.retailSales)}</dd>
+          <dt className="text-ink-500">物販売上</dt>
+          <dd className="font-bold text-ink-900">{formatYen(kpi.retailSales)}</dd>
         </div>
-        <div className="flex justify-between border-t border-stone-200 pt-1.5">
-          <dt className="font-bold">合計</dt>
-          <dd className="font-bold text-brand-700">{formatYen(kpi.totalSales)}</dd>
+        <div className="flex justify-between border-t border-brand-200 pt-2 mt-1">
+          <dt className="font-bold text-ink-800">合計</dt>
+          <dd className="font-display text-lg leading-none font-bold text-brand-700">
+            {formatYen(kpi.totalSales)}
+          </dd>
         </div>
       </dl>
     </div>
@@ -56,10 +58,10 @@ export function SalesBreakdownCard({ kpi }: { kpi: KpiSummary }) {
 /** 月次推移テーブル（新規/既存の構成比と売上・予約率の推移） */
 export function MonthlyTrendTable({ rows }: { rows: { month: string; kpi: KpiSummary }[] }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-stone-400">データがありません</p>;
+    return <p className="text-sm text-ink-400">データがありません</p>;
   }
   return (
-    <div className="overflow-x-auto">
+    <div className="table-wrap">
       <table className="table-base">
         <thead>
           <tr>
@@ -77,7 +79,7 @@ export function MonthlyTrendTable({ rows }: { rows: { month: string; kpi: KpiSum
               <td className="text-right font-bold">{formatYen(kpi.totalSales)}</td>
               <td className="text-right">
                 {kpi.totalClients}人
-                <span className="text-stone-400 text-xs">
+                <span className="text-ink-400 text-xs">
                   （新{kpi.newClients}/既{kpi.repeatClients}）
                 </span>
               </td>

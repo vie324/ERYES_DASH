@@ -67,11 +67,11 @@ export default async function AdminReportsPage({
 
       <div className="space-y-4">
         <section>
-          <h2 className="font-bold text-sm text-stone-500 mb-2">
+          <h2 className="section-title">
             月間サマリー（{formatDateJa(from)}〜{formatDateJa(to)}の合計）
           </h2>
           <KpiCards kpi={totalKpi} />
-          <p className="text-xs text-stone-500 mt-2">
+          <p className="text-xs text-ink-500 mt-2">
             ※ サロンボードの集計と突合する際は、割引が反映された本システムの数値を正としてください。
           </p>
         </section>
@@ -79,11 +79,11 @@ export default async function AdminReportsPage({
         <SalesBreakdownCard kpi={totalKpi} />
 
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">スタッフ別（{formatMonthJa(month)}）</h2>
+          <h2 className="section-title">スタッフ別（{formatMonthJa(month)}）</h2>
           {byStaff.size === 0 ? (
-            <p className="text-sm text-stone-400">この月の日報はまだありません</p>
+            <p className="text-sm text-ink-400">この月の日報はまだありません</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -114,17 +114,17 @@ export default async function AdminReportsPage({
 
         <section className="card">
           <div className="flex items-center justify-between mb-2 gap-2">
-            <h2 className="font-bold text-sm text-stone-500">レジ締め・現金管理（{formatMonthJa(month)}）</h2>
-            <span className="text-xs font-bold text-stone-500">
+            <h2 className="section-title !mb-0">レジ締め・現金管理（{formatMonthJa(month)}）</h2>
+            <span className="text-xs font-bold text-ink-500">
               現金売上計 {formatYen(cashTotals.cashSales)} ／ 銀行預入計 {formatYen(cashTotals.bankDeposit)}
             </span>
           </div>
           {cashReports.length === 0 ? (
-            <p className="text-sm text-stone-400">
+            <p className="text-sm text-ink-400">
               この月のレジ締め入力はまだありません（スタッフ画面の「レジ締め・現金管理」から入力できます）
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -160,7 +160,7 @@ export default async function AdminReportsPage({
                         <td className="text-right">{formatYen(r.movedToSafe)}</td>
                         <td className="text-right">{formatYen(r.safeBalance)}</td>
                         <td className="text-right">{r.bankDeposit > 0 ? formatYen(r.bankDeposit) : "−"}</td>
-                        <td className="max-w-32 truncate text-stone-500">{r.memo}</td>
+                        <td className="max-w-32 truncate text-ink-500">{r.memo}</td>
                       </tr>
                     );
                   })}
@@ -168,23 +168,23 @@ export default async function AdminReportsPage({
               </table>
             </div>
           )}
-          <p className="text-xs text-stone-400 mt-2">
+          <p className="text-xs text-ink-400 mt-2">
             ※「差額」＝レジ残高が「おつり準備金＋金庫へ移動額」と合わない場合の表示です。
           </p>
         </section>
 
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">サロン全体の月次推移（直近6ヶ月）</h2>
+          <h2 className="section-title">サロン全体の月次推移（直近6ヶ月）</h2>
           <MonthlyTrendTable rows={trend} />
         </section>
 
         <section className="card">
           <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-            <h2 className="font-bold text-sm text-stone-500">日別明細</h2>
+            <h2 className="section-title !mb-0">日別明細</h2>
             <div className="flex gap-1.5 flex-wrap">
               <Link
                 href={`/admin/reports?month=${month}`}
-                className={`text-xs font-bold rounded-full px-3 py-1.5 border ${!selectedStaff ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"}`}
+                className={`chip ${!selectedStaff ? "chip-active" : ""}`}
               >
                 全員
               </Link>
@@ -192,7 +192,7 @@ export default async function AdminReportsPage({
                 <Link
                   key={s.id}
                   href={`/admin/reports?month=${month}&staff=${s.id}`}
-                  className={`text-xs font-bold rounded-full px-3 py-1.5 border ${selectedStaff === s.id ? "bg-brand-600 text-white border-brand-600" : "border-stone-300 text-stone-600"}`}
+                  className={`chip ${selectedStaff === s.id ? "chip-active" : ""}`}
                 >
                   {s.name}
                 </Link>
@@ -202,7 +202,7 @@ export default async function AdminReportsPage({
           {dailyReports.length === 0 ? (
             <EmptyState message="日報がありません" />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -233,7 +233,7 @@ export default async function AdminReportsPage({
                       <td className="text-right font-bold">
                         {formatYen(r.serviceSales + r.optionSales + r.retailSales)}
                       </td>
-                      <td className="max-w-40 truncate text-stone-500">{r.memo}</td>
+                      <td className="max-w-40 truncate text-ink-500">{r.memo}</td>
                       <td>
                         <Link
                           href={`/admin/reports/${r.id}?month=${month}`}
@@ -251,7 +251,7 @@ export default async function AdminReportsPage({
         </section>
 
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">
+          <h2 className="section-title">
             今日のふりかえり（スタッフの日報コメント）
           </h2>
           {(() => {
@@ -259,13 +259,13 @@ export default async function AdminReportsPage({
               .filter((r) => r.goodPoint || r.improvement || r.message || r.memo)
               .sort((a, b) => b.reportDate.localeCompare(a.reportDate));
             if (withComments.length === 0) {
-              return <p className="text-sm text-stone-400">この月のコメントはまだありません</p>;
+              return <p className="text-sm text-ink-400">この月のコメントはまだありません</p>;
             }
             return (
               <div className="space-y-3">
                 {withComments.map((r) => (
                   <div key={r.id} className="rounded-xl border border-brand-100 bg-brand-50/40 p-3">
-                    <p className="text-xs font-bold text-stone-500">
+                    <p className="text-xs font-bold text-ink-500">
                       {formatDateJa(r.reportDate)} ／ {staffMap.get(r.staffId)?.name ?? "（不明）"}
                     </p>
                     <dl className="mt-2 space-y-2 text-sm">
@@ -289,8 +289,8 @@ export default async function AdminReportsPage({
                       )}
                       {r.memo && (
                         <div>
-                          <dt className="text-xs font-bold text-stone-400">メモ</dt>
-                          <dd className="whitespace-pre-wrap text-stone-500">{r.memo}</dd>
+                          <dt className="text-xs font-bold text-ink-400">メモ</dt>
+                          <dd className="whitespace-pre-wrap text-ink-500">{r.memo}</dd>
                         </div>
                       )}
                     </dl>

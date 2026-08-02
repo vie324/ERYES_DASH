@@ -34,16 +34,23 @@ export default async function StaffHomePage() {
 
   return (
     <div>
-      <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
-      <h1 className="font-display text-2xl font-bold mb-5">
-        {session.name}さん、おつかれさまです
-      </h1>
+      {/* あいさつ（今日の日付とお名前） */}
+      <div className="mb-5">
+        <p className="text-xs font-bold tracking-[0.14em] text-brand-600 mb-1.5">
+          {formatDateJa(today, true)}
+        </p>
+        <h1 className="font-display text-2xl sm:text-[1.8rem] leading-tight font-bold text-ink-900">
+          {session.name}さん、おつかれさまです
+        </h1>
+        <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
+      </div>
 
       <ShiftNoticeBanner staffId={session.staffId} />
 
       {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
       <Dashboard brand={brand} />
 
+      <h2 className="section-title mt-6">メニュー</h2>
       {brand === "eyes" ? (
         <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />
       ) : (
@@ -56,21 +63,18 @@ export default async function StaffHomePage() {
         />
       )}
 
-      <Link
-        href="/staff/help"
-        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
-      >
-        <Icon name="help" className="w-4 h-4" />
-        使い方ガイド（困ったときはこちら）
-      </Link>
-
-      {session.role === "admin" && (
-        <p className="mt-2 text-center">
-          <Link href="/admin" className="text-sm font-bold text-brand-700 underline">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        <Link href="/staff/help" className="chip !py-2.5 !px-4">
+          <Icon name="help" className="w-4 h-4 text-brand-500" />
+          使い方ガイド（困ったときはこちら）
+        </Link>
+        {session.role === "admin" && (
+          <Link href="/admin" className="chip !py-2.5 !px-4">
+            <Icon name="sliders" className="w-4 h-4 text-brand-500" />
             管理者画面へ
           </Link>
-        </p>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -95,7 +99,7 @@ async function EyeMenu({
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <BigMenuLink
         href="/staff/counseling"
         icon="clipboard"
@@ -187,7 +191,7 @@ async function EniMenu({
   ).length;
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       {showStylist && (
         <BigMenuLink
           href="/staff/eni-report"

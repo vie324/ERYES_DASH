@@ -96,7 +96,7 @@ async function EyesDashboard() {
   return (
     <div className="space-y-3 mb-5">
       {/* 見出しの数字 */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <StatTile
           label={`今月の売上（${formatMonthJa(month)}）`}
           value={formatYen(kpi.totalSales)}
@@ -140,7 +140,7 @@ async function EyesDashboard() {
         <ColumnChart data={trend} format="yen" />
       </ChartCard>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {/* 売上の内訳 */}
         <ChartCard title={`売上の内訳（${formatMonthJa(month)}）`}>
           <CompositionBar
@@ -267,7 +267,7 @@ async function EniDashboard() {
 
   return (
     <div className="space-y-3 mb-5">
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <StatTile
           label="今週の週報（アシスタント）"
           value={`${thisWeekReports.length}/${assistants.length}`}
@@ -313,7 +313,7 @@ async function EniDashboard() {
         <ColumnChart data={practiceTrend} format="hour" />
       </ChartCard>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {/* メンバー別 練習時間 */}
         <ChartCard title="今週の練習時間（メンバー別）">
           <HBarList data={practiceBars} format="hour" emptyText="今週の週報がまだありません" />

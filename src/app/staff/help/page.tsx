@@ -10,7 +10,7 @@ export default async function StaffHelpPage() {
   const session = await requireSession();
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="使い方ガイド（スタッフ）" backHref="/staff" />
 
       <p className="text-sm text-ink-500 mb-2">

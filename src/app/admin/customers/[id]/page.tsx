@@ -39,7 +39,7 @@ export default async function AdminCustomerDetailPage({
   const backTo = `/admin/customers/${id}`;
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="顧客詳細" backHref="/admin/customers" backLabel="顧客一覧へ戻る" />
 
       {flash.saved && (
@@ -78,7 +78,7 @@ export default async function AdminCustomerDetailPage({
               変更
             </button>
           </form>
-          <div className="flex items-center gap-2 mt-3 text-xs text-stone-500">
+          <div className="flex items-center gap-2 mt-3 text-xs text-ink-500">
             <span>登録：{formatDateTimeJa(customer.createdAt, true)}</span>
             {customer.lineUserId ? (
               <StatusBadge label="LINE連携済み" tone="ok" />
@@ -89,7 +89,7 @@ export default async function AdminCustomerDetailPage({
         </section>
 
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-3">次回予約を登録</h2>
+          <h2 className="section-title">次回予約を登録</h2>
           <form action={createAppointmentAction} className="space-y-3">
             <input type="hidden" name="customer_id" value={customer.id} />
             <input type="hidden" name="back_to" value={backTo} />
@@ -129,16 +129,16 @@ export default async function AdminCustomerDetailPage({
         </section>
 
         <section className="card">
-          <h2 className="font-bold text-sm text-stone-500 mb-2">今後の予約</h2>
+          <h2 className="section-title">今後の予約</h2>
           {upcoming.length === 0 ? (
-            <p className="text-sm text-stone-400">予約はありません</p>
+            <p className="text-sm text-ink-400">予約はありません</p>
           ) : (
-            <ul className="divide-y divide-stone-100">
+            <ul className="divide-y divide-ink-100">
               {upcoming.map((a) => (
                 <li key={a.id} className="py-2.5 flex items-center gap-2 text-sm">
                   <div className="flex-1">
                     <p className="font-bold">{formatDateTimeJa(a.scheduledAt, true)}</p>
-                    <p className="text-xs text-stone-500">
+                    <p className="text-xs text-ink-500">
                       担当：{a.staffId ? (staffMap.get(a.staffId)?.name ?? "（不明）") : "指定なし"}
                       {a.reminderSentAt
                         ? ` ／ リマインド送信済み（${formatDateTimeJa(a.reminderSentAt)}）`
@@ -158,8 +158,8 @@ export default async function AdminCustomerDetailPage({
           )}
           {past.length > 0 && (
             <>
-              <h3 className="font-bold text-xs text-stone-400 mt-3 mb-1">過去の予約（直近5件）</h3>
-              <ul className="text-xs text-stone-500 space-y-1">
+              <h3 className="font-bold text-xs text-ink-400 mt-3 mb-1">過去の予約（直近5件）</h3>
+              <ul className="text-xs text-ink-500 space-y-1">
                 {past.map((a) => (
                   <li key={a.id}>{formatDateTimeJa(a.scheduledAt, true)}</li>
                 ))}
@@ -169,7 +169,7 @@ export default async function AdminCustomerDetailPage({
         </section>
 
         <section>
-          <h2 className="font-bold text-sm text-stone-500 mb-2">カウンセリング履歴</h2>
+          <h2 className="section-title">カウンセリング履歴</h2>
           {counseling.length === 0 ? (
             <EmptyState message="カウンセリング回答はまだありません" />
           ) : (
@@ -184,7 +184,7 @@ export default async function AdminCustomerDetailPage({
                     <p className="text-sm font-bold">{formatDateTimeJa(r.submittedAt, true)}</p>
                   </div>
                   <CounselingStatusBadge status={r.status} />
-                  <span className="text-stone-300 text-xl">›</span>
+                  <span className="text-ink-300 text-xl">›</span>
                 </Link>
               ))}
             </div>

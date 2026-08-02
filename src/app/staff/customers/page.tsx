@@ -37,7 +37,7 @@ export default async function StaffCustomersPage({
         </button>
       </form>
 
-      <p className="text-xs text-stone-500 mb-3">
+      <p className="text-xs text-ink-500 mb-3">
         {q ? `「${q}」の検索結果：${customers.length}名` : `登録顧客：${customers.length}名`}
         ／ お名前をタップすると過去のカウンセリング（カルテ）を見られます
       </p>
@@ -54,12 +54,12 @@ export default async function StaffCustomersPage({
             >
               <div className="flex-1 min-w-0">
                 <p className="font-bold truncate">{c.fullName} 様</p>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-ink-500 mt-0.5">
                   登録：{formatDateTimeJa(c.createdAt, true)}
                 </p>
               </div>
               {pendingCustomerIds.has(c.id) && <StatusBadge label="未確認あり" tone="pending" />}
-              <span className="text-stone-300 text-xl">›</span>
+              <span className="text-ink-300 text-xl">›</span>
             </Link>
           ))}
         </div>

@@ -19,9 +19,17 @@ export type IconName =
   | "alertTriangle"
   | "checkCircle"
   | "chevronDown"
+  | "chevronRight"
   | "banknote"
   | "help"
   | "book"
+  | "layoutGrid"
+  | "users"
+  | "share"
+  | "menu"
+  | "close"
+  | "logout"
+  | "swap"
   | "brandMark";
 
 const PATHS: Record<IconName, JSX.Element> = {
@@ -104,6 +112,43 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
+  chevronRight: <path d="m9 6 6 6-6 6" />,
+  layoutGrid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  share: (
+    <>
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+    </>
+  ),
+  menu: <path d="M3 6h18M3 12h18M3 18h18" />,
+  close: <path d="M18 6 6 18M6 6l12 12" />,
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5M21 12H9" />
+    </>
+  ),
+  swap: (
+    <>
+      <path d="M3 8h14l-3.5-3.5M21 16H7l3.5 3.5" />
+    </>
+  ),
   banknote: (
     <>
       <rect x="2" y="6" width="20" height="12" rx="2" />

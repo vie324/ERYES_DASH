@@ -27,32 +27,36 @@ export default async function AdminHomePage() {
 
   return (
     <div>
-      <p className="text-sm text-stone-500 font-bold mb-1">{formatDateJa(today, true)}</p>
-      <h1 className="font-display text-2xl font-bold mb-4">
-        管理者メニュー
-        <span className="text-sm font-bold text-brand-500 ml-2">
-          {brand === "eyes" ? "EREYS" : "ENi"}
-        </span>
-      </h1>
+      <div className="mb-5">
+        <p className="text-xs font-bold tracking-[0.14em] text-brand-600 mb-1.5">
+          {formatDateJa(today, true)}
+        </p>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="font-display text-2xl sm:text-[1.8rem] leading-tight font-bold text-ink-900">
+            管理者ダッシュボード
+          </h1>
+          <span className="inline-flex items-center rounded-full border border-brand-300 bg-white px-2.5 py-0.5 font-display text-xs font-bold text-brand-700">
+            {brand === "eyes" ? "EREYS" : "ENi"}
+          </span>
+        </div>
+        <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
+      </div>
 
       {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
       <Dashboard brand={brand} />
 
       {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
 
-      <Link
-        href="/admin/help"
-        className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-brand-700 py-3"
-      >
-        <Icon name="help" className="w-4 h-4" />
-        使い方ガイド（運用の流れ・各機能の説明）
-      </Link>
-
-      <p className="mt-2 text-center">
-        <Link href="/staff" className="text-sm font-bold text-brand-700 underline">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        <Link href="/admin/help" className="chip !py-2.5 !px-4">
+          <Icon name="help" className="w-4 h-4 text-brand-500" />
+          使い方ガイド（運用の流れ・各機能の説明）
+        </Link>
+        <Link href="/staff" className="chip !py-2.5 !px-4">
+          <Icon name="pencil" className="w-4 h-4 text-brand-500" />
           スタッフ画面へ（日報入力・打刻はこちら）
         </Link>
-      </p>
+      </div>
     </div>
   );
 }
@@ -108,8 +112,8 @@ async function EyesAdminDashboard() {
   return (
     <>
       {(overtimeAlerts.length > 0 || pushCount >= LINE_FREE_QUOTA * 0.8) && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-4 space-y-1.5">
-          <p className="text-sm font-bold text-amber-800 flex items-center gap-1.5">
+        <div className="note note-warn !p-4 mb-4 space-y-1.5">
+          <p className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
             <Icon name="alertTriangle" className="w-4 h-4" />
             お知らせ・アラート
           </p>
@@ -132,7 +136,8 @@ async function EyesAdminDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <h2 className="section-title mt-6">今日・今月の数字</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard label="本日の売上（全員）" value={formatYen(todayKpi.totalSales)} tone="accent"
           sub={`施術 ${todayKpi.totalClients}人（日報 ${todayReports.length}件）`} />
         <StatCard label="今月の売上（全員）" value={formatYen(monthKpi.totalSales)}
@@ -147,7 +152,8 @@ async function EyesAdminDashboard() {
         />
       </div>
 
-      <div className="space-y-3">
+      <h2 className="section-title mt-6">メニュー</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/admin/reports" icon="barChart" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
         <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
@@ -193,7 +199,8 @@ async function EniAdminDashboard() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <h2 className="section-title mt-6">対応が必要なもの</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard
           label="議事録 未提出"
           value={`${missingMinutes.length}件`}
@@ -208,7 +215,8 @@ async function EniAdminDashboard() {
         />
       </div>
 
-      <div className="space-y-3">
+      <h2 className="section-title mt-6">メニュー</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
           description="スタイリスト日報・アシスタント週報の閲覧＋コメント" />
         <BigMenuLink href="/staff/practice" icon="sparkles" title="練習ペアの設定"

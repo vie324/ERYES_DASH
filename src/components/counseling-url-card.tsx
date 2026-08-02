@@ -14,8 +14,8 @@ export function CounselingUrlCard() {
     <details className="card mb-4 group">
       <summary className="flex items-center gap-2 cursor-pointer list-none">
         <span className="font-bold text-sm flex-1">カウンセリングフォームのURL</span>
-        <span className="text-xs text-stone-400 group-open:hidden">タップで表示</span>
-        <span className="text-stone-300 transition-transform group-open:rotate-180">▾</span>
+        <span className="text-xs text-ink-400 group-open:hidden">タップで表示</span>
+        <span className="text-ink-300 transition-transform group-open:rotate-180">▾</span>
       </summary>
 
       <div className="mt-3 pt-3 border-t border-brand-100 space-y-4 text-sm">
@@ -33,7 +33,7 @@ export function CounselingUrlCard() {
               を設定すると、ここにお客様用URL（liff.line.me/…）が表示されます。
             </p>
           )}
-          <p className="text-xs text-stone-500 mt-1">
+          <p className="text-xs text-ink-500 mt-1">
             このURLをLINE公式アカウントのリッチメニュー「カウンセリング」ボタンに設定します。
             お客様がLINEから開くと、そのお客様のLINEアカウントと自動で紐付きます。
           </p>
@@ -42,10 +42,10 @@ export function CounselingUrlCard() {
         {/* テスト・直接URL */}
         <div>
           <p className="font-bold text-ink-700 mb-1">テスト用・直接URL（動作確認用）</p>
-          <code className="block bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs break-all select-all">
+          <code className="block bg-ink-50 border border-ink-200 rounded-lg px-3 py-2 text-xs break-all select-all">
             {directUrl}
           </code>
-          <p className="text-xs text-stone-500 mt-1">
+          <p className="text-xs text-ink-500 mt-1">
             ブラウザで直接開けます。
             {lineReady
               ? "LINEログインを経由してお客様を識別します。"
@@ -54,7 +54,7 @@ export function CounselingUrlCard() {
         </div>
 
         {!lineReady && (
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-ink-400">
             ※ 実運用（LINE追加→自動で氏名登録→このフォームで顧客と自動紐付け）には、LINE
             Messaging API と LIFF の接続が必要です。手順は README「LINE Developers
             設定手順」をご覧ください。

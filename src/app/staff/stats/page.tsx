@@ -47,8 +47,8 @@ export default async function StaffStatsPage({
           <SalesBreakdownCard kpi={kpi} />
 
           <section className="card">
-            <h2 className="font-bold text-sm text-stone-500 mb-2">日別の入力内容</h2>
-            <div className="overflow-x-auto">
+            <h2 className="section-title">日別の入力内容</h2>
+            <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -79,7 +79,7 @@ export default async function StaffStatsPage({
       )}
 
       <section className="card mt-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">月次推移（直近6ヶ月）</h2>
+        <h2 className="section-title">月次推移（直近6ヶ月）</h2>
         <MonthlyTrendTable rows={trend} />
       </section>
     </div>

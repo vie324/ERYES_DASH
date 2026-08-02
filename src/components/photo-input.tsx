@@ -38,7 +38,7 @@ export function PhotoInput({
           <img
             src={dataUrl}
             alt="添付写真"
-            className="w-full max-h-80 object-contain rounded-xl border border-stone-200 bg-white"
+            className="w-full max-h-80 object-contain rounded-xl border border-ink-200 bg-white"
           />
           <button
             type="button"

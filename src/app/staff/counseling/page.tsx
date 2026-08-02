@@ -21,13 +21,13 @@ function CounselingListItem({
     >
       <div className="flex-1 min-w-0">
         <p className="font-bold text-base truncate">{customer?.fullName ?? "（不明）"} 様</p>
-        <p className="text-xs text-stone-500 mt-0.5">{formatDateTimeJa(response.submittedAt)}</p>
+        <p className="text-xs text-ink-500 mt-0.5">{formatDateTimeJa(response.submittedAt)}</p>
         {flags.length > 0 && (
           <p className="text-xs font-bold text-red-600 mt-1">要確認：{flags.join("・")}</p>
         )}
       </div>
       <CounselingStatusBadge status={response.status} />
-      <span className="text-stone-300 text-xl">›</span>
+      <span className="text-ink-300 text-xl">›</span>
     </Link>
   );
 }
@@ -61,7 +61,7 @@ export default async function StaffCounselingPage({
       )}
 
       <section className="mb-6">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">
+        <h2 className="section-title">
           未確認（{pending.length}件）
         </h2>
         {pending.length === 0 ? (
@@ -76,7 +76,7 @@ export default async function StaffCounselingPage({
       </section>
 
       <section>
-        <h2 className="font-bold text-sm text-stone-500 mb-2">確認済み（直近10件）</h2>
+        <h2 className="section-title">確認済み（直近10件）</h2>
         {recentConfirmed.length === 0 ? (
           <EmptyState message="確認済みのカウンセリングはまだありません" />
         ) : (

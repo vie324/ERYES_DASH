@@ -14,7 +14,7 @@ export default async function AdminShiftSettingsPage({
   const rules = await getDataStore().getShiftRules();
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="シフトのルール設定" backHref="/admin/shift" backLabel="シフト管理へ戻る" />
 
       {params.saved && (
@@ -41,7 +41,7 @@ export default async function AdminShiftSettingsPage({
             className="input"
             required
           />
-          <p className="text-xs text-stone-400 mt-1">自動割当はこの連勤数を超える割当をしません。</p>
+          <p className="text-xs text-ink-400 mt-1">自動割当はこの連勤数を超える割当をしません。</p>
         </div>
         <div>
           <label className="label" htmlFor="min_staff_per_store_per_day">各店舗・各日の最低人数（名）</label>
@@ -56,7 +56,7 @@ export default async function AdminShiftSettingsPage({
             required
           />
           {/* TODO: 最低人数は「日単位」を仮としている。早番・遅番の帯ごとに必要なら要改修 */}
-          <p className="text-xs text-stone-400 mt-1">
+          <p className="text-xs text-ink-400 mt-1">
             日単位での人数です（早番・遅番の帯ごとではありません）。満たせない日はボードに赤色で警告されます。
           </p>
         </div>
@@ -72,7 +72,7 @@ export default async function AdminShiftSettingsPage({
             className="input"
             required
           />
-          <p className="text-xs text-stone-400 mt-1">
+          <p className="text-xs text-ink-400 mt-1">
             翌月分の希望は「当月◯日」まで提出・修正できます。募集の自動通知は毎月15日です。
           </p>
         </div>

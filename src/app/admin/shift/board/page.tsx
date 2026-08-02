@@ -149,7 +149,7 @@ export default async function AdminShiftBoardPage({
 
       <div className="card mb-4 space-y-3">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-sm text-stone-500">状態：</span>
+          <span className="text-sm font-bold text-ink-500">状態：</span>
           {status === "確定済み" ? (
             <StatusBadge label="確定済み（公開中）" tone="ok" />
           ) : status === "下書き" ? (
@@ -165,7 +165,7 @@ export default async function AdminShiftBoardPage({
             <button type="submit" className="btn-secondary w-full">
               自動割当を実行（下書きを作り直す）
             </button>
-            <p className="text-xs text-stone-400 mt-1.5">
+            <p className="text-xs text-ink-400 mt-1.5">
               ※ 希望（休み・店舗・早遅）と連勤上限{rules.maxConsecutiveDays}日・各店舗{rules.minStaffPerStoreDay}名を考慮します。
               実行すると現在の下書き・手動調整は消えます。
             </p>
@@ -173,9 +173,9 @@ export default async function AdminShiftBoardPage({
         )}
 
         {!isConfirmed && assignments.length > 0 && (
-          <form action={confirmMonthAction} className="border-t border-stone-100 pt-3 space-y-2">
+          <form action={confirmMonthAction} className="border-t border-ink-100 pt-3 space-y-2">
             <input type="hidden" name="target_month" value={month} />
-            <label className="flex items-start gap-2 text-sm font-bold text-stone-600">
+            <label className="flex items-start gap-2 text-sm font-bold text-ink-600">
               <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-brand-500" />
               内容を確認しました。確定すると全スタッフに公開されます。
             </label>
@@ -183,7 +183,7 @@ export default async function AdminShiftBoardPage({
           </form>
         )}
         {isConfirmed && (
-          <p className="text-xs text-stone-500">
+          <p className="text-xs text-ink-500">
             確定済みです。下の表から削除・追加した変更は即時公開されます。
           </p>
         )}
@@ -234,7 +234,7 @@ export default async function AdminShiftBoardPage({
             {datesOfMonth(month).map((date) => {
               const wd = weekdayOf(date);
               return (
-                <tr key={date} className={wd === 0 || wd === 6 ? "bg-stone-50" : ""}>
+                <tr key={date} className={wd === 0 || wd === 6 ? "bg-ink-50" : ""}>
                   <td
                     className={`sticky left-0 bg-inherit font-bold whitespace-nowrap z-10 ${
                       wd === 0 ? "text-red-400" : wd === 6 ? "text-sky-500" : ""
@@ -263,14 +263,14 @@ export default async function AdminShiftBoardPage({
                                     ? "border-red-400 bg-red-100 text-red-700"
                                     : outside
                                       ? "border-amber-400 bg-amber-50 text-amber-800"
-                                      : "border-stone-200 bg-white text-stone-700"
+                                      : "border-ink-200 bg-white text-ink-700"
                                 }`}
                                 title={staffMap.get(a.staffId)?.name}
                               >
                                 <span className="font-bold">
                                   {shortName(staffMap.get(a.staffId)?.name ?? "？")}
                                 </span>
-                                <span className="text-stone-400">
+                                <span className="text-ink-400">
                                   {SHIFT_TYPE_LABEL[a.shiftType]}
                                 </span>
                                 {off && <span>休!</span>}
@@ -280,7 +280,7 @@ export default async function AdminShiftBoardPage({
                                   <button
                                     type="submit"
                                     aria-label="この割当を削除"
-                                    className="text-stone-400 hover:text-red-500 font-bold px-0.5"
+                                    className="text-ink-400 hover:text-red-500 font-bold px-0.5"
                                   >
                                     ×
                                   </button>
@@ -289,7 +289,7 @@ export default async function AdminShiftBoardPage({
                             );
                           })}
                           <span
-                            className={`text-[10px] font-bold ${understaffed ? "text-red-600" : "text-stone-400"}`}
+                            className={`text-[10px] font-bold ${understaffed ? "text-red-600" : "text-ink-400"}`}
                           >
                             {cell.length}/{rules.minStaffPerStoreDay}名
                             <Link
@@ -311,7 +311,7 @@ export default async function AdminShiftBoardPage({
       </div>
 
       <section id="add-form" className="card">
-        <h2 className="font-bold text-sm text-stone-500 mb-3">割当を追加（手動調整）</h2>
+        <h2 className="section-title">割当を追加（手動調整）</h2>
         <form action={addAssignmentAction} className="space-y-3">
           <input type="hidden" name="target_month" value={month} />
           <div className="grid grid-cols-2 gap-3">
@@ -360,7 +360,7 @@ export default async function AdminShiftBoardPage({
               ))}
             </select>
           </div>
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-ink-400">
             ※ 休み希望日や勤務可能店舗外にも追加できますが、表と警告欄に印が付きます（最終判断は管理者）。
           </p>
           <button type="submit" className="btn-primary w-full">追加する</button>

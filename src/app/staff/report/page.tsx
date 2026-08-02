@@ -42,7 +42,7 @@ export default async function ReportPage({
           placeholder="0"
           className="input pr-12 text-right text-lg font-bold"
         />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-stone-400 font-bold">
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-400 font-bold">
           {unit}
         </span>
       </div>
@@ -50,7 +50,7 @@ export default async function ReportPage({
   );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="日報を入力" backHref="/staff" />
 
       {params.saved && (
@@ -85,7 +85,7 @@ export default async function ReportPage({
         </div>
 
         <div className="card">
-          <p className="font-bold text-sm text-stone-500 mb-3">お客様の人数</p>
+          <p className="section-title">お客様の人数</p>
           <div className="grid grid-cols-2 gap-3">
             {numberField("new_clients", "新規", existing?.newClients, "人")}
             {numberField("repeat_clients", "既存", existing?.repeatClients, "人")}
@@ -94,14 +94,14 @@ export default async function ReportPage({
         </div>
 
         <div className="card">
-          <p className="font-bold text-sm text-stone-500 mb-3">売上</p>
+          <p className="section-title">売上</p>
           <div className="grid grid-cols-1 gap-3">
             {numberField("service_sales", "技術売上", existing?.serviceSales, "円")}
             {numberField("option_sales", "オプション売上", existing?.optionSales, "円")}
             {numberField("retail_sales", "物販売上", existing?.retailSales, "円")}
           </div>
           {existing && (
-            <p className="text-xs text-stone-500 mt-3">
+            <p className="text-xs text-ink-500 mt-3">
               前回保存時の合計：
               {formatYen(existing.serviceSales + existing.optionSales + existing.retailSales)}
             </p>
@@ -123,7 +123,7 @@ export default async function ReportPage({
         </div>
 
         <div className="card space-y-3">
-          <p className="font-bold text-sm text-stone-500">今日のふりかえり（任意）</p>
+          <p className="section-title !mb-0">今日のふりかえり（任意）</p>
           <div>
             <label className="label" htmlFor="good_point">
               今日お客様やスタッフに喜んでいただけたこと

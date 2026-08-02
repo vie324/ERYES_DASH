@@ -52,8 +52,8 @@ export default async function AdminSettingsPage({
       )}
 
       <section className="mb-5">
-        <h2 className="font-bold text-base mb-3">店舗一覧</h2>
-        <p className="text-xs text-stone-500 mb-3">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">店舗一覧</h2>
+        <p className="text-xs text-ink-500 mb-3">
           シフト管理は全店舗が対象です。GPS打刻は「最寄りの店舗」の座標・許容半径で判定されます。
         </p>
         <div className="space-y-3">
@@ -62,7 +62,7 @@ export default async function AdminSettingsPage({
               <summary className="flex items-center gap-2 cursor-pointer list-none">
                 <span className="font-bold flex-1">
                   {store.name}
-                  {index === 0 && <span className="text-xs text-stone-400 ml-2">（本店）</span>}
+                  {index === 0 && <span className="text-xs text-ink-400 ml-2">（本店）</span>}
                 </span>
                 {store.attendanceEnabled ? (
                   <StatusBadge label="勤怠ON" tone="ok" />
@@ -71,7 +71,7 @@ export default async function AdminSettingsPage({
                 )}
                 <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
-              <form action={updateStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
+              <form action={updateStoreAction} className="space-y-3 mt-4 pt-4 border-t border-ink-100">
                 <input type="hidden" name="id" value={store.id} />
                 <div>
                   <label className="label">店舗名</label>
@@ -91,7 +91,7 @@ export default async function AdminSettingsPage({
                     <input name="lng" type="number" step="any" defaultValue={store.lng} className="input" required />
                   </div>
                 </div>
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-ink-500">
                   ※ 緯度経度はGoogleマップで店舗を右クリック→表示される数値をコピーして貼り付けてください。
                 </p>
                 <div>
@@ -106,7 +106,7 @@ export default async function AdminSettingsPage({
                     required
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
                   <input
                     type="checkbox"
                     name="attendance_enabled"
@@ -126,7 +126,7 @@ export default async function AdminSettingsPage({
                   この店舗を削除する（元に戻せません）
                 </label>
                 <button type="submit" className="btn-danger w-full">店舗を削除</button>
-                <p className="text-[11px] text-stone-400">
+                <p className="text-[11px] text-ink-400">
                   ※ スタッフ・打刻・現金・シフト等の記録が紐づく店舗は削除できません（先に付け替え・無効化が必要）。
                 </p>
               </form>
@@ -138,7 +138,7 @@ export default async function AdminSettingsPage({
           <summary className="font-bold cursor-pointer list-none text-brand-700">
             ＋ 店舗を追加
           </summary>
-          <form action={createStoreAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
+          <form action={createStoreAction} className="space-y-3 mt-4 pt-4 border-t border-ink-100">
             <div>
               <label className="label" htmlFor="new_store_name">店舗名</label>
               <input id="new_store_name" name="name" className="input" placeholder="例）EREYS 新宿店" required />
@@ -147,7 +147,7 @@ export default async function AdminSettingsPage({
               <label className="label" htmlFor="new_store_address">住所（任意）</label>
               <input id="new_store_address" name="address" className="input" />
             </div>
-            <p className="text-xs text-stone-500">
+            <p className="text-xs text-ink-500">
               ※ 緯度経度は本店と同じ値で作成されます。追加後にこの画面で正しい座標へ変更してください。
             </p>
             <button type="submit" className="btn-primary w-full">店舗を追加</button>
@@ -156,14 +156,14 @@ export default async function AdminSettingsPage({
       </section>
 
       <section className="mb-5">
-        <h2 className="font-bold text-base mb-3">スタッフ一覧</h2>
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">スタッフ一覧</h2>
         <div className="space-y-3">
           {staffList.map((s) => (
             <details key={s.id} className="card group">
               <summary className="flex items-center gap-2 cursor-pointer list-none">
                 <span className="font-bold flex-1">
                   {s.name}
-                  <span className="text-xs text-stone-400 ml-2">ID: {s.loginId}</span>
+                  <span className="text-xs text-ink-400 ml-2">ID: {s.loginId}</span>
                 </span>
                 {s.role === "admin" ? (
                   <StatusBadge label="管理者" tone="pending" />
@@ -176,7 +176,7 @@ export default async function AdminSettingsPage({
                 {!s.isActive && <StatusBadge label="無効" tone="danger" />}
                 <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
-              <form action={updateStaffAction} className="space-y-3 mt-4 pt-4 border-t border-stone-100">
+              <form action={updateStaffAction} className="space-y-3 mt-4 pt-4 border-t border-ink-100">
                 <input type="hidden" name="id" value={s.id} />
                 <div>
                   <label className="label">氏名</label>
@@ -235,7 +235,7 @@ export default async function AdminSettingsPage({
                     className="input min-h-16"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
                   <input
                     type="checkbox"
                     name="is_executive"
@@ -244,7 +244,7 @@ export default async function AdminSettingsPage({
                   />
                   幹部メンバー
                 </label>
-                <p className="text-xs text-stone-400 -mt-1">
+                <p className="text-xs text-ink-400 -mt-1">
                   ※ 職種を設定するとホームがENi向けメニューになります。ランクでアシスタント週報の内容が変わります。
                   幹部は欠勤・早退の閲覧、発注管理、ペア設定、日報/週報の閲覧・コメントができます。
                 </p>
@@ -252,7 +252,7 @@ export default async function AdminSettingsPage({
                   <label className="label">新しいパスワード（変更する場合のみ・8文字以上）</label>
                   <input name="new_password" type="password" autoComplete="new-password" className="input" />
                 </div>
-                <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+                <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
                   <input
                     type="checkbox"
                     name="is_active"
@@ -263,7 +263,7 @@ export default async function AdminSettingsPage({
                   有効（オフにするとログインできなくなります）
                 </label>
                 {s.id === session.staffId && (
-                  <p className="text-xs text-stone-400">※ 自分自身の権限・有効フラグは変更できません</p>
+                  <p className="text-xs text-ink-400">※ 自分自身の権限・有効フラグは変更できません</p>
                 )}
                 <button type="submit" className="btn-secondary w-full">この内容で更新</button>
               </form>
@@ -277,7 +277,7 @@ export default async function AdminSettingsPage({
                     このスタッフを削除する（元に戻せません）
                   </label>
                   <button type="submit" className="btn-danger w-full">スタッフを削除</button>
-                  <p className="text-[11px] text-stone-400">
+                  <p className="text-[11px] text-ink-400">
                     ※ 日報・打刻・シフト等の記録があるスタッフは削除できません。退職時は上の「有効」をオフ（記録は残ります）。
                   </p>
                 </form>
@@ -288,7 +288,7 @@ export default async function AdminSettingsPage({
       </section>
 
       <section className="card">
-        <h2 className="font-bold text-base mb-3">スタッフを追加</h2>
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">スタッフを追加</h2>
         <form action={createStaffAction} className="space-y-3">
           <div>
             <label className="label" htmlFor="new_name">氏名</label>
@@ -351,7 +351,7 @@ export default async function AdminSettingsPage({
               </select>
             </div>
             <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 text-sm font-bold text-stone-600">
+              <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
                 <input type="checkbox" name="is_executive" className="h-5 w-5 accent-brand-500" />
                 幹部メンバー
               </label>
@@ -362,11 +362,12 @@ export default async function AdminSettingsPage({
       </section>
 
       <section className="card mt-5">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">ロゴ画像の差し替え</h2>
-        <p className="text-xs text-stone-500">
-          ヘッダーのロゴは <code className="font-bold">public/logo.svg</code>{" "}
-          を差し替えるだけで反映されます（PNGの場合はファイル名を logo.svg のまま中身を置き換えるか、
-          src/components/app-header.tsx の参照先を変更）。正式ロゴの受領後に対応します。
+        <h2 className="section-title">ロゴ画像の差し替え</h2>
+        <p className="text-xs text-ink-500">
+          サイドバーのロゴは、ENiは <code className="font-bold">public/logo-eni.png</code>、EREYSは{" "}
+          <code className="font-bold">public/logo.png</code>{" "}
+          を置くだけで自動的に切り替わります（未設置のときは同名のSVGを表示します）。
+          参照先を変えたい場合は <code className="font-bold">src/lib/logo.ts</code> を編集してください。
         </p>
       </section>
     </div>

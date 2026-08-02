@@ -79,7 +79,7 @@ export default async function AdminSchedulePage({
       >
         <span>
           <span className="block font-bold">基本パターンの設定</span>
-          <span className="block text-xs text-stone-500 mt-0.5">
+          <span className="block text-xs text-ink-500 mt-0.5">
             スタッフごとに曜日別の出勤・時間を設定（例：フル出勤／平日のみ10:00-16:30）
           </span>
         </span>
@@ -88,7 +88,7 @@ export default async function AdminSchedulePage({
 
       {/* 希望休の提出状況（いま募集中＝3ヶ月後の月） */}
       <section className="card mb-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-1">
+        <h2 className="section-title !mb-1.5">
           希望休の提出状況（{formatMonthJa(dayoffTarget)}分・締切 {formatDateJa(dayoffDeadline(dayoffTarget))}）
         </h2>
         <p className="text-sm">
@@ -109,7 +109,7 @@ export default async function AdminSchedulePage({
       />
 
       <section className="card">
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="table-base">
             <thead>
               <tr>
@@ -142,7 +142,7 @@ export default async function AdminSchedulePage({
                               day.source === "override"
                                 ? "bg-amber-50 font-bold text-amber-800"
                                 : !day.working
-                                  ? "text-stone-300"
+                                  ? "text-ink-300"
                                   : ""
                             }`}
                           >
@@ -151,7 +151,7 @@ export default async function AdminSchedulePage({
                               <span className="text-[10px] text-brand-500 ml-0.5">希</span>
                             )}
                             {day.note && (
-                              <span className="block text-[10px] text-stone-400">{day.note}</span>
+                              <span className="block text-[10px] text-ink-400">{day.note}</span>
                             )}
                           </Link>
                         </td>
@@ -163,13 +163,13 @@ export default async function AdminSchedulePage({
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-stone-400 mt-2">
+        <p className="text-xs text-ink-400 mt-2">
           セルをタップすると個別調整（休み⇔出勤・時間変更）ができます ／ 「希」＝希望休、黄色＝個別調整済み
         </p>
       </section>
 
       <p className="mt-4 text-center">
-        <Link href="/admin/shift" className="text-xs font-bold text-stone-400 underline">
+        <Link href="/admin/shift" className="text-xs font-bold text-ink-400 underline">
           旧シフト機能（早番・遅番の自動割当）はこちら
         </Link>
       </p>

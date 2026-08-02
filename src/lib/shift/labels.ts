@@ -15,7 +15,7 @@ export const SHIFT_TYPE_LABEL: Record<ShiftType, string> = {
 
 /** カレンダーセル・バッジの配色（指定なし含む） */
 export const PREFERENCE_CLASS: Record<ShiftPreference | "none", string> = {
-  none: "bg-white text-stone-400 border-stone-200",
+  none: "bg-white text-ink-400 border-ink-200",
   early: "bg-sky-100 text-sky-700 border-sky-300",
   late: "bg-indigo-100 text-indigo-700 border-indigo-300",
   off: "bg-rose-100 text-rose-600 border-rose-300",

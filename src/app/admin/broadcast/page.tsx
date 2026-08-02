@@ -34,7 +34,7 @@ export default async function AdminBroadcastPage({
   const mockLogs = mock ? getMockSendLogs().slice(0, 5) : [];
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="一斉配信" backHref="/admin" />
 
       {flash.sent && (
@@ -65,7 +65,7 @@ export default async function AdminBroadcastPage({
       </div>
 
       <section className="card mb-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-3">メッセージを作成</h2>
+        <h2 className="section-title">メッセージを作成</h2>
         <form action={sendBroadcastAction} className="space-y-3">
           <textarea
             name="body"
@@ -75,7 +75,7 @@ export default async function AdminBroadcastPage({
             className="input min-h-32"
             required
           />
-          <label className="flex items-start gap-2 text-sm font-bold text-stone-600">
+          <label className="flex items-start gap-2 text-sm font-bold text-ink-600">
             <input type="checkbox" name="confirm" className="mt-0.5 h-5 w-5 accent-brand-500" />
             <span>
               {recipientCount}名のお客様に送信されることを確認しました（取り消しはできません）
@@ -88,14 +88,14 @@ export default async function AdminBroadcastPage({
       </section>
 
       <section className="mb-4">
-        <h2 className="font-bold text-sm text-stone-500 mb-2">送信履歴</h2>
+        <h2 className="section-title">送信履歴</h2>
         {broadcasts.length === 0 ? (
           <EmptyState message="送信履歴はまだありません" />
         ) : (
           <div className="space-y-3">
             {broadcasts.map((b) => (
               <div key={b.id} className="card">
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-ink-500">
                   {formatDateTimeJa(b.sentAt, true)} ／ {b.recipientCount}名 ／ 送信者：
                   {staffMap.get(b.sentBy)?.name ?? "（不明）"}
                 </p>
@@ -107,13 +107,13 @@ export default async function AdminBroadcastPage({
       </section>
 
       {mock && mockLogs.length > 0 && (
-        <section className="card !bg-stone-100">
-          <h2 className="font-bold text-xs text-stone-500 mb-2">
+        <section className="card !bg-ink-100">
+          <h2 className="font-bold text-xs text-ink-500 mb-2">
             モック送信ログ（直近5件・動作確認用）
           </h2>
-          <ul className="space-y-2 text-xs text-stone-600">
+          <ul className="space-y-2 text-xs text-ink-600">
             {mockLogs.map((log, i) => (
-              <li key={i} className="border-b border-stone-200 pb-1.5 last:border-0">
+              <li key={i} className="border-b border-ink-200 pb-1.5 last:border-0">
                 <span className="font-bold">[{log.type}]</span> → {log.to}（
                 {formatDateTimeJa(log.at)}）
                 <br />

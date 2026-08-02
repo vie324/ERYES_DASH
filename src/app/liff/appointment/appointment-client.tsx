@@ -173,7 +173,7 @@ export function AppointmentClient({
         )}
 
         {phase === "init" && (
-          <p className="card text-center text-sm font-bold text-stone-500 animate-pulse">
+          <p className="card text-center text-sm font-bold text-ink-500 animate-pulse">
             LINEと接続しています…
           </p>
         )}
@@ -195,17 +195,17 @@ export function AppointmentClient({
 
         {phase === "ready" && (
           <>
-            {fullName && <p className="text-sm font-bold text-stone-600">{fullName} 様のご予約</p>}
+            {fullName && <p className="text-sm font-bold text-ink-600">{fullName} 様のご予約</p>}
 
             {loading ? (
-              <p className="card text-center text-sm font-bold text-stone-500 animate-pulse">
+              <p className="card text-center text-sm font-bold text-ink-500 animate-pulse">
                 読み込み中…
               </p>
             ) : appointments.length === 0 ? (
               <div className="card text-center py-10 space-y-2">
                 <Icon name="calendar" className="w-10 h-10 mx-auto text-brand-300" />
-                <p className="text-sm font-bold text-stone-500">現在、今後のご予約はありません</p>
-                <p className="text-xs text-stone-400">
+                <p className="text-sm font-bold text-ink-500">現在、今後のご予約はありません</p>
+                <p className="text-xs text-ink-400">
                   ご予約はお電話またはホットペッパービューティーから承っております
                 </p>
               </div>
@@ -267,7 +267,7 @@ function AppointmentCard({
     <div className="card space-y-3">
       <div>
         <p className="font-display text-xl font-bold">{formatDateTimeJa(scheduled, true)}</p>
-        {a.staffName && <p className="text-sm text-stone-500 mt-0.5">担当：{a.staffName}</p>}
+        {a.staffName && <p className="text-sm text-ink-500 mt-0.5">担当：{a.staffName}</p>}
         <span
           className={`inline-block mt-2 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.cls}`}
         >
@@ -334,7 +334,7 @@ function AppointmentCard({
               >
                 この内容で変更を希望する
               </button>
-              <p className="text-[11px] text-stone-500">
+              <p className="text-[11px] text-ink-500">
                 ※空き状況をサロンで確認し、確定後にLINEでお知らせします
               </p>
             </div>

@@ -46,7 +46,7 @@ export default async function AdminReportEditPage({
           defaultValue={value}
           className="input pr-12 text-right text-lg font-bold"
         />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-stone-400 font-bold">
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-400 font-bold">
           {unit}
         </span>
       </div>
@@ -54,13 +54,13 @@ export default async function AdminReportEditPage({
   );
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="日報の修正" backHref={`/admin/reports?month=${backMonth}`} backLabel="成績・日報へ戻る" />
 
       <div className="card mb-4">
         <p className="font-bold text-lg">{staff?.name ?? "（不明なスタッフ）"}</p>
-        <p className="text-sm text-stone-500 mt-0.5">{formatDateJa(report.reportDate, true)} の日報</p>
-        <p className="text-xs text-stone-400 mt-1">
+        <p className="text-sm text-ink-500 mt-0.5">{formatDateJa(report.reportDate, true)} の日報</p>
+        <p className="text-xs text-ink-400 mt-1">
           ※ スタッフ・日付は変更できません。数値とメモのみ修正できます。
         </p>
       </div>
@@ -70,7 +70,7 @@ export default async function AdminReportEditPage({
         <input type="hidden" name="month" value={backMonth} />
 
         <div className="card">
-          <p className="font-bold text-sm text-stone-500 mb-3">お客様の人数</p>
+          <p className="section-title">お客様の人数</p>
           <div className="grid grid-cols-2 gap-3">
             {numberField("new_clients", "新規", report.newClients, "人")}
             {numberField("repeat_clients", "既存", report.repeatClients, "人")}
@@ -79,13 +79,13 @@ export default async function AdminReportEditPage({
         </div>
 
         <div className="card">
-          <p className="font-bold text-sm text-stone-500 mb-3">売上</p>
+          <p className="section-title">売上</p>
           <div className="grid grid-cols-1 gap-3">
             {numberField("service_sales", "技術売上", report.serviceSales, "円")}
             {numberField("option_sales", "オプション売上", report.optionSales, "円")}
             {numberField("retail_sales", "物販売上", report.retailSales, "円")}
           </div>
-          <p className="text-xs text-stone-500 mt-3">
+          <p className="text-xs text-ink-500 mt-3">
             現在の合計：
             {formatYen(report.serviceSales + report.optionSales + report.retailSales)}
           </p>
@@ -105,7 +105,7 @@ export default async function AdminReportEditPage({
         </div>
 
         <div className="card space-y-3">
-          <p className="font-bold text-sm text-stone-500">今日のふりかえり</p>
+          <p className="section-title !mb-0">今日のふりかえり</p>
           <div>
             <label className="label" htmlFor="good_point">
               今日お客様やスタッフに喜んでいただけたこと
@@ -153,7 +153,7 @@ export default async function AdminReportEditPage({
       <form action={deleteDailyReportAction} className="card mt-5 space-y-2 border-red-100">
         <input type="hidden" name="id" value={report.id} />
         <input type="hidden" name="month" value={backMonth} />
-        <p className="font-bold text-sm text-stone-500">この日報を削除</p>
+        <p className="section-title !mb-0">この日報を削除</p>
         <label className="flex items-center gap-2 text-xs font-bold text-red-600">
           <input type="checkbox" name="confirm" className="h-4 w-4 accent-red-500" required />
           削除すると元に戻せません（成績の集計からも除外されます）

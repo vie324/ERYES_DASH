@@ -27,7 +27,7 @@ export default async function AttendancePage() {
   const monthly = aggregateAttendance(monthPunches);
 
   return (
-    <div>
+    <div className="page-narrow">
       <PageHeader title="出勤・退勤の打刻" backHref="/staff" />
 
       {!attendanceAvailable ? (
@@ -37,16 +37,16 @@ export default async function AttendancePage() {
           <PunchPanel />
 
           <section className="card">
-            <h2 className="font-bold text-sm text-stone-500 mb-2">本日の打刻</h2>
+            <h2 className="section-title">本日の打刻</h2>
             {todayPunches.length === 0 ? (
-              <p className="text-sm text-stone-400">まだ打刻はありません</p>
+              <p className="text-sm text-ink-400">まだ打刻はありません</p>
             ) : (
-              <ul className="divide-y divide-stone-100">
+              <ul className="divide-y divide-ink-100">
                 {todayPunches.map((p) => (
                   <li key={p.id} className="py-2 flex items-center gap-3 text-sm">
                     <span className="font-bold w-12">{p.punchType === "in" ? "出勤" : "退勤"}</span>
                     <span className="font-bold text-lg">{formatTimeJa(p.punchedAt)}</span>
-                    <span className="text-stone-400 text-xs">店舗から{p.distanceM}m</span>
+                    <span className="text-ink-400 text-xs">店舗から{p.distanceM}m</span>
                     <span className="ml-auto">
                       {p.isValid ? (
                         <StatusBadge label="成立" tone="ok" />
@@ -61,12 +61,12 @@ export default async function AttendancePage() {
           </section>
 
           <section className="card">
-            <h2 className="font-bold text-sm text-stone-500 mb-2">今月の勤務（参考）</h2>
+            <h2 className="section-title">今月の勤務（参考）</h2>
             <p className="text-2xl font-bold">
               {formatMinutes(monthly.totalMinutes)}
-              <span className="text-sm text-stone-500 font-bold ml-2">／ {monthly.workDays}日出勤</span>
+              <span className="text-sm text-ink-500 font-bold ml-2">／ {monthly.workDays}日出勤</span>
             </p>
-            <p className="text-xs text-stone-400 mt-1">
+            <p className="text-xs text-ink-400 mt-1">
               ※ 勤怠の利用は任意です。打刻を忘れても業務には影響しません。
             </p>
           </section>

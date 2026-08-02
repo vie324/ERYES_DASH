@@ -36,7 +36,7 @@ export function DayoffCalendar({
       <input type="hidden" name="target_month" value={month} />
       <input type="hidden" name="dates" value={JSON.stringify([...selected].sort())} />
 
-      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-stone-500 mb-1">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-ink-500 mb-1">
         {["日", "月", "火", "水", "木", "金", "土"].map((w, i) => (
           <div key={w} className={i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : ""}>
             {w}
@@ -62,7 +62,7 @@ export function DayoffCalendar({
               className={`aspect-square rounded-xl border text-sm font-bold transition-colors ${
                 isSelected
                   ? "bg-brand-600 text-white border-brand-600 shadow-sm"
-                  : `bg-white border-stone-200 ${
+                  : `bg-white border-ink-200 ${
                       wd === 0 ? "text-red-400" : wd === 6 ? "text-blue-400" : "text-ink-700"
                     } ${editable ? "active:bg-brand-50" : "opacity-60"}`
               }`}
@@ -73,10 +73,10 @@ export function DayoffCalendar({
         })}
       </div>
 
-      <p className="text-sm font-bold text-stone-600 mt-3">
+      <p className="text-sm font-bold text-ink-600 mt-3">
         選択中：{selected.size}日
         {selected.size > 0 && (
-          <span className="block text-xs font-normal text-stone-500 mt-1">
+          <span className="block text-xs font-normal text-ink-500 mt-1">
             {[...selected]
               .sort()
               .map((d) => `${Number(d.slice(8))}日`)
