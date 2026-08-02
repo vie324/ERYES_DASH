@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="320" viewBox="0 0 440 320">
+  <!-- ENi ロゴ（スプラッシュ・ログイン用）。ワードマーク＋鏡面リフレクション＋サークルマーク（マークはEREYSと共通） -->
+  <g font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
+     font-size="104" font-weight="600" letter-spacing="10">
+    <text x="16" y="160" fill="#A99668">ENi</text>
+    <text x="16" y="-172" transform="scale(1,-1)" fill="#A99668" opacity="0.28">ENi</text>
+  </g>
+  <g fill="none" stroke="#A99668" stroke-width="2.4" stroke-linecap="round">
+    <circle cx="348" cy="160" r="62"/>
+    <line x1="282" y1="230" x2="388" y2="149"/>
+  </g>
+  <circle cx="388" cy="149" r="7" fill="#A99668"/>
+</svg>

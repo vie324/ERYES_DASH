@@ -3,17 +3,16 @@ import { requireSession } from "@/lib/auth/session";
 import { logoutAction } from "@/lib/auth/actions";
 import { isDemoMode } from "@/lib/data";
 import { getLogoFullSrc } from "@/lib/logo";
-import { BRAND_INFO, type Brand } from "@/lib/brand";
+import { BRAND_INFO, BRAND_ORDER } from "@/lib/brand";
 import { DemoBanner } from "@/components/ui";
 import { selectBrandAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-// ログイン後の業態選択：EREYS（アイサロン）か ENi（ヘアサロン）を選ぶ。
-// 選んだ業態に応じて、以降のメニュー（項目）が切り替わる。
+// ログイン後の業態選択：メインブランドの ENi（ヘアサロン）を先頭・大きく見せ、
+// EREYS（アイサロン）はその下に置く。選んだ業態に応じて以降のメニューが切り替わる。
 export default async function SelectBrandPage() {
   const session = await requireSession();
-  const brands: Brand[] = ["eyes", "eni"];
 
   return (
     <div className="min-h-dvh flex flex-col bg-brand-50">
@@ -21,7 +20,8 @@ export default async function SelectBrandPage() {
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-sm animate-fade-up">
           <div className="text-center mb-6">
-            <img src={getLogoFullSrc()} alt="EREYS" className="w-44 h-auto mx-auto" />
+            {/* メインブランド（ENi）のロゴ */}
+            <img src={getLogoFullSrc()} alt="ENi" className="w-40 h-auto mx-auto" />
             <p className="text-sm font-bold text-stone-600 mt-2">
               {session.name}さん、どちらで使いますか？
             </p>
@@ -29,24 +29,44 @@ export default async function SelectBrandPage() {
           </div>
 
           <div className="space-y-3">
-            {brands.map((b) => (
-              <form action={selectBrandAction} key={b}>
-                <input type="hidden" name="brand" value={b} />
-                <button
-                  type="submit"
-                  className="card w-full flex items-center gap-4 text-left transition-transform active:scale-[0.99]"
-                >
-                  <span className="w-14 h-14 shrink-0 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-100 to-brand-200 border border-brand-300 font-display text-2xl font-bold text-brand-700">
-                    {b === "eyes" ? "E" : "H"}
-                  </span>
-                  <span className="flex-1">
-                    <span className="block font-display text-xl font-bold">{BRAND_INFO[b].label}</span>
-                    <span className="block text-xs text-stone-500 mt-0.5">{BRAND_INFO[b].sub}</span>
-                  </span>
-                  <span className="text-brand-300 text-2xl shrink-0">›</span>
-                </button>
-              </form>
-            ))}
+            {BRAND_ORDER.map((b, i) => {
+              const isMain = i === 0; // ENi＝メインブランドは大きく・強調して見せる
+              return (
+                <form action={selectBrandAction} key={b}>
+                  <input type="hidden" name="brand" value={b} />
+                  <button
+                    type="submit"
+                    className={`card w-full flex items-center gap-4 text-left transition-transform active:scale-[0.99] ${
+                      isMain ? "!py-5 border-brand-400 !shadow-[0_8px_30px_rgba(93,80,58,0.14)]" : "!py-3.5"
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 flex items-center justify-center rounded-2xl font-display font-bold ${
+                        isMain
+                          ? "w-16 h-16 text-3xl bg-gradient-to-br from-brand-500 to-brand-700 text-white border border-brand-600"
+                          : "w-12 h-12 text-xl bg-gradient-to-br from-brand-100 to-brand-200 border border-brand-300 text-brand-700"
+                      }`}
+                    >
+                      {b === "eni" ? "N" : "E"}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className={`block font-display font-bold ${isMain ? "text-2xl" : "text-lg"}`}>
+                          {BRAND_INFO[b].label}
+                        </span>
+                        {isMain && (
+                          <span className="text-[10px] font-bold text-white bg-brand-600 rounded-full px-2 py-0.5">
+                            メイン
+                          </span>
+                        )}
+                      </span>
+                      <span className="block text-xs text-stone-500 mt-0.5">{BRAND_INFO[b].sub}</span>
+                    </span>
+                    <span className="text-brand-300 text-2xl shrink-0">›</span>
+                  </button>
+                </form>
+              );
+            })}
           </div>
 
           <form action={logoutAction} className="mt-6 text-center">

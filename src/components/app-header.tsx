@@ -1,9 +1,9 @@
-// 共通ヘッダー：左上にロゴ（public/logo.svg を差し替え可能）＋使い方＋ユーザー名＋ログアウト
+// 共通ヘッダー：左上にロゴ（選んでいる業態のロゴ。既定はメインブランドのENi）＋使い方＋ユーザー名＋ログアウト
 
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
-import { getLogoSrc } from "@/lib/logo";
+import { getBrandName, getLogoSrc } from "@/lib/logo";
 import { Icon } from "@/components/icons";
 import { BRAND_INFO, type Brand } from "@/lib/brand";
 import type { Session } from "@/lib/auth/session";
@@ -22,8 +22,8 @@ export function AppHeader({
     <header className="sticky top-0 z-10 bg-brand-50/85 backdrop-blur border-b border-brand-200/70 print:hidden">
       <div className="mx-auto max-w-3xl px-4 h-14 flex items-center justify-between gap-3">
         <Link href={homeHref} className="flex items-center gap-2.5 min-w-0">
-          {/* 正式ロゴ（public/logo.png）があれば自動で優先表示される（src/lib/logo.ts） */}
-          <img src={getLogoSrc()} alt="EREYS" className="h-9 w-auto" />
+          {/* 選択中の業態のロゴ（未選択はメインブランドのENi）。マークは共通で文字だけ変わる */}
+          <img src={getLogoSrc(brand)} alt={getBrandName(brand)} className="h-9 w-auto" />
           <span className="text-[10px] font-bold tracking-widest text-brand-600 border border-brand-300 rounded-full px-2 py-0.5 shrink-0">
             {session.role === "admin" ? "管理者" : "スタッフ"}
           </span>
