@@ -148,9 +148,11 @@ export default async function AbsencePage({
             required
           />
         </div>
-        <button type="submit" className="btn-primary w-full">
-          この内容で報告する
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full">
+            この内容で報告する
+          </button>
+        </div>
       </form>
 
       <MonthNav

@@ -160,7 +160,7 @@ async function EyesDashboard() {
 
       {/* 進捗（今日の提出・明日の予約） */}
       <ChartCard title="今日の状況">
-        <div className="flex items-center gap-5">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
           <ProgressRing
             value={todayReports.length}
             total={Math.max(activeStaff.length, 1)}
@@ -334,7 +334,7 @@ async function EniDashboard() {
 
       {/* 提出・実施の進捗 */}
       <ChartCard title="提出・実施の状況">
-        <div className="flex items-center gap-5">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
           <ProgressRing
             value={thisWeekReports.length}
             total={Math.max(assistants.length, 1)}

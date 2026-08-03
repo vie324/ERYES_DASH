@@ -158,9 +158,11 @@ export function ShiftRequestForm({
       </section>
 
       {editable && (
-        <button type="submit" className="btn-primary w-full text-lg">
-          この内容で提出する
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            この内容で提出する
+          </button>
+        </div>
       )}
     </form>
   );

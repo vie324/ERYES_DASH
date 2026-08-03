@@ -47,21 +47,30 @@ export default async function StaffHomePage() {
 
       <ShiftNoticeBanner staffId={session.staffId} />
 
-      {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
-      <Dashboard brand={brand} />
+      {/* スマホは「やること（メニュー）」を先に、グラフはその下に。
+          PCは画面が広いので、これまで通りグラフを上に置く。 */}
+      <div className="flex flex-col">
+        <section className="order-1 lg:order-2">
+          <h2 className="section-title lg:mt-6">メニュー</h2>
+          {brand === "eyes" ? (
+            <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />
+          ) : (
+            <EniMenu
+              staffId={session.staffId}
+              today={today}
+              jobType={jobType}
+              isExec={isExec}
+              shiftBadge={shiftBadge}
+            />
+          )}
+        </section>
 
-      <h2 className="section-title mt-6">メニュー</h2>
-      {brand === "eyes" ? (
-        <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />
-      ) : (
-        <EniMenu
-          staffId={session.staffId}
-          today={today}
-          jobType={jobType}
-          isExec={isExec}
-          shiftBadge={shiftBadge}
-        />
-      )}
+        {/* ダッシュボード：グラフで今の進捗をひと目で */}
+        <section className="order-2 lg:order-1 mt-7 lg:mt-0">
+          <h2 className="section-title lg:hidden">今の状況</h2>
+          <Dashboard brand={brand} />
+        </section>
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         <Link href="/staff/help" className="chip !py-2.5 !px-4">

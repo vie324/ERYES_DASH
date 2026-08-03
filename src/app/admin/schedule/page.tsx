@@ -18,7 +18,7 @@ import {
   formatWorkTime,
   resolveScheduleDay,
 } from "@/lib/schedule";
-import { MonthNav, PageHeader } from "@/components/ui";
+import { MonthNav, PageHeader, ScrollHint } from "@/components/ui";
 
 // 出勤スケジュール（管理者用）：基本パターン＋希望休から自動で組まれた表を確認し、
 // セルをタップして個別調整（休み⇔出勤・時間変更）できる。
@@ -163,6 +163,7 @@ export default async function AdminSchedulePage({
             </tbody>
           </table>
         </div>
+        <ScrollHint text="横にスクロールすると全員分が見られます" />
         <p className="text-xs text-ink-400 mt-2">
           セルをタップすると個別調整（休み⇔出勤・時間変更）ができます ／ 「希」＝希望休、黄色＝個別調整済み
         </p>

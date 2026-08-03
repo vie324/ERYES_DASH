@@ -114,9 +114,11 @@ export default async function MorningBoardPage({
           <p className="label !mb-2">スケジュール帳の写真（貼る場合）</p>
           <PhotoInput name="photo" initial={myPlan?.photo ?? ""} label="スケジュール帳を撮影・選択" />
         </div>
-        <button type="submit" className="btn-primary w-full">
-          {myPlan ? "上書き保存する" : "今日の予定を保存する"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full">
+            {myPlan ? "上書き保存する" : "今日の予定を保存する"}
+          </button>
+        </div>
       </form>
 
       {/* よくある項目（みんなで使う候補リスト） */}

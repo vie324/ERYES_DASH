@@ -176,6 +176,12 @@ body {
   background-attachment: fixed;
 }
 
+/* スマホ：タップ時の青いハイライトを消し、押した感じは各部品の active で出す */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
 /* キーボード操作時のフォーカスをブランド色で分かりやすく */
 :focus-visible {
   outline: 2px solid var(--color-brand-500);
@@ -308,15 +314,52 @@ body {
   .table-base tbody tr:last-child td {
     @apply border-b-0;
   }
-  /* 角丸の枠で表を包むときに使う */
+  /* 角丸の枠で表を包むときに使う。スマホでは右端をぼかして「横に続き」を伝える */
   .table-wrap {
-    @apply overflow-x-auto scroll-slim rounded-xl border border-brand-100;
+    @apply relative overflow-x-auto scroll-slim rounded-xl border border-brand-100;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    background:
+      linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left / 28px 100% no-repeat,
+      linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right / 28px 100% no-repeat,
+      radial-gradient(farthest-side at 0 50%, rgba(65, 56, 40, 0.14), transparent) left / 12px 100%
+        no-repeat,
+      radial-gradient(farthest-side at 100% 50%, rgba(65, 56, 40, 0.14), transparent) right / 12px
+        100% no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
+  /* 横に長い表は1列目（日付・名前）を固定。横スクロールしても「どの行か」を見失わない。
+     1列目の背景は行から受け継ぐので、当日や土日の色分けもそのまま残る。 */
+  .table-wrap .table-base tbody tr {
+    @apply bg-white hover:bg-brand-50/70;
+  }
+  .table-wrap .table-base th:first-child,
+  .table-wrap .table-base td:first-child {
+    @apply sticky left-0 z-10 border-r border-brand-100;
+    background-color: inherit;
+  }
+  .table-wrap .table-base th:first-child {
+    @apply bg-brand-50;
+  }
+  /* 「横にスクロールできます」の注記（スマホのみ） */
+  .scroll-hint {
+    @apply sm:hidden flex items-center gap-1 text-[11px] text-ink-400 mt-1.5;
+  }
+
+  /* 入力フォームの保存ボタン：スマホでは画面下に貼り付けて、どこからでも押せるようにする。
+     下部タブがある画面では、その高さ（--tabbar-h）だけ上に浮かせる。 */
+  .form-actions {
+    @apply sticky z-10 -mx-3 px-3 pt-3 pb-3
+      bg-gradient-to-t from-brand-50 via-brand-50/95 to-brand-50/70 backdrop-blur-sm
+      lg:static lg:mx-0 lg:px-0 lg:pt-0 lg:pb-0 lg:bg-none lg:backdrop-blur-none;
+    bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom));
   }
 
   /* ---- チップ（絞り込み・タブ）---- */
+  /* スマホでも押しやすいよう、高さは最低36pxを確保する */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3.5 py-1.5 text-xs font-bold text-ink-600
-      transition-all duration-200 hover:border-brand-400 hover:text-brand-800 hover:bg-brand-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full border border-brand-200 bg-white px-3.5 py-2 min-h-9 text-xs font-bold text-ink-600
+      transition-all duration-200 hover:border-brand-400 hover:text-brand-800 hover:bg-brand-50 active:bg-brand-100;
   }
   .chip-active {
     @apply border-brand-600 bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_2px_8px_rgba(148,129,90,0.3)]

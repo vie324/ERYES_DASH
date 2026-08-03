@@ -42,10 +42,17 @@ export default async function AdminHomePage() {
         <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
       </div>
 
-      {/* 上部ダッシュボード：グラフで今の進捗をひと目で */}
-      <Dashboard brand={brand} />
-
-      {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
+      {/* スマホは「アラート・数字・メニュー」を先に、グラフはその下に。
+          PCは画面が広いので、これまで通りグラフを上に置く。 */}
+      <div className="flex flex-col">
+        <div className="order-1 lg:order-2">
+          {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
+        </div>
+        <div className="order-2 lg:order-1 mt-7 lg:mt-0">
+          <h2 className="section-title lg:hidden">今の状況</h2>
+          <Dashboard brand={brand} />
+        </div>
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         <Link href="/admin/help" className="chip !py-2.5 !px-4">

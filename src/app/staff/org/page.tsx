@@ -278,7 +278,7 @@ export default async function OrgPage({
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="label !text-xs" htmlFor={`sort-${unit.unitKey}`}>並び順</label>
-                          <input id={`sort-${unit.unitKey}`} name="sort_order" type="number" defaultValue={unit.sortOrder} className="input !min-h-10 !py-2 text-sm" />
+                          <input id={`sort-${unit.unitKey}`} name="sort_order" type="number" inputMode="numeric" defaultValue={unit.sortOrder} className="input !min-h-10 !py-2 text-sm" />
                         </div>
                         <div>
                           <label className="label !text-xs" htmlFor={`color-${unit.unitKey}`}>色</label>

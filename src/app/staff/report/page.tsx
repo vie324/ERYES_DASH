@@ -162,9 +162,11 @@ export default async function ReportPage({
           </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full text-lg">
-          {existing ? "上書き保存する" : "日報を保存する"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            {existing ? "上書き保存する" : "日報を保存する"}
+          </button>
+        </div>
       </form>
 
       <p className="mt-5 text-center">

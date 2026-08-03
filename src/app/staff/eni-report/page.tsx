@@ -94,9 +94,11 @@ export default async function StylistReportPage({
         <EniFormFields items={STYLIST_REPORT_NUMBERS} answers={answers} />
         <EniFormFields items={STYLIST_REPORT_TEXTS} answers={answers} />
 
-        <button type="submit" className="btn-primary w-full text-lg">
-          {existing ? "上書き保存する" : "日報を保存する"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary w-full text-lg">
+            {existing ? "上書き保存する" : "日報を保存する"}
+          </button>
+        </div>
       </form>
 
       {recent.length > 0 && (

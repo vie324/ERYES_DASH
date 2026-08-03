@@ -9,6 +9,8 @@ import type { Brand } from "@/lib/brand";
 export type NavItem = {
   href: string;
   label: string;
+  /** スマホの下部タブ用の短い呼び名（未指定なら label をそのまま使う） */
+  short?: string;
   icon: IconName;
   /** サイドバーに出す件数バッジ（0・nullなら出さない） */
   badge?: number | string | null;
@@ -70,6 +72,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
           {
             href: "/staff/counseling",
             label: "本日のカウンセリング",
+            short: "カウンセ",
             icon: "clipboard",
             badge: badge(b.counseling),
           },
@@ -79,7 +82,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
       {
         label: "記録・成績",
         items: [
-          { href: "/staff/report", label: "日報を入力", icon: "pencil", badge: b.report ? "！" : null },
+          { href: "/staff/report", label: "日報を入力", short: "日報", icon: "pencil", badge: b.report ? "！" : null },
           { href: "/staff/reports", label: "過去の日報", icon: "book" },
           { href: "/staff/cash", label: "レジ締め・現金管理", icon: "banknote" },
           { href: "/staff/stats", label: "自分の成績", icon: "trendingUp" },
@@ -88,9 +91,9 @@ function staffNav(ctx: NavContext): NavGroup[] {
       {
         label: "勤務",
         items: [
-          { href: "/staff/schedule", label: "出勤スケジュール", icon: "calendar", badge: b.shift ? "！" : null },
+          { href: "/staff/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
           ...(ctx.attendanceEnabled
-            ? [{ href: "/staff/attendance", label: "出勤・退勤の打刻", icon: "mapPin" as IconName }]
+            ? [{ href: "/staff/attendance", label: "出勤・退勤の打刻", short: "打刻", icon: "mapPin" as IconName }]
             : []),
         ],
       },
@@ -111,6 +114,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
               {
                 href: "/staff/eni-report",
                 label: "日報を入力",
+                short: "日報",
                 icon: "pencil" as IconName,
                 badge: b.eniReport ? "！" : null,
               },
@@ -121,14 +125,15 @@ function staffNav(ctx: NavContext): NavGroup[] {
               {
                 href: "/staff/weekly-report",
                 label: "週報を入力",
+                short: "週報",
                 icon: "pencil" as IconName,
                 badge: b.weeklyReport ? "！" : null,
               },
             ]
           : []),
-        { href: "/staff/morning", label: "今日のスケジュール", icon: "clock", badge: b.plan ? "！" : null },
+        { href: "/staff/morning", label: "今日のスケジュール", short: "今日の予定", icon: "clock", badge: b.plan ? "！" : null },
         { href: "/staff/ideal", label: "理想のスケジュール", icon: "sparkles" },
-        { href: "/staff/eni-reports", label: "日報・週報を見る", icon: "fileText" },
+        { href: "/staff/eni-reports", label: "日報・週報を見る", short: "日報週報", icon: "fileText" },
       ],
     },
     {
@@ -137,6 +142,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",
+          short: "議事録",
           icon: "users",
           badge: badge(b.minutes),
         },
@@ -150,7 +156,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
     {
       label: "勤務・申請",
       items: [
-        { href: "/staff/schedule", label: "出勤スケジュール", icon: "calendar", badge: b.shift ? "！" : null },
+        { href: "/staff/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
         { href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" },
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote" },
       ],
@@ -181,7 +187,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       {
         label: "成績・売上",
         items: [
-          { href: "/admin/reports", label: "成績・日報", icon: "barChart" },
+          { href: "/admin/reports", label: "成績・日報", short: "成績", icon: "barChart" },
           { href: "/admin/csv", label: "売上CSV出力", icon: "fileText" },
         ],
       },
@@ -191,6 +197,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
           {
             href: "/admin/counseling",
             label: "カウンセリング",
+            short: "カウンセ",
             icon: "clipboard",
             badge: badge(b.counseling),
           },
@@ -207,7 +214,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       {
         label: "勤務",
         items: [
-          { href: "/admin/schedule", label: "出勤スケジュール", icon: "calendar" },
+          { href: "/admin/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar" },
           ...(ctx.attendanceEnabled
             ? [{ href: "/admin/attendance", label: "勤怠管理", icon: "clock" as IconName }]
             : []),
@@ -223,7 +230,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
     {
       label: "記録・育成",
       items: [
-        { href: "/staff/eni-reports", label: "日報・週報を見る", icon: "fileText" },
+        { href: "/staff/eni-reports", label: "日報・週報を見る", short: "日報週報", icon: "fileText" },
         { href: "/staff/practice", label: "練習ペアの設定", icon: "sparkles" },
       ],
     },
@@ -233,6 +240,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",
+          short: "議事録",
           icon: "users",
           badge: badge(b.minutes),
         },
@@ -243,13 +251,35 @@ function adminNav(ctx: NavContext): NavGroup[] {
     {
       label: "勤務・申請",
       items: [
-        { href: "/admin/schedule", label: "出勤スケジュール", icon: "calendar" },
+        { href: "/admin/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar" },
         { href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" },
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote", badge: badge(b.orders) },
       ],
     },
     support,
   ]);
+}
+
+/**
+ * スマホの下部タブ（親指で届く位置）に置く3つ。
+ * 「ホーム」と「メニュー」は画面側で足すので、ここには“よく使う操作”だけを返す。
+ * 並び順は、現場で1日に触る回数が多い順。
+ */
+export function buildMobileTabs(ctx: NavContext): NavItem[] {
+  const groups = buildNav(ctx);
+  const all = groups.flatMap((g) => g.items);
+  const pick = (href: string) => all.find((i) => i.href === href);
+
+  const wanted =
+    ctx.role === "admin"
+      ? ctx.brand === "eyes"
+        ? ["/admin/reports", "/admin/counseling", "/admin/schedule"]
+        : ["/staff/eni-reports", "/staff/meetings", "/admin/schedule"]
+      : ctx.brand === "eyes"
+        ? ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"]
+        : ["/staff/eni-report", "/staff/weekly-report", "/staff/morning", "/staff/schedule"];
+
+  return wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3);
 }
 
 /** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致） */
