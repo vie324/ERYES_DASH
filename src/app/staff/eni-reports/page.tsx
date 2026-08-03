@@ -145,11 +145,15 @@ export default async function EniReportsViewPage({
   );
 }
 
-/** スタイリスト日報の表示（稼働率・施術時間±＋数字＋テキスト） */
+/** スタイリスト日報の表示（時間のまとめ＋数字＋テキスト） */
 function StylistView({ answers }: { answers: Record<string, unknown> }) {
-  const util = typeof answers.utilization === "number" ? answers.utilization : null;
-  const diff = typeof answers.time_diff === "number" ? answers.time_diff : null;
-  const clients = typeof answers.client_count === "number" ? answers.client_count : null;
+  const numAnswer = (key: string): number | null =>
+    typeof answers[key] === "number" && Number.isFinite(answers[key]) ? (answers[key] as number) : null;
+  const util = numAnswer("utilization");
+  const diff = numAnswer("time_diff");
+  const clients = numAnswer("client_count");
+  const early = numAnswer("minutes_early");
+  const over = numAnswer("minutes_over");
 
   return (
     <div className="space-y-2">
@@ -166,6 +170,12 @@ function StylistView({ answers }: { answers: Record<string, unknown> }) {
             <span className={`font-bold ${diff > 0 ? "text-red-500" : diff < 0 ? "text-emerald-600" : ""}`}>
               {diff > 0 ? `+${diff}` : diff}分
             </span>
+          </span>
+        )}
+        {(early !== null || over !== null) && (early ?? 0) + (over ?? 0) > 0 && (
+          <span className="text-xs text-ink-500">
+            （早く終わり <span className="font-bold text-emerald-700">{early ?? 0}分</span> ／ オーバー{" "}
+            <span className="font-bold text-red-500">{over ?? 0}分</span>）
           </span>
         )}
         {STYLIST_REPORT_NUMBERS.map((item) => (

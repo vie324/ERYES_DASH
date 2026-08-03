@@ -319,24 +319,41 @@ export function formatEniAnswer(item: EniFormItem, value: unknown): string {
   return String(value);
 }
 
-// ---- スタイリスト日報の稼働率・施術時間の自動計算 ----
+// ---- スタイリスト日報の時間まとめ ----
+// お客様1人ずつの±を書くのは手間なので、その日の合計（早く終わった／オーバー）を本人が記入する。
+// 稼働率は「施術時間の合計」を入れたときだけ出す（任意項目）。
 
-export interface ClientEntry {
-  booked: number; // 予約（約束）時間・分
-  actual: number; // 実際の施術時間・分
+export interface StylistTimeInput {
+  /** 今日の客数（人） */
+  clientCount: number;
+  /** 予定より早く終わった時間の合計（分） */
+  minutesEarly: number;
+  /** 予定をオーバーした時間の合計（分） */
+  minutesOver: number;
+  /** 今日の勤務時間（分）。シフトから自動で入る */
+  workMinutes: number;
+  /** 施術時間の合計（分）。任意。入れると稼働率を計算する */
+  serviceMinutes: number;
 }
 
 export interface StylistCalc {
-  clientCount: number;
-  utilization: number; // 稼働率（%）
-  timeDiff: number; // 施術時間の合計（実 − 予約）分。マイナスなら早い
+  /** 施術時間の合計±（分）。＋はオーバー、−は早く終わった */
+  timeDiff: number;
+  /** 稼働率（%）。施術時間の合計が未入力なら null */
+  utilization: number | null;
 }
 
-/** 稼働率＝各予約の前後30分（受付/仕上げ/お会計＝アシスタント対応分）を除いた拘束時間 ÷ 勤務時間 */
-export function computeStylistCalc(entries: ClientEntry[], workMinutes: number): StylistCalc {
-  const valid = entries.filter((e) => e.booked > 0 || e.actual > 0);
-  const busy = valid.reduce((sum, e) => sum + Math.max(0, e.booked - 60), 0);
-  const utilization = workMinutes > 0 ? Math.round((busy / workMinutes) * 1000) / 10 : 0;
-  const timeDiff = valid.reduce((sum, e) => sum + (e.actual - e.booked), 0);
-  return { clientCount: valid.length, utilization, timeDiff };
+/**
+ * 施術時間の合計± ＝ オーバー − 早く終わった
+ * 稼働率 ＝（施術時間の合計 − 客数×60分）÷ 勤務時間
+ *   ※ 1人あたり前後30分（受付・仕上げ・お会計＝アシスタント対応分）を除く、という従来の考え方
+ */
+export function computeStylistCalc(input: StylistTimeInput): StylistCalc {
+  const timeDiff = input.minutesOver - input.minutesEarly;
+  const busy = Math.max(0, input.serviceMinutes - input.clientCount * 60);
+  const utilization =
+    input.serviceMinutes > 0 && input.workMinutes > 0
+      ? Math.round((busy / input.workMinutes) * 1000) / 10
+      : null;
+  return { timeDiff, utilization };
 }

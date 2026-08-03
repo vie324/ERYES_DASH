@@ -1,11 +1,11 @@
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { addDays, formatDateJa, todayJst, weekdayOf } from "@/lib/date";
-import { STYLIST_REPORT_NUMBERS, STYLIST_REPORT_TEXTS, type ClientEntry } from "@/lib/eni/forms";
+import { STYLIST_REPORT_NUMBERS, STYLIST_REPORT_TEXTS } from "@/lib/eni/forms";
 import { resolveScheduleDay } from "@/lib/schedule";
 import { EniFormFields } from "@/components/eni-form-fields";
 import { PageHeader } from "@/components/ui";
-import { StylistClients } from "./stylist-clients";
+import { StylistTimeSummary } from "./stylist-time";
 import { saveStylistReportAction } from "./actions";
 
 function minutesFromTimes(start: string, end: string): number {
@@ -42,8 +42,8 @@ export default async function StylistReportPage({
   const defaultWorkMinutes = sched.working ? minutesFromTimes(sched.startTime, sched.endTime) : 0;
 
   const answers = existing?.answers ?? {};
-  const initialClients = Array.isArray(answers.clients) ? (answers.clients as ClientEntry[]) : [];
-  const initialWorkMinutes = typeof answers.work_minutes === "number" ? answers.work_minutes : 0;
+  const numAnswer = (key: string): number =>
+    typeof answers[key] === "number" && Number.isFinite(answers[key]) ? (answers[key] as number) : 0;
 
   return (
     <div className="page-narrow">
@@ -85,9 +85,12 @@ export default async function StylistReportPage({
           )}
         </div>
 
-        <StylistClients
-          initialClients={initialClients}
-          initialWorkMinutes={initialWorkMinutes}
+        <StylistTimeSummary
+          initialClientCount={numAnswer("client_count")}
+          initialMinutesEarly={numAnswer("minutes_early")}
+          initialMinutesOver={numAnswer("minutes_over")}
+          initialWorkMinutes={numAnswer("work_minutes")}
+          initialServiceMinutes={numAnswer("service_minutes")}
           defaultWorkMinutes={defaultWorkMinutes}
         />
 
