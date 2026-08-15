@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateTimeJa } from "@/lib/date";
 import { CounselingStatusBadge, riskFlags } from "@/components/counseling-detail";
+import { CounselingInviteCard } from "@/components/counseling-invite";
 import { CounselingUrlCard } from "@/components/counseling-url-card";
 import { EmptyState, PageHeader } from "@/components/ui";
 
@@ -16,7 +17,12 @@ const FILTERS = [
 export default async function AdminCounselingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; confirmed?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    confirmed?: string;
+    invite?: string;
+    invite_error?: string;
+  }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
@@ -37,6 +43,13 @@ export default async function AdminCounselingPage({
       <PageHeader title="カウンセリング" backHref="/admin" />
 
       <CounselingUrlCard />
+
+      {/* 来店前カウンセリングのSMS送付 */}
+      <CounselingInviteCard
+        back="/admin/counseling"
+        highlightId={params.invite}
+        error={params.invite_error}
+      />
 
       {params.confirmed && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">

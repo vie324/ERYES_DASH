@@ -2,6 +2,7 @@
 // すべてサーバー側からサービスロールで接続する（認証は自前のセッションCookieで行うため、
 // RLSは全テーブル「拒否」のままでよい。詳細は supabase/schema.sql を参照）。
 
+import { randomBytes } from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
@@ -14,6 +15,11 @@ import type {
   Broadcast,
   CashReport,
   CashReportInput,
+  ChatMember,
+  ChatMessage,
+  ChatReaction,
+  ChatRoom,
+  CounselingInvite,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -24,6 +30,7 @@ import type {
   DataStore,
   DayoffRequest,
   EniReport,
+  ExecNoticeCheck,
   IdealSchedule,
   Meeting,
   MeetingTask,
@@ -45,8 +52,14 @@ import type {
   ShiftRules,
   Staff,
   StaffInput,
+  StaffTask,
   StaffWithSecret,
   Store,
+  TaskCompletion,
+  TaskKind,
+  ThanksComment,
+  ThanksLike,
+  ThanksPost,
   WorkPatternDay,
 } from "@/lib/data/types";
 
@@ -92,6 +105,18 @@ const mapCounseling = (r: Row): CounselingResponse => ({
   submittedAt: new Date(r.submitted_at),
   confirmedBy: r.confirmed_by,
   confirmedAt: r.confirmed_at ? new Date(r.confirmed_at) : null,
+});
+
+const mapCounselingInvite = (r: Row): CounselingInvite => ({
+  id: r.id,
+  token: r.token,
+  customerName: r.customer_name ?? "",
+  phone: r.phone ?? "",
+  customerId: r.customer_id ?? null,
+  responseId: r.response_id ?? null,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+  answeredAt: r.answered_at ? new Date(r.answered_at) : null,
 });
 
 const mapReport = (r: Row): DailyReport => ({
@@ -280,9 +305,93 @@ const mapOrderRequest = (r: Row): OrderRequest => ({
   itemName: r.item_name,
   quantity: r.quantity,
   note: r.note ?? "",
+  supplierUrl: r.supplier_url ?? "",
   status: r.status,
   createdAt: new Date(r.created_at),
   updatedAt: new Date(r.updated_at),
+});
+
+const mapStaffTask = (r: Row): StaffTask => ({
+  id: r.id,
+  kind: r.kind,
+  title: r.title,
+  note: r.note ?? "",
+  assigneeStaffId: r.assignee_staff_id,
+  createdBy: r.created_by,
+  dueDate: r.due_date ?? "",
+  repeat: r.repeat_rule ?? "",
+  repeatDays: Array.isArray(r.repeat_days) ? r.repeat_days.map(Number) : [],
+  status: r.status,
+  doneAt: r.done_at ? new Date(r.done_at) : null,
+  createdAt: new Date(r.created_at),
+  updatedAt: new Date(r.updated_at),
+});
+
+const mapTaskCompletion = (r: Row): TaskCompletion => ({
+  id: r.id,
+  taskId: r.task_id,
+  date: r.date,
+  doneBy: r.done_by,
+  doneAt: new Date(r.done_at),
+});
+
+const mapExecNoticeCheck = (r: Row): ExecNoticeCheck => ({
+  id: r.id,
+  reportId: r.report_id,
+  checkedBy: r.checked_by,
+  checkedAt: new Date(r.checked_at),
+});
+
+const mapChatRoom = (r: Row): ChatRoom => ({
+  id: r.id,
+  name: r.name ?? "",
+  isGroup: r.is_group ?? false,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+});
+
+const mapChatMember = (r: Row): ChatMember => ({
+  roomId: r.room_id,
+  staffId: r.staff_id,
+  lastReadAt: new Date(r.last_read_at),
+});
+
+const mapChatMessage = (r: Row): ChatMessage => ({
+  id: r.id,
+  roomId: r.room_id,
+  senderId: r.sender_id,
+  body: r.body ?? "",
+  image: r.image ?? "",
+  deleted: r.deleted ?? false,
+  createdAt: new Date(r.created_at),
+});
+
+const mapChatReaction = (r: Row): ChatReaction => ({
+  messageId: r.message_id,
+  staffId: r.staff_id,
+  emoji: r.emoji,
+});
+
+const mapThanksPost = (r: Row): ThanksPost => ({
+  id: r.id,
+  fromStaffId: r.from_staff_id,
+  toStaffId: r.to_staff_id,
+  body: r.body,
+  cardColor: r.card_color ?? "gold",
+  createdAt: new Date(r.created_at),
+});
+
+const mapThanksLike = (r: Row): ThanksLike => ({
+  postId: r.post_id,
+  staffId: r.staff_id,
+});
+
+const mapThanksComment = (r: Row): ThanksComment => ({
+  id: r.id,
+  postId: r.post_id,
+  staffId: r.staff_id,
+  body: r.body,
+  createdAt: new Date(r.created_at),
 });
 
 const EMPTY_PLAN_FIELDS = { goal: "", horenso: "", todo: "", timetable: "" };
@@ -1637,6 +1746,7 @@ class SupabaseStore implements DataStore {
         item_name: input.itemName,
         quantity: input.quantity,
         note: input.note,
+        supplier_url: input.supplierUrl,
       })
       .select()
       .single();
@@ -1751,6 +1861,441 @@ class SupabaseStore implements DataStore {
   async deleteSchedulePreset(id: string): Promise<void> {
     const { error } = await this.sb.from("schedule_presets").delete().eq("id", id);
     if (error) throw new Error(`[supabase] 項目削除: ${error.message}`);
+  }
+
+  // ---- 来店前カウンセリングの案内（SMSでURL送付） ----
+
+  async createCounselingInvite(input: {
+    customerName: string;
+    phone: string;
+    createdBy: string;
+  }): Promise<CounselingInvite> {
+    const { data, error } = await this.sb
+      .from("counseling_invites")
+      .insert({
+        token: randomBytes(18).toString("base64url"),
+        customer_name: input.customerName,
+        phone: input.phone,
+        created_by: input.createdBy,
+      })
+      .select()
+      .single();
+    return mapCounselingInvite(must(data, error, "カウンセリング案内の発行"));
+  }
+
+  async getCounselingInviteByToken(token: string): Promise<CounselingInvite | null> {
+    const { data } = await this.sb
+      .from("counseling_invites")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+    return data ? mapCounselingInvite(data) : null;
+  }
+
+  async listCounselingInvites(limit = 30): Promise<CounselingInvite[]> {
+    const { data, error } = await this.sb
+      .from("counseling_invites")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return must(data, error, "カウンセリング案内一覧").map(mapCounselingInvite);
+  }
+
+  async markCounselingInviteAnswered(
+    id: string,
+    customerId: string,
+    responseId: string
+  ): Promise<void> {
+    const { error } = await this.sb
+      .from("counseling_invites")
+      .update({
+        customer_id: customerId,
+        response_id: responseId,
+        answered_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] カウンセリング案内更新: ${error.message}`);
+  }
+
+  async deleteCounselingInvite(id: string): Promise<void> {
+    const { error } = await this.sb.from("counseling_invites").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] カウンセリング案内削除: ${error.message}`);
+  }
+
+  // ---- タスク管理（ルーティン／依頼／幹部タスク） ----
+
+  async createStaffTask(
+    input: Omit<StaffTask, "id" | "doneAt" | "createdAt" | "updatedAt">
+  ): Promise<StaffTask> {
+    const { data, error } = await this.sb
+      .from("staff_tasks")
+      .insert({
+        kind: input.kind,
+        title: input.title,
+        note: input.note,
+        assignee_staff_id: input.assigneeStaffId,
+        created_by: input.createdBy,
+        due_date: input.dueDate || null,
+        repeat_rule: input.repeat,
+        repeat_days: input.repeatDays,
+        status: input.status,
+      })
+      .select()
+      .single();
+    return mapStaffTask(must(data, error, "タスク作成"));
+  }
+
+  async getStaffTask(id: string): Promise<StaffTask | null> {
+    const { data } = await this.sb.from("staff_tasks").select("*").eq("id", id).maybeSingle();
+    return data ? mapStaffTask(data) : null;
+  }
+
+  async listStaffTasks(filter?: {
+    kind?: TaskKind;
+    assigneeStaffId?: string;
+    createdBy?: string;
+    includeDone?: boolean;
+  }): Promise<StaffTask[]> {
+    let query = this.sb
+      .from("staff_tasks")
+      .select("*")
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at");
+    if (filter?.kind) query = query.eq("kind", filter.kind);
+    if (filter?.assigneeStaffId) query = query.eq("assignee_staff_id", filter.assigneeStaffId);
+    if (filter?.createdBy) query = query.eq("created_by", filter.createdBy);
+    if (!filter?.includeDone) query = query.neq("status", "done");
+    const { data, error } = await query;
+    return must(data, error, "タスク一覧").map(mapStaffTask);
+  }
+
+  async updateStaffTask(
+    id: string,
+    patch: Partial<
+      Pick<StaffTask, "title" | "note" | "assigneeStaffId" | "dueDate" | "repeat" | "repeatDays" | "status">
+    >
+  ): Promise<void> {
+    const row: Row = { updated_at: new Date().toISOString() };
+    if (patch.title !== undefined) row.title = patch.title;
+    if (patch.note !== undefined) row.note = patch.note;
+    if (patch.assigneeStaffId !== undefined) row.assignee_staff_id = patch.assigneeStaffId;
+    if (patch.dueDate !== undefined) row.due_date = patch.dueDate || null;
+    if (patch.repeat !== undefined) row.repeat_rule = patch.repeat;
+    if (patch.repeatDays !== undefined) row.repeat_days = patch.repeatDays;
+    if (patch.status !== undefined) {
+      row.status = patch.status;
+      row.done_at = patch.status === "done" ? new Date().toISOString() : null;
+    }
+    const { error } = await this.sb.from("staff_tasks").update(row).eq("id", id);
+    if (error) throw new Error(`[supabase] タスク更新: ${error.message}`);
+  }
+
+  async deleteStaffTask(id: string): Promise<void> {
+    const { error } = await this.sb.from("staff_tasks").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] タスク削除: ${error.message}`);
+  }
+
+  async setTaskCompletion(taskId: string, date: string, staffId: string, done: boolean): Promise<void> {
+    if (done) {
+      const { error } = await this.sb
+        .from("task_completions")
+        .upsert(
+          { task_id: taskId, date, done_by: staffId, done_at: new Date().toISOString() },
+          { onConflict: "task_id,date" }
+        );
+      if (error) throw new Error(`[supabase] タスク完了記録: ${error.message}`);
+    } else {
+      const { error } = await this.sb
+        .from("task_completions")
+        .delete()
+        .eq("task_id", taskId)
+        .eq("date", date);
+      if (error) throw new Error(`[supabase] タスク完了取消: ${error.message}`);
+    }
+  }
+
+  async listTaskCompletions(filter: {
+    from: string;
+    to: string;
+    taskIds?: string[];
+  }): Promise<TaskCompletion[]> {
+    if (filter.taskIds && filter.taskIds.length === 0) return [];
+    let query = this.sb
+      .from("task_completions")
+      .select("*")
+      .gte("date", filter.from)
+      .lte("date", filter.to);
+    if (filter.taskIds) query = query.in("task_id", filter.taskIds);
+    const { data, error } = await query;
+    return must(data, error, "タスク完了一覧").map(mapTaskCompletion);
+  }
+
+  // ---- 幹部：日報の気づき確認 ----
+
+  async listExecNoticeChecks(reportIds: string[]): Promise<ExecNoticeCheck[]> {
+    if (reportIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("exec_notice_checks")
+      .select("*")
+      .in("report_id", reportIds);
+    return must(data, error, "気づき確認一覧").map(mapExecNoticeCheck);
+  }
+
+  async setExecNoticeChecked(reportId: string, staffId: string, checked: boolean): Promise<void> {
+    if (checked) {
+      const { error } = await this.sb
+        .from("exec_notice_checks")
+        .upsert(
+          { report_id: reportId, checked_by: staffId, checked_at: new Date().toISOString() },
+          { onConflict: "report_id" }
+        );
+      if (error) throw new Error(`[supabase] 気づき確認: ${error.message}`);
+    } else {
+      const { error } = await this.sb
+        .from("exec_notice_checks")
+        .delete()
+        .eq("report_id", reportId);
+      if (error) throw new Error(`[supabase] 気づき確認取消: ${error.message}`);
+    }
+  }
+
+  // ---- 社内チャット ----
+
+  async listChatRooms(staffId: string): Promise<ChatRoom[]> {
+    const { data: memberRows, error: memberError } = await this.sb
+      .from("chat_members")
+      .select("room_id")
+      .eq("staff_id", staffId);
+    const roomIds = must(memberRows, memberError, "チャット参加一覧").map((r: Row) => r.room_id);
+    if (roomIds.length === 0) return [];
+    const { data, error } = await this.sb.from("chat_rooms").select("*").in("id", roomIds);
+    return must(data, error, "チャットルーム一覧").map(mapChatRoom);
+  }
+
+  async getChatRoom(roomId: string): Promise<ChatRoom | null> {
+    const { data } = await this.sb.from("chat_rooms").select("*").eq("id", roomId).maybeSingle();
+    return data ? mapChatRoom(data) : null;
+  }
+
+  async listChatMembers(roomIds: string[]): Promise<ChatMember[]> {
+    if (roomIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("chat_members")
+      .select("*")
+      .in("room_id", roomIds);
+    return must(data, error, "チャットメンバー一覧").map(mapChatMember);
+  }
+
+  async getOrCreateDmRoom(staffA: string, staffB: string): Promise<ChatRoom> {
+    const dmKey = `dm:${[staffA, staffB].sort().join(":")}`;
+    const { data: existing } = await this.sb
+      .from("chat_rooms")
+      .select("*")
+      .eq("dm_key", dmKey)
+      .maybeSingle();
+    if (existing) return mapChatRoom(existing);
+
+    const { data, error } = await this.sb
+      .from("chat_rooms")
+      .insert({ name: "", is_group: false, dm_key: dmKey, created_by: staffA })
+      .select()
+      .single();
+    const room = mapChatRoom(must(data, error, "DM作成"));
+    const { error: memberError } = await this.sb.from("chat_members").insert(
+      [staffA, staffB].map((id) => ({ room_id: room.id, staff_id: id }))
+    );
+    if (memberError) throw new Error(`[supabase] DMメンバー登録: ${memberError.message}`);
+    return room;
+  }
+
+  async createGroupRoom(name: string, createdBy: string, memberIds: string[]): Promise<ChatRoom> {
+    const { data, error } = await this.sb
+      .from("chat_rooms")
+      .insert({ name, is_group: true, dm_key: "", created_by: createdBy })
+      .select()
+      .single();
+    const room = mapChatRoom(must(data, error, "グループ作成"));
+    const ids = [...new Set([createdBy, ...memberIds])];
+    const { error: memberError } = await this.sb.from("chat_members").insert(
+      ids.map((id) => ({ room_id: room.id, staff_id: id }))
+    );
+    if (memberError) throw new Error(`[supabase] グループメンバー登録: ${memberError.message}`);
+    return room;
+  }
+
+  async listChatMessages(roomId: string, limit = 100): Promise<ChatMessage[]> {
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return must(data, error, "メッセージ一覧").map(mapChatMessage).reverse();
+  }
+
+  async listChatMessagesForRooms(roomIds: string[], limit = 300): Promise<ChatMessage[]> {
+    if (roomIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("*")
+      .in("room_id", roomIds)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return must(data, error, "メッセージ一覧").map(mapChatMessage);
+  }
+
+  async createChatMessage(input: {
+    roomId: string;
+    senderId: string;
+    body: string;
+    image: string;
+  }): Promise<ChatMessage> {
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .insert({
+        room_id: input.roomId,
+        sender_id: input.senderId,
+        body: input.body,
+        image: input.image,
+      })
+      .select()
+      .single();
+    const message = mapChatMessage(must(data, error, "メッセージ送信"));
+    await this.markChatRead(input.roomId, input.senderId);
+    return message;
+  }
+
+  async deleteChatMessage(id: string, staffId: string): Promise<void> {
+    const { error } = await this.sb
+      .from("chat_messages")
+      .update({ deleted: true, body: "", image: "" })
+      .eq("id", id)
+      .eq("sender_id", staffId);
+    if (error) throw new Error(`[supabase] メッセージ取消: ${error.message}`);
+  }
+
+  async markChatRead(roomId: string, staffId: string): Promise<void> {
+    const { error } = await this.sb
+      .from("chat_members")
+      .update({ last_read_at: new Date().toISOString() })
+      .eq("room_id", roomId)
+      .eq("staff_id", staffId);
+    if (error) throw new Error(`[supabase] 既読更新: ${error.message}`);
+  }
+
+  async toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void> {
+    const { data } = await this.sb
+      .from("chat_reactions")
+      .select("message_id")
+      .eq("message_id", messageId)
+      .eq("staff_id", staffId)
+      .eq("emoji", emoji)
+      .maybeSingle();
+    if (data) {
+      const { error } = await this.sb
+        .from("chat_reactions")
+        .delete()
+        .eq("message_id", messageId)
+        .eq("staff_id", staffId)
+        .eq("emoji", emoji);
+      if (error) throw new Error(`[supabase] リアクション取消: ${error.message}`);
+    } else {
+      const { error } = await this.sb
+        .from("chat_reactions")
+        .insert({ message_id: messageId, staff_id: staffId, emoji });
+      if (error) throw new Error(`[supabase] リアクション: ${error.message}`);
+    }
+  }
+
+  async listChatReactions(messageIds: string[]): Promise<ChatReaction[]> {
+    if (messageIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("chat_reactions")
+      .select("*")
+      .in("message_id", messageIds);
+    return must(data, error, "リアクション一覧").map(mapChatReaction);
+  }
+
+  // ---- 社内SNS（サンクスカード） ----
+
+  async createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost> {
+    const { data, error } = await this.sb
+      .from("thanks_posts")
+      .insert({
+        from_staff_id: input.fromStaffId,
+        to_staff_id: input.toStaffId,
+        body: input.body,
+        card_color: input.cardColor,
+      })
+      .select()
+      .single();
+    return mapThanksPost(must(data, error, "サンクスカード送信"));
+  }
+
+  async listThanksPosts(filter?: {
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }): Promise<ThanksPost[]> {
+    let query = this.sb
+      .from("thanks_posts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(filter?.limit ?? 100);
+    if (filter?.from) query = query.gte("created_at", filter.from.toISOString());
+    if (filter?.to) query = query.lt("created_at", filter.to.toISOString());
+    const { data, error } = await query;
+    return must(data, error, "サンクスカード一覧").map(mapThanksPost);
+  }
+
+  async toggleThanksLike(postId: string, staffId: string): Promise<void> {
+    const { data } = await this.sb
+      .from("thanks_likes")
+      .select("post_id")
+      .eq("post_id", postId)
+      .eq("staff_id", staffId)
+      .maybeSingle();
+    if (data) {
+      const { error } = await this.sb
+        .from("thanks_likes")
+        .delete()
+        .eq("post_id", postId)
+        .eq("staff_id", staffId);
+      if (error) throw new Error(`[supabase] いいね取消: ${error.message}`);
+    } else {
+      const { error } = await this.sb
+        .from("thanks_likes")
+        .insert({ post_id: postId, staff_id: staffId });
+      if (error) throw new Error(`[supabase] いいね: ${error.message}`);
+    }
+  }
+
+  async listThanksLikes(postIds: string[]): Promise<ThanksLike[]> {
+    if (postIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("thanks_likes")
+      .select("*")
+      .in("post_id", postIds);
+    return must(data, error, "いいね一覧").map(mapThanksLike);
+  }
+
+  async createThanksComment(input: Omit<ThanksComment, "id" | "createdAt">): Promise<ThanksComment> {
+    const { data, error } = await this.sb
+      .from("thanks_comments")
+      .insert({ post_id: input.postId, staff_id: input.staffId, body: input.body })
+      .select()
+      .single();
+    return mapThanksComment(must(data, error, "コメント送信"));
+  }
+
+  async listThanksComments(postIds: string[]): Promise<ThanksComment[]> {
+    if (postIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("thanks_comments")
+      .select("*")
+      .in("post_id", postIds)
+      .order("created_at");
+    return must(data, error, "コメント一覧").map(mapThanksComment);
   }
 }
 

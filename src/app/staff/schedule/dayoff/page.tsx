@@ -6,7 +6,7 @@ import { MonthNav, PageHeader } from "@/components/ui";
 import { DayoffCalendar } from "./dayoff-calendar";
 
 // 希望休の申請（スタッフ用）：カレンダーをタップして休みたい日を選び、保存する。
-// 対象は「3ヶ月後の月」で、締切は当月7日（例：10月分は7月7日まで）。
+// 対象は「3ヶ月後の月」で、締切は当月5日（例：10月分は7月5日まで）。
 export default async function DayoffRequestPage({
   searchParams,
 }: {
@@ -76,7 +76,7 @@ export default async function DayoffRequestPage({
 
       <div className="card mt-4 text-xs text-ink-500 space-y-1">
         <p className="font-bold text-ink-600">希望休のルール</p>
-        <p>・毎月1週目（7日）までに、3ヶ月後の月の希望休を申請します（次回予約を2ヶ月先まで受けるため）。</p>
+        <p>・毎月5日までに、3ヶ月後の月の希望休を申請します（次回予約を2ヶ月先まで受けるため）。</p>
         <p>・定休日・お休みの曜日は申請不要です（基本パターンで自動的にお休みになります）。</p>
         <p>・締切後の変更は、お店に直接ご相談ください（管理者が個別調整できます）。</p>
       </div>

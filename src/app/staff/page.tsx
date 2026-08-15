@@ -5,12 +5,25 @@ import { getDataStore } from "@/lib/data";
 import { formatDateJa, monthRange, todayJst, weekStartOf } from "@/lib/date";
 import { getBrand } from "@/lib/brand";
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
-import { BigMenuLink } from "@/components/ui";
-import { Icon } from "@/components/icons";
+import { getChatOverview } from "@/lib/chat";
+import { getMyTaskSummary } from "@/lib/tasks";
+import { BigMenuLink, IconMenuLink } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
 import { Dashboard } from "@/components/dashboard";
 
-// スタッフのホーム：迷わないよう「やること」を大きなボタンだけにする。
+/** ホームのメニュー1項目。スマホ＝アイコングリッド／PC＝大きなボタンの両方で使う */
+interface HomeMenuItem {
+  href: string;
+  icon: IconName;
+  title: string;
+  /** スマホのアイコングリッド用の短い呼び名 */
+  short: string;
+  description: string;
+  badge?: string | number | null;
+}
+
+// スタッフのホーム：スマホは「今の状況」を上に、メニューはアイコン＋小さな文字の3列グリッドで見せる。
 // ログイン後に選んだ業態（EREYS/ENi）に応じてメニュー（項目）を切り替える。
 export default async function StaffHomePage() {
   const session = await requireSession();
@@ -24,13 +37,30 @@ export default async function StaffHomePage() {
   const jobType = me?.jobType ?? "";
   const isExec = session.role === "admin" || (me?.isExecutive ?? false);
 
-  // 希望休：3ヶ月後の月の申請期間中（毎月7日まで）で、まだ1日も登録がなければ知らせる
+  // 希望休：3ヶ月後の月の申請期間中（毎月5日まで）で、まだ1日も登録がなければ知らせる
   const dayoffTarget = defaultDayoffTargetMonth(today);
   const dayoffEditable = isDayoffEditable(dayoffTarget, today);
-  const myDayoffs = dayoffEditable
-    ? await db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
-    : [];
+  const [myDayoffs, taskSummary, chatOverview] = await Promise.all([
+    dayoffEditable
+      ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
+      : Promise.resolve([]),
+    getMyTaskSummary(db, session.staffId, today),
+    getChatOverview(db, session.staffId),
+  ]);
   const shiftBadge = dayoffEditable && myDayoffs.length === 0 ? "！" : null;
+  const taskBadge = taskSummary.dueCount > 0 ? taskSummary.dueCount : null;
+  const chatBadge = chatOverview.totalUnread > 0 ? chatOverview.totalUnread : null;
+
+  const items =
+    brand === "eyes"
+      ? await eyesMenuItems(session.staffId, today, { shiftBadge, taskBadge, chatBadge, isExec })
+      : await eniMenuItems(session.staffId, today, {
+          jobType,
+          isExec,
+          shiftBadge,
+          taskBadge,
+          chatBadge,
+        });
 
   return (
     <div>
@@ -47,30 +77,42 @@ export default async function StaffHomePage() {
 
       <ShiftNoticeBanner staffId={session.staffId} />
 
-      {/* スマホは「やること（メニュー）」を先に、グラフはその下に。
-          PCは画面が広いので、これまで通りグラフを上に置く。 */}
-      <div className="flex flex-col">
-        <section className="order-1 lg:order-2">
-          <h2 className="section-title lg:mt-6">メニュー</h2>
-          {brand === "eyes" ? (
-            <EyeMenu staffId={session.staffId} today={today} shiftBadge={shiftBadge} />
-          ) : (
-            <EniMenu
-              staffId={session.staffId}
-              today={today}
-              jobType={jobType}
-              isExec={isExec}
-              shiftBadge={shiftBadge}
-            />
-          )}
-        </section>
+      {/* スマホもPCも「今の状況」を上に、メニューはその下に */}
+      <section>
+        <h2 className="section-title">今の状況</h2>
+        <Dashboard brand={brand} />
+      </section>
 
-        {/* ダッシュボード：グラフで今の進捗をひと目で */}
-        <section className="order-2 lg:order-1 mt-7 lg:mt-0">
-          <h2 className="section-title lg:hidden">今の状況</h2>
-          <Dashboard brand={brand} />
-        </section>
-      </div>
+      <section className="mt-2">
+        <h2 className="section-title">メニュー</h2>
+
+        {/* スマホ：アイコン＋小さな文字の3列グリッド */}
+        <div className="grid grid-cols-3 gap-2 sm:hidden">
+          {items.map((item) => (
+            <IconMenuLink
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              label={item.short}
+              badge={item.badge}
+            />
+          ))}
+        </div>
+
+        {/* タブレット・PC：説明つきの大きなボタン */}
+        <div className="hidden sm:grid gap-3 sm:grid-cols-2">
+          {items.map((item) => (
+            <BigMenuLink
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              title={item.title}
+              description={item.description}
+              badge={item.badge}
+            />
+          ))}
+        </div>
+      </section>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         <Link href="/staff/help" className="chip !py-2.5 !px-4">
@@ -88,16 +130,17 @@ export default async function StaffHomePage() {
   );
 }
 
-/** アイサロン（EREYS）のメニュー */
-async function EyeMenu({
-  staffId,
-  today,
-  shiftBadge,
-}: {
-  staffId: string;
-  today: string;
-  shiftBadge: string | null;
-}) {
+/** アイサロン（EREYS）のメニュー項目 */
+async function eyesMenuItems(
+  staffId: string,
+  today: string,
+  flags: {
+    shiftBadge: string | null;
+    taskBadge: number | null;
+    chatBadge: number | null;
+    isExec: boolean;
+  }
+): Promise<HomeMenuItem[]> {
   const db = getDataStore();
   const [pendingCounseling, todayReport, stores, todayCash] = await Promise.all([
     db.listCounselingResponses({ status: "pending" }),
@@ -107,87 +150,126 @@ async function EyeMenu({
   ]);
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <BigMenuLink
-        href="/staff/counseling"
-        icon="clipboard"
-        title="本日のカウンセリング"
-        description={
-          pendingCounseling.length > 0
-            ? `未確認が ${pendingCounseling.length} 件あります`
-            : "未確認はありません"
-        }
-        badge={pendingCounseling.length}
-      />
-      <BigMenuLink
-        href="/staff/customers"
-        icon="user"
-        title="お客様のカルテ"
-        description="過去のお客様の初期カウンセリングを見返す"
-      />
-      <BigMenuLink
-        href="/staff/report"
-        icon="pencil"
-        title="日報を入力"
-        description={todayReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です"}
-        badge={todayReport ? null : "！"}
-      />
-      <BigMenuLink
-        href="/staff/cash"
-        icon="banknote"
-        title="レジ締め・現金管理"
-        description={`本日 ${todayCash.length} / ${stores.length}店舗 入力済み`}
-      />
-      <BigMenuLink
-        href="/staff/schedule"
-        icon="calendar"
-        title="出勤スケジュール"
-        description="自分の予定の確認・希望休の提出"
-        badge={shiftBadge}
-      />
-      {attendanceAvailable && (
-        <BigMenuLink
-          href="/staff/attendance"
-          icon="mapPin"
-          title="出勤・退勤の打刻"
-          description="お店に着いたら／帰るときに"
-        />
-      )}
-      <BigMenuLink
-        href="/staff/stats"
-        icon="trendingUp"
-        title="自分の成績"
-        description="売上・次回予約率・月次推移"
-      />
-      <BigMenuLink
-        href="/staff/reports"
-        icon="book"
-        title="過去の日報をふりかえる"
-        description="これまでの日報・ふりかえりを見返す"
-      />
-    </div>
-  );
+  return [
+    {
+      href: "/staff/counseling",
+      icon: "clipboard",
+      title: "本日のカウンセリング",
+      short: "カウンセ",
+      description:
+        pendingCounseling.length > 0
+          ? `未確認が ${pendingCounseling.length} 件あります`
+          : "未確認はありません",
+      badge: pendingCounseling.length || null,
+    },
+    {
+      href: "/staff/customers",
+      icon: "user",
+      title: "お客様のカルテ",
+      short: "カルテ",
+      description: "過去のお客様の初期カウンセリングを見返す",
+    },
+    {
+      href: "/staff/report",
+      icon: "pencil",
+      title: "日報を入力",
+      short: "日報",
+      description: todayReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です",
+      badge: todayReport ? null : "！",
+    },
+    {
+      href: "/staff/tasks",
+      icon: "listTodo",
+      title: "タスク",
+      short: "タスク",
+      description: "ルーティン・依頼・会社のタスクを追う",
+      badge: flags.taskBadge,
+    },
+    {
+      href: "/staff/chat",
+      icon: "chat",
+      title: "チャット",
+      short: "チャット",
+      description: "スタッフ同士の連絡（DM・グループ）",
+      badge: flags.chatBadge,
+    },
+    {
+      href: "/staff/thanks",
+      icon: "heart",
+      title: "サンクスカード",
+      short: "サンクス",
+      description: "ありがとうをカードで贈り合う",
+    },
+    {
+      href: "/staff/cash",
+      icon: "banknote",
+      title: "レジ締め・現金管理",
+      short: "レジ締め",
+      description: `本日 ${todayCash.length} / ${stores.length}店舗 入力済み`,
+    },
+    {
+      href: "/staff/schedule",
+      icon: "calendar",
+      title: "出勤スケジュール",
+      short: "シフト",
+      description: "自分の予定の確認・希望休の提出",
+      badge: flags.shiftBadge,
+    },
+    ...(attendanceAvailable
+      ? [
+          {
+            href: "/staff/attendance",
+            icon: "mapPin" as IconName,
+            title: "出勤・退勤の打刻",
+            short: "打刻",
+            description: "お店に着いたら／帰るときに",
+          },
+        ]
+      : []),
+    {
+      href: "/staff/stats",
+      icon: "trendingUp",
+      title: "自分の成績",
+      short: "成績",
+      description: "売上・次回予約率・月次推移",
+    },
+    {
+      href: "/staff/reports",
+      icon: "book",
+      title: "過去の日報をふりかえる",
+      short: "過去日報",
+      description: "これまでの日報・ふりかえりを見返す",
+    },
+    ...(flags.isExec
+      ? [
+          {
+            href: "/staff/exec",
+            icon: "crown" as IconName,
+            title: "幹部メニュー",
+            short: "幹部",
+            description: "幹部タスクの進捗・日報の気づき確認",
+          },
+        ]
+      : []),
+  ];
 }
 
-/** ENi（ヘアサロン）のメニュー */
-async function EniMenu({
-  staffId,
-  today,
-  jobType,
-  isExec,
-  shiftBadge,
-}: {
-  staffId: string;
-  today: string;
-  jobType: "" | "stylist" | "assistant";
-  isExec: boolean;
-  shiftBadge: string | null;
-}) {
+/** ENi（ヘアサロン）のメニュー項目 */
+async function eniMenuItems(
+  staffId: string,
+  today: string,
+  flags: {
+    jobType: "" | "stylist" | "assistant";
+    isExec: boolean;
+    shiftBadge: string | null;
+    taskBadge: number | null;
+    chatBadge: number | null;
+  }
+): Promise<HomeMenuItem[]> {
   const db = getDataStore();
   const weekStart = weekStartOf(today);
-  const showStylist = jobType !== "assistant"; // スタイリスト or 未設定
-  const showWeekly = jobType !== "stylist"; // アシスタント or 未設定
+  const showStylist = flags.jobType !== "assistant"; // スタイリスト or 未設定
+  const showWeekly = flags.jobType !== "stylist"; // アシスタント or 未設定
 
   const [todayPlan, missingMinutes, todayStylistReport, thisWeekReport] = await Promise.all([
     db.listDailyPlans(today).then((plans) => plans.find((p) => p.staffId === staffId) ?? null),
@@ -199,85 +281,133 @@ async function EniMenu({
     (m) => m.hostStaffId === staffId || m.createdBy === staffId
   ).length;
 
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {showStylist && (
-        <BigMenuLink
-          href="/staff/eni-report"
-          icon="pencil"
-          title="日報を入力（スタイリスト）"
-          description={
-            todayStylistReport ? "本日分は入力済み（修正できます）" : "本日分はまだ未入力です"
-          }
-          badge={todayStylistReport ? null : "！"}
-        />
-      )}
-      {showWeekly && (
-        <BigMenuLink
-          href="/staff/weekly-report"
-          icon="pencil"
-          title="週報を入力（アシスタント）"
-          description={thisWeekReport ? "今週分は入力済み（修正できます）" : "今週分はまだ未入力です"}
-          badge={thisWeekReport ? null : "！"}
-        />
-      )}
-      <BigMenuLink
-        href="/staff/morning"
-        icon="clock"
-        title="今日のスケジュール"
-        description={todayPlan ? "入力済み（みんなの予定も見られます）" : "今日の予定をまだ入力していません"}
-        badge={todayPlan ? null : "！"}
-      />
-      <BigMenuLink
-        href="/staff/eni-reports"
-        icon="fileText"
-        title="日報・週報を見る"
-        description={jobType === "assistant" ? "みんなの週報を見る" : "みんなの日報・週報を見る"}
-      />
-      <BigMenuLink
-        href="/staff/meetings"
-        icon="user"
-        title="ミーティング・1on1"
-        description={
-          myMissingMinutes > 0
-            ? `議事録が未提出のミーティングが ${myMissingMinutes} 件あります`
-            : "カレンダーで確認・議事録の提出"
-        }
-        badge={myMissingMinutes}
-      />
-      <BigMenuLink
-        href="/staff/org"
-        icon="sparkles"
-        title="組織図（シナジーマップ）"
-        description="チームの役割・メンバー・会議体のつながりを見る"
-      />
-      <BigMenuLink
-        href="/staff/schedule"
-        icon="calendar"
-        title="出勤スケジュール"
-        description="自分の予定の確認・希望休の提出"
-        badge={shiftBadge}
-      />
-      <BigMenuLink
-        href="/staff/orders"
-        icon="banknote"
-        title="発注・購入申請"
-        description="ウィッグ・社販・商材の申請"
-      />
-      <BigMenuLink
-        href="/staff/absence"
-        icon="alertTriangle"
-        title="欠勤・早退の報告"
-        description={isExec ? "報告の送信・全員分の確認（幹部）" : "体調不良や早退の報告はこちら"}
-      />
-      {isExec && (
-        <BigMenuLink
-          href="/staff/practice"
-          icon="sparkles"
-          title="練習ペアの設定（幹部）"
-          description="今月のペア（誰に付いてもらうか）の割当"
-        />
-      )}
-    </div>
-  );
+  return [
+    ...(showStylist
+      ? [
+          {
+            href: "/staff/eni-report",
+            icon: "pencil" as IconName,
+            title: "日報を入力（スタイリスト）",
+            short: "日報",
+            description: todayStylistReport
+              ? "本日分は入力済み（修正できます）"
+              : "本日分はまだ未入力です",
+            badge: todayStylistReport ? null : "！",
+          },
+        ]
+      : []),
+    ...(showWeekly
+      ? [
+          {
+            href: "/staff/weekly-report",
+            icon: "pencil" as IconName,
+            title: "週報を入力（アシスタント）",
+            short: "週報",
+            description: thisWeekReport
+              ? "今週分は入力済み（修正できます）"
+              : "今週分はまだ未入力です",
+            badge: thisWeekReport ? null : "！",
+          },
+        ]
+      : []),
+    {
+      href: "/staff/tasks",
+      icon: "listTodo",
+      title: "タスク",
+      short: "タスク",
+      description: "ルーティン・依頼・会社のタスクを追う",
+      badge: flags.taskBadge,
+    },
+    {
+      href: "/staff/morning",
+      icon: "clock",
+      title: "今日のスケジュール",
+      short: "今日の予定",
+      description: todayPlan
+        ? "入力済み（みんなの予定も見られます）"
+        : "今日の予定をまだ入力していません",
+      badge: todayPlan ? null : "！",
+    },
+    {
+      href: "/staff/chat",
+      icon: "chat",
+      title: "チャット",
+      short: "チャット",
+      description: "スタッフ同士の連絡（DM・グループ）",
+      badge: flags.chatBadge,
+    },
+    {
+      href: "/staff/thanks",
+      icon: "heart",
+      title: "サンクスカード",
+      short: "サンクス",
+      description: "ありがとうをカードで贈り合う",
+    },
+    {
+      href: "/staff/eni-reports",
+      icon: "fileText",
+      title: "日報・週報を見る",
+      short: "日報週報",
+      description: flags.jobType === "assistant" ? "みんなの週報を見る" : "みんなの日報・週報を見る",
+    },
+    {
+      href: "/staff/meetings",
+      icon: "users",
+      title: "ミーティング・1on1",
+      short: "議事録",
+      description:
+        myMissingMinutes > 0
+          ? `議事録が未提出のミーティングが ${myMissingMinutes} 件あります`
+          : "カレンダーで確認・議事録の提出",
+      badge: myMissingMinutes || null,
+    },
+    {
+      href: "/staff/schedule",
+      icon: "calendar",
+      title: "出勤スケジュール",
+      short: "シフト",
+      description: "自分の予定の確認・希望休の提出",
+      badge: flags.shiftBadge,
+    },
+    {
+      href: "/staff/orders",
+      icon: "banknote",
+      title: "発注・購入申請",
+      short: "発注",
+      description: "ウィッグ・社販・商材の申請",
+    },
+    {
+      href: "/staff/absence",
+      icon: "alertTriangle",
+      title: "欠勤・早退の報告",
+      short: "欠勤報告",
+      description: flags.isExec ? "報告の送信・全員分の確認（幹部）" : "体調不良や早退の報告はこちら",
+    },
+    // 組織図・幹部メニューは管理者・幹部のみ
+    ...(flags.isExec
+      ? [
+          {
+            href: "/staff/exec",
+            icon: "crown" as IconName,
+            title: "幹部メニュー",
+            short: "幹部",
+            description: "幹部タスクの進捗・日報の気づき確認",
+          },
+          {
+            href: "/staff/org",
+            icon: "sparkles" as IconName,
+            title: "組織図（シナジーマップ）",
+            short: "組織図",
+            description: "チームの役割・メンバー・会議体のつながりを見る",
+          },
+          {
+            href: "/staff/practice",
+            icon: "sparkles" as IconName,
+            title: "練習ペアの設定（幹部）",
+            short: "練習ペア",
+            description: "今月のペア（誰に付いてもらうか）の割当",
+          },
+        ]
+      : []),
+  ];
 }

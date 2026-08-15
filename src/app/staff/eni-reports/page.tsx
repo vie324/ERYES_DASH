@@ -8,6 +8,7 @@ import {
   STYLIST_REPORT_NUMBERS,
   STYLIST_REPORT_TEXTS,
   formatEniAnswer,
+  rebookRateOf,
 } from "@/lib/eni/forms";
 import { EniAnswersView } from "@/components/eni-form-fields";
 import { EmptyState, MonthNav, PageHeader } from "@/components/ui";
@@ -145,38 +146,77 @@ export default async function EniReportsViewPage({
   );
 }
 
-/** スタイリスト日報の表示（時間のまとめ＋数字＋テキスト） */
+/** %の小さなメーター表示（稼働率・次回予約率で共用） */
+function RateBadge({
+  label,
+  rate,
+  goodFrom,
+}: {
+  label: string;
+  rate: number | null;
+  /** この%以上なら緑で表示 */
+  goodFrom: number;
+}) {
+  const tone =
+    rate === null
+      ? "text-ink-400"
+      : rate >= goodFrom
+        ? "text-emerald-600"
+        : rate >= goodFrom * 0.6
+          ? "text-brand-700"
+          : "text-red-500";
+  const barTone =
+    rate === null
+      ? "bg-ink-200"
+      : rate >= goodFrom
+        ? "bg-emerald-500"
+        : rate >= goodFrom * 0.6
+          ? "bg-brand-500"
+          : "bg-red-400";
+  return (
+    <div className="flex-1 min-w-32 rounded-xl bg-brand-50/70 border border-brand-100 px-3 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-bold text-ink-500">{label}</span>
+        <span className={`font-display text-lg font-bold ${tone}`}>
+          {rate === null ? "—" : `${rate}%`}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 rounded-full bg-white overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barTone}`}
+          style={{ width: `${Math.min(100, Math.max(0, rate ?? 0))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** スタイリスト日報の表示（稼働率・次回予約率＋数字＋テキスト） */
 function StylistView({ answers }: { answers: Record<string, unknown> }) {
   const numAnswer = (key: string): number | null =>
     typeof answers[key] === "number" && Number.isFinite(answers[key]) ? (answers[key] as number) : null;
   const util = numAnswer("utilization");
-  const diff = numAnswer("time_diff");
   const clients = numAnswer("client_count");
-  const early = numAnswer("minutes_early");
-  const over = numAnswer("minutes_over");
+  const nextBookings = numAnswer("next_bookings");
+  const service = numAnswer("service_minutes");
+  const rebookRate = rebookRateOf(answers);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
+      {/* 稼働率・次回予約率をひと目で */}
+      <div className="flex flex-wrap gap-2">
+        <RateBadge label="稼働率（÷8h）" rate={util} goodFrom={70} />
+        <RateBadge label="次回予約率" rate={rebookRate} goodFrom={50} />
+      </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {clients !== null && (
           <span><span className="text-xs text-ink-500">客数</span> <span className="font-bold">{clients}人</span></span>
         )}
-        {util !== null && (
-          <span><span className="text-xs text-ink-500">稼働率</span> <span className="font-bold text-brand-700">{util}%</span></span>
+        {nextBookings !== null && (
+          <span><span className="text-xs text-ink-500">次回予約</span> <span className="font-bold">{nextBookings}件</span></span>
         )}
-        {diff !== null && (
-          <span>
-            <span className="text-xs text-ink-500">施術時間±</span>{" "}
-            <span className={`font-bold ${diff > 0 ? "text-red-500" : diff < 0 ? "text-emerald-600" : ""}`}>
-              {diff > 0 ? `+${diff}` : diff}分
-            </span>
-          </span>
-        )}
-        {(early !== null || over !== null) && (early ?? 0) + (over ?? 0) > 0 && (
-          <span className="text-xs text-ink-500">
-            （早く終わり <span className="font-bold text-emerald-700">{early ?? 0}分</span> ／ オーバー{" "}
-            <span className="font-bold text-red-500">{over ?? 0}分</span>）
-          </span>
+        {service !== null && service > 0 && (
+          <span><span className="text-xs text-ink-500">入客時間</span> <span className="font-bold">{service}分</span></span>
         )}
         {STYLIST_REPORT_NUMBERS.map((item) => (
           <span key={item.key}>

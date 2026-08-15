@@ -11,6 +11,7 @@ import {
 } from "@/lib/date";
 import { isExecutive } from "@/lib/eni/access";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import type { OrderCategory, OrderStatus } from "@/lib/data/types";
 import { createOrderRequestAction, updateOrderStatusAction } from "./actions";
 
@@ -121,6 +122,19 @@ export default async function OrdersPage({
           </div>
         </div>
         <div>
+          <label className="label" htmlFor="supplier_url">
+            発注先のURL（任意）
+          </label>
+          <input
+            id="supplier_url"
+            name="supplier_url"
+            type="url"
+            inputMode="url"
+            className="input"
+            placeholder="https://…（商品ページのURLを貼るとワンタップで飛べます）"
+          />
+        </div>
+        <div>
           <label className="label" htmlFor="note">
             メモ（任意）
           </label>
@@ -163,6 +177,17 @@ export default async function OrdersPage({
                   {staffMap.get(o.staffId) ?? "（不明）"} ／ {formatDateJa(jstDateOf(o.createdAt))}
                   {o.note && <span className="block mt-0.5">メモ：{o.note}</span>}
                 </p>
+                {o.supplierUrl && (
+                  <a
+                    href={o.supplierUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-bold text-brand-800 transition-colors hover:bg-brand-100"
+                  >
+                    <Icon name="link" className="w-3.5 h-3.5" />
+                    発注先のページを開く
+                  </a>
+                )}
                 {isExec && o.status !== "received" && (
                   <form action={updateOrderStatusAction} className="mt-2">
                     <input type="hidden" name="id" value={o.id} />

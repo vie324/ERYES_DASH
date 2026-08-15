@@ -61,6 +61,19 @@ create table if not exists counseling_responses (
   confirmed_at timestamptz
 );
 
+-- 来店前カウンセリングの案内（SMSでURLを送る。token付きの公開フォーム /c/[token] で回答）
+create table if not exists counseling_invites (
+  id uuid primary key default gen_random_uuid(),
+  token text not null unique,
+  customer_name text not null default '',
+  phone text not null default '',
+  customer_id uuid references customers(id),           -- 回答時に作成・紐づけ
+  response_id uuid references counseling_responses(id),
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now(),
+  answered_at timestamptz
+);
+
 -- 日報（スタッフ×日付でユニーク。再保存は上書き）
 create table if not exists daily_reports (
   id uuid primary key default gen_random_uuid(),
@@ -369,9 +382,121 @@ create table if not exists order_requests (
   item_name text not null,
   quantity integer not null default 1 check (quantity > 0),
   note text not null default '',
+  supplier_url text not null default '',   -- 発注先のURL（商品ページなど）
   status text not null default 'requested' check (status in ('requested', 'ordered', 'received')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+-- 既存DBに後から列を足す場合（本番に order_requests が既にある場合）に実行：
+--   alter table order_requests add column if not exists supplier_url text not null default '';
+
+-- ============================================================
+-- タスク管理（ルーティン／依頼／幹部タスク）
+-- ============================================================
+
+-- kind: routine=自分で決めたルーティン / request=依頼されたタスク / exec=幹部タスク
+-- repeat_rule: ''=単発 / daily=毎日 / weekly=毎週（repeat_days=曜日0-6）/ monthly=毎月（repeat_days=日1-31）
+-- status は単発タスクの進捗。繰り返しタスクの完了は task_completions（日別）で持つ
+create table if not exists staff_tasks (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('routine', 'request', 'exec')),
+  title text not null,
+  note text not null default '',
+  assignee_staff_id uuid not null references staff(id) on delete cascade,
+  created_by uuid not null references staff(id),
+  due_date date,
+  repeat_rule text not null default '' check (repeat_rule in ('', 'daily', 'weekly', 'monthly')),
+  repeat_days jsonb not null default '[]',
+  status text not null default 'open' check (status in ('open', 'in_progress', 'done')),
+  done_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 繰り返しタスクの「その日やったか」の記録
+create table if not exists task_completions (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references staff_tasks(id) on delete cascade,
+  date date not null,
+  done_by uuid not null references staff(id),
+  done_at timestamptz not null default now(),
+  unique (task_id, date)
+);
+
+-- スタイリスト日報の「気づき・共有」を幹部が確認した記録（レポート単位）
+create table if not exists exec_notice_checks (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references eni_reports(id) on delete cascade,
+  checked_by uuid not null references staff(id),
+  checked_at timestamptz not null default now(),
+  unique (report_id)
+);
+
+-- ============================================================
+-- 社内チャット（DM・グループ／既読／リアクション）
+-- ============================================================
+
+-- dm_key: DMルームの重複防止キー（'dm:小さいID:大きいID'。グループは空文字）
+create table if not exists chat_rooms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default '',
+  is_group boolean not null default false,
+  dm_key text not null default '',
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
+
+create table if not exists chat_members (
+  room_id uuid not null references chat_rooms(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  primary key (room_id, staff_id)
+);
+
+create table if not exists chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references chat_rooms(id) on delete cascade,
+  sender_id uuid not null references staff(id),
+  body text not null default '',
+  image text not null default '',            -- 添付画像（データURL）
+  deleted boolean not null default false,    -- 送信取消
+  created_at timestamptz not null default now()
+);
+
+create table if not exists chat_reactions (
+  message_id uuid not null references chat_messages(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  emoji text not null,
+  primary key (message_id, staff_id, emoji)
+);
+
+-- ============================================================
+-- 社内SNS（サンクスカード）
+-- ============================================================
+
+create table if not exists thanks_posts (
+  id uuid primary key default gen_random_uuid(),
+  from_staff_id uuid not null references staff(id) on delete cascade,
+  to_staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  card_color text not null default 'gold',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists thanks_likes (
+  post_id uuid not null references thanks_posts(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  primary key (post_id, staff_id)
+);
+
+create table if not exists thanks_comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references thanks_posts(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
 );
 
 -- 今日のスケジュール（1人1日1件）。構造化フォーム or スケジュール帳の写真。
@@ -415,6 +540,7 @@ create table if not exists schedule_presets (
 -- ---- インデックス ----
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
+create index if not exists idx_counseling_invites_created on counseling_invites (created_at desc);
 create index if not exists idx_reports_date on daily_reports (report_date);
 create index if not exists idx_reports_staff_date on daily_reports (staff_id, report_date);
 create index if not exists idx_cash_reports_date on cash_reports (report_date);
@@ -439,6 +565,14 @@ create index if not exists idx_daily_plans_date on daily_plans (plan_date);
 create index if not exists idx_shift_requests_month on shift_requests (target_month);
 create index if not exists idx_shift_available_month on staff_available_stores (target_month);
 create index if not exists idx_shift_assignments_month on shift_assignments (target_month, date);
+create index if not exists idx_staff_tasks_assignee on staff_tasks (assignee_staff_id, status);
+create index if not exists idx_staff_tasks_kind on staff_tasks (kind, status);
+create index if not exists idx_task_completions_date on task_completions (date);
+create index if not exists idx_chat_members_staff on chat_members (staff_id);
+create index if not exists idx_chat_messages_room on chat_messages (room_id, created_at desc);
+create index if not exists idx_thanks_posts_created on thanks_posts (created_at desc);
+create index if not exists idx_thanks_posts_to on thanks_posts (to_staff_id, created_at desc);
+create index if not exists idx_thanks_comments_post on thanks_comments (post_id);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、
@@ -447,6 +581,7 @@ alter table stores enable row level security;
 alter table staff enable row level security;
 alter table customers enable row level security;
 alter table counseling_responses enable row level security;
+alter table counseling_invites enable row level security;
 alter table daily_reports enable row level security;
 alter table cash_reports enable row level security;
 alter table attendances enable row level security;
@@ -473,6 +608,16 @@ alter table order_requests enable row level security;
 alter table daily_plans enable row level security;
 alter table ideal_schedules enable row level security;
 alter table schedule_presets enable row level security;
+alter table staff_tasks enable row level security;
+alter table task_completions enable row level security;
+alter table exec_notice_checks enable row level security;
+alter table chat_rooms enable row level security;
+alter table chat_members enable row level security;
+alter table chat_messages enable row level security;
+alter table chat_reactions enable row level security;
+alter table thanks_posts enable row level security;
+alter table thanks_likes enable row level security;
+alter table thanks_comments enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。

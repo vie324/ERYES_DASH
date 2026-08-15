@@ -136,6 +136,38 @@ export function BigMenuLink({
   );
 }
 
+/** スマホのホーム用：アイコン＋小さな文字のコンパクトなメニュー（3列グリッドで並べる） */
+export function IconMenuLink({
+  href,
+  label,
+  icon,
+  badge,
+}: {
+  href: string;
+  label: string;
+  icon: IconName;
+  badge?: string | number | null;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col items-center justify-start gap-1.5 rounded-2xl bg-white border border-brand-100 shadow-[0_1px_4px_rgba(93,80,58,0.06)] px-1 pt-3 pb-2.5 transition-colors active:bg-brand-50"
+    >
+      <span className="relative w-11 h-11 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 text-brand-700">
+        <Icon name={icon} className="w-[22px] h-[22px]" />
+        {badge !== undefined && badge !== null && badge !== 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-gradient-to-b from-brand-500 to-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="text-[11px] font-bold text-ink-700 leading-tight text-center text-balance">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
 /** KPI表示カード */
 export function StatCard({
   label,

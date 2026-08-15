@@ -1,14 +1,14 @@
 // 出勤スケジュール（基本パターン＋希望休＋個別調整）の解決ロジックと締切ルール。
 //
 // 優先順位：個別調整（管理者） ＞ 希望休（スタッフ） ＞ 週の基本パターン
-// 希望休は「3ヶ月後の月」を対象に、当月の1週目（7日）までに申請する運用。
+// 希望休は「3ヶ月後の月」を対象に、当月の5日までに申請する運用。
 // （次回予約を2ヶ月先まで受けるため、3ヶ月先の休みを先に確定させる）
 
 import { addMonths } from "@/lib/date";
 import type { DayoffRequest, ScheduleOverride, WorkPatternDay } from "@/lib/data/types";
 
 /** 希望休の申請締切日（対象月の3ヶ月前の◯日まで） */
-export const DAYOFF_DEADLINE_DAY = 7;
+export const DAYOFF_DEADLINE_DAY = 5;
 /** 希望休の対象月＝何ヶ月後か */
 export const DAYOFF_MONTHS_AHEAD = 3;
 
@@ -17,7 +17,7 @@ export function defaultDayoffTargetMonth(today: string): string {
   return addMonths(today.slice(0, 7), DAYOFF_MONTHS_AHEAD);
 }
 
-/** 対象月の申請締切日（"YYYY-MM-DD"）＝対象月の3ヶ月前の7日 */
+/** 対象月の申請締切日（"YYYY-MM-DD"）＝対象月の3ヶ月前の5日 */
 export function dayoffDeadline(targetMonth: string): string {
   return `${addMonths(targetMonth, -DAYOFF_MONTHS_AHEAD)}-${String(DAYOFF_DEADLINE_DAY).padStart(2, "0")}`;
 }

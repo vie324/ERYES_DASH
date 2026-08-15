@@ -2,7 +2,7 @@
 // Supabase の環境変数が未設定のときに使われ、起動のたびにデモデータが再生成される。
 // 本番では supabase-store.ts が使われるため、このファイルは動作確認専用。
 
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
@@ -16,6 +16,11 @@ import type {
   Broadcast,
   CashReport,
   CashReportInput,
+  ChatMember,
+  ChatMessage,
+  ChatReaction,
+  ChatRoom,
+  CounselingInvite,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -26,6 +31,7 @@ import type {
   DataStore,
   DayoffRequest,
   EniReport,
+  ExecNoticeCheck,
   IdealSchedule,
   Meeting,
   MeetingTask,
@@ -47,8 +53,14 @@ import type {
   ShiftRules,
   Staff,
   StaffInput,
+  StaffTask,
   StaffWithSecret,
   Store,
+  TaskCompletion,
+  TaskKind,
+  ThanksComment,
+  ThanksLike,
+  ThanksPost,
   WorkPatternDay,
 } from "@/lib/data/types";
 
@@ -57,6 +69,7 @@ interface MockDb {
   staff: (StaffWithSecret & { passwordHash: string })[];
   customers: Customer[];
   counseling: CounselingResponse[];
+  counselingInvites: CounselingInvite[];
   reports: DailyReport[];
   cashReports: CashReport[];
   attendances: Attendance[];
@@ -83,6 +96,16 @@ interface MockDb {
   dailyPlans: DailyPlan[];
   idealSchedules: IdealSchedule[];
   schedulePresets: SchedulePreset[];
+  staffTasks: StaffTask[];
+  taskCompletions: TaskCompletion[];
+  execNoticeChecks: ExecNoticeCheck[];
+  chatRooms: (ChatRoom & { dmKey: string })[];
+  chatMembers: ChatMember[];
+  chatMessages: ChatMessage[];
+  chatReactions: ChatReaction[];
+  thanksPosts: ThanksPost[];
+  thanksLikes: ThanksLike[];
+  thanksComments: ThanksComment[];
 }
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -448,25 +471,24 @@ function seed(): MockDb {
   // ---- ENi（ヘアサロン）のデモデータ ----
   const eniReports: (EniReport & { kind: "stylist" | "weekly" })[] = [
     {
-      id: randomUUID(),
+      id: "eni-report-1",
       kind: "stylist",
       staffId: "staff-3",
       periodKey: addDays(today, -1),
       answers: {
         client_count: 8,
-        minutes_early: 25,
-        minutes_over: 10,
-        time_diff: -15,
-        work_minutes: 540,
+        service_minutes: 360,
+        utilization: 75, // 360分 ÷ 480分（8時間）
         new_clients: 2,
         service_sales: 68000,
         retail_sales: 8800,
         next_bookings: 6,
+        rebook_rate: 75,
         good_point: "ハイライトの提案がお客様にとても好評だった",
         self_issue: "施術の合間の声かけをもう少し増やしたい",
         improve_idea: "似合わせのカウンセリングをもっと言語化したい",
         onsite_notice: "受付の動線が混雑時に詰まりやすい",
-        staff_share: "",
+        staff_share: "新人には仕上げのブロー時にお客様の要望をもう一度確認するよう共有した",
       },
       comment: "",
       commentedBy: null,
@@ -603,9 +625,164 @@ function seed(): MockDb {
       itemName: "カットウィッグ（レディース）",
       quantity: 2,
       note: "国家試験の練習用",
+      supplierUrl: "https://www.beauty-garage.co.jp/",
       status: "requested",
       createdAt: jstAt(addDays(today, -1), 9),
       updatedAt: jstAt(addDays(today, -1), 9),
+    },
+  ];
+
+  // ---- タスク管理のデモデータ ----
+  const staffTasks: StaffTask[] = [
+    {
+      id: "task-1",
+      kind: "routine",
+      title: "インスタのストーリーを1本投稿",
+      note: "サロンワークの様子・ビフォーアフターなど",
+      assigneeStaffId: "staff-3",
+      createdBy: "staff-3",
+      dueDate: "",
+      repeat: "daily",
+      repeatDays: [],
+      status: "open",
+      doneAt: null,
+      createdAt: jstAt(addDays(today, -14), 9),
+      updatedAt: jstAt(addDays(today, -14), 9),
+    },
+    {
+      id: "task-2",
+      kind: "request",
+      title: "来月のポップ（春キャンペーン）を作成",
+      note: "A4サイズ・レジ横用。先月のデータはドライブにあります",
+      assigneeStaffId: "staff-5",
+      createdBy: "staff-3",
+      dueDate: addDays(today, 3),
+      repeat: "",
+      repeatDays: [],
+      status: "open",
+      doneAt: null,
+      createdAt: jstAt(addDays(today, -2), 13),
+      updatedAt: jstAt(addDays(today, -2), 13),
+    },
+    {
+      id: "task-3",
+      kind: "exec",
+      title: "採用媒体の原稿を更新する",
+      note: "新しい店内写真に差し替え。文言は幹部会議で決めた案で",
+      assigneeStaffId: "staff-4",
+      createdBy: "staff-3",
+      dueDate: addDays(today, -1),
+      repeat: "",
+      repeatDays: [],
+      status: "in_progress",
+      doneAt: null,
+      createdAt: jstAt(addDays(today, -7), 10),
+      updatedAt: jstAt(addDays(today, -3), 10),
+    },
+    {
+      id: "task-4",
+      kind: "exec",
+      title: "月次の数字まとめを共有",
+      note: "売上・新規・次回予約率をスプレッドシートに",
+      assigneeStaffId: "staff-3",
+      createdBy: "staff-3",
+      dueDate: "",
+      repeat: "monthly",
+      repeatDays: [1],
+      status: "open",
+      doneAt: null,
+      createdAt: jstAt(addDays(today, -30), 9),
+      updatedAt: jstAt(addDays(today, -30), 9),
+    },
+  ];
+
+  // ---- チャットのデモデータ ----
+  const chatRooms: (ChatRoom & { dmKey: string })[] = [
+    {
+      id: "room-all",
+      name: "ENi 全体",
+      isGroup: true,
+      dmKey: "",
+      createdBy: "staff-3",
+      createdAt: jstAt(addDays(today, -30), 9),
+    },
+    {
+      id: "room-dm-1",
+      name: "",
+      isGroup: false,
+      dmKey: "dm:staff-3:staff-4",
+      createdBy: "staff-3",
+      createdAt: jstAt(addDays(today, -10), 9),
+    },
+  ];
+  const chatMembers: ChatMember[] = [
+    { roomId: "room-all", staffId: "staff-3", lastReadAt: jstAt(today, 8) },
+    { roomId: "room-all", staffId: "staff-4", lastReadAt: jstAt(addDays(today, -1), 21) },
+    { roomId: "room-all", staffId: "staff-5", lastReadAt: jstAt(today, 7) },
+    { roomId: "room-all", staffId: "staff-6", lastReadAt: jstAt(addDays(today, -1), 20) },
+    { roomId: "room-dm-1", staffId: "staff-3", lastReadAt: jstAt(today, 8) },
+    { roomId: "room-dm-1", staffId: "staff-4", lastReadAt: jstAt(addDays(today, -1), 22) },
+  ];
+  const chatMessages: ChatMessage[] = [
+    {
+      id: randomUUID(),
+      roomId: "room-all",
+      senderId: "staff-3",
+      body: "おはようございます！今日もよろしくお願いします。本日の朝礼は9:30からです",
+      image: "",
+      deleted: false,
+      createdAt: jstAt(today, 7, 50),
+    },
+    {
+      id: randomUUID(),
+      roomId: "room-all",
+      senderId: "staff-5",
+      body: "よろしくお願いします！",
+      image: "",
+      deleted: false,
+      createdAt: jstAt(today, 7, 55),
+    },
+    {
+      id: randomUUID(),
+      roomId: "room-dm-1",
+      senderId: "staff-4",
+      body: "明日のモデル撮影、17時からで大丈夫ですか？",
+      image: "",
+      deleted: false,
+      createdAt: jstAt(addDays(today, -1), 21, 30),
+    },
+  ];
+
+  // ---- サンクスカードのデモデータ ----
+  const thanksPosts: ThanksPost[] = [
+    {
+      id: "thanks-1",
+      fromStaffId: "staff-4",
+      toStaffId: "staff-5",
+      body: "今日の忙しい時間帯、先回りしてシャンプーとお片付けを回してくれて本当に助かりました！おかげでお客様をお待たせせずに済みました。ありがとう！",
+      cardColor: "gold",
+      createdAt: jstAt(addDays(today, -1), 21),
+    },
+    {
+      id: "thanks-2",
+      fromStaffId: "staff-5",
+      toStaffId: "staff-6",
+      body: "閉店後のワインディング練習に付き合ってくれてありがとう！次は私が手伝います。",
+      cardColor: "rose",
+      createdAt: jstAt(addDays(today, -2), 22),
+    },
+  ];
+  const thanksLikes: ThanksLike[] = [
+    { postId: "thanks-1", staffId: "staff-3" },
+    { postId: "thanks-1", staffId: "staff-6" },
+  ];
+  const thanksComments: ThanksComment[] = [
+    {
+      id: randomUUID(),
+      postId: "thanks-1",
+      staffId: "staff-3",
+      body: "ナイスチームワーク！",
+      createdAt: jstAt(addDays(today, -1), 22),
     },
   ];
   const dailyPlans: DailyPlan[] = [
@@ -769,6 +946,7 @@ function seed(): MockDb {
     staff,
     customers,
     counseling,
+    counselingInvites: [],
     reports,
     cashReports,
     attendances,
@@ -795,6 +973,16 @@ function seed(): MockDb {
     dailyPlans,
     idealSchedules,
     schedulePresets,
+    staffTasks,
+    taskCompletions: [],
+    execNoticeChecks: [],
+    chatRooms,
+    chatMembers,
+    chatMessages,
+    chatReactions: [],
+    thanksPosts,
+    thanksLikes,
+    thanksComments,
   };
 }
 
@@ -1870,6 +2058,348 @@ class MockStore implements DataStore {
 
   async deleteSchedulePreset(id: string): Promise<void> {
     this.db.schedulePresets = this.db.schedulePresets.filter((p) => p.id !== id);
+  }
+
+  // ---- 来店前カウンセリングの案内（SMSでURL送付） ----
+
+  async createCounselingInvite(input: {
+    customerName: string;
+    phone: string;
+    createdBy: string;
+  }): Promise<CounselingInvite> {
+    const created: CounselingInvite = {
+      id: randomUUID(),
+      token: randomBytes(18).toString("base64url"),
+      customerName: input.customerName,
+      phone: input.phone,
+      customerId: null,
+      responseId: null,
+      createdBy: input.createdBy,
+      createdAt: new Date(),
+      answeredAt: null,
+    };
+    this.db.counselingInvites.push(created);
+    return { ...created };
+  }
+
+  async getCounselingInviteByToken(token: string): Promise<CounselingInvite | null> {
+    const found = this.db.counselingInvites.find((i) => i.token === token);
+    return found ? { ...found } : null;
+  }
+
+  async listCounselingInvites(limit = 30): Promise<CounselingInvite[]> {
+    return [...this.db.counselingInvites]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((i) => ({ ...i }));
+  }
+
+  async markCounselingInviteAnswered(
+    id: string,
+    customerId: string,
+    responseId: string
+  ): Promise<void> {
+    const found = this.db.counselingInvites.find((i) => i.id === id);
+    if (found) {
+      found.customerId = customerId;
+      found.responseId = responseId;
+      found.answeredAt = new Date();
+    }
+  }
+
+  async deleteCounselingInvite(id: string): Promise<void> {
+    this.db.counselingInvites = this.db.counselingInvites.filter((i) => i.id !== id);
+  }
+
+  // ---- タスク管理（ルーティン／依頼／幹部タスク） ----
+
+  async createStaffTask(
+    input: Omit<StaffTask, "id" | "doneAt" | "createdAt" | "updatedAt">
+  ): Promise<StaffTask> {
+    const created: StaffTask = {
+      ...input,
+      id: randomUUID(),
+      doneAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.db.staffTasks.push(created);
+    return { ...created };
+  }
+
+  async getStaffTask(id: string): Promise<StaffTask | null> {
+    const found = this.db.staffTasks.find((t) => t.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async listStaffTasks(filter?: {
+    kind?: TaskKind;
+    assigneeStaffId?: string;
+    createdBy?: string;
+    includeDone?: boolean;
+  }): Promise<StaffTask[]> {
+    return this.db.staffTasks
+      .filter(
+        (t) =>
+          (!filter?.kind || t.kind === filter.kind) &&
+          (!filter?.assigneeStaffId || t.assigneeStaffId === filter.assigneeStaffId) &&
+          (!filter?.createdBy || t.createdBy === filter.createdBy) &&
+          (filter?.includeDone || t.status !== "done")
+      )
+      .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999") || a.createdAt.getTime() - b.createdAt.getTime())
+      .map((t) => ({ ...t }));
+  }
+
+  async updateStaffTask(
+    id: string,
+    patch: Partial<
+      Pick<StaffTask, "title" | "note" | "assigneeStaffId" | "dueDate" | "repeat" | "repeatDays" | "status">
+    >
+  ): Promise<void> {
+    const found = this.db.staffTasks.find((t) => t.id === id);
+    if (!found) return;
+    Object.assign(found, patch);
+    if (patch.status !== undefined) {
+      found.doneAt = patch.status === "done" ? new Date() : null;
+    }
+    found.updatedAt = new Date();
+  }
+
+  async deleteStaffTask(id: string): Promise<void> {
+    this.db.staffTasks = this.db.staffTasks.filter((t) => t.id !== id);
+    this.db.taskCompletions = this.db.taskCompletions.filter((c) => c.taskId !== id);
+  }
+
+  async setTaskCompletion(taskId: string, date: string, staffId: string, done: boolean): Promise<void> {
+    this.db.taskCompletions = this.db.taskCompletions.filter(
+      (c) => !(c.taskId === taskId && c.date === date)
+    );
+    if (done) {
+      this.db.taskCompletions.push({
+        id: randomUUID(),
+        taskId,
+        date,
+        doneBy: staffId,
+        doneAt: new Date(),
+      });
+    }
+  }
+
+  async listTaskCompletions(filter: {
+    from: string;
+    to: string;
+    taskIds?: string[];
+  }): Promise<TaskCompletion[]> {
+    return this.db.taskCompletions
+      .filter(
+        (c) =>
+          c.date >= filter.from &&
+          c.date <= filter.to &&
+          (!filter.taskIds || filter.taskIds.includes(c.taskId))
+      )
+      .map((c) => ({ ...c }));
+  }
+
+  // ---- 幹部：日報の気づき確認 ----
+
+  async listExecNoticeChecks(reportIds: string[]): Promise<ExecNoticeCheck[]> {
+    return this.db.execNoticeChecks
+      .filter((c) => reportIds.includes(c.reportId))
+      .map((c) => ({ ...c }));
+  }
+
+  async setExecNoticeChecked(reportId: string, staffId: string, checked: boolean): Promise<void> {
+    this.db.execNoticeChecks = this.db.execNoticeChecks.filter((c) => c.reportId !== reportId);
+    if (checked) {
+      this.db.execNoticeChecks.push({
+        id: randomUUID(),
+        reportId,
+        checkedBy: staffId,
+        checkedAt: new Date(),
+      });
+    }
+  }
+
+  // ---- 社内チャット ----
+
+  async listChatRooms(staffId: string): Promise<ChatRoom[]> {
+    const myRoomIds = new Set(
+      this.db.chatMembers.filter((m) => m.staffId === staffId).map((m) => m.roomId)
+    );
+    return this.db.chatRooms
+      .filter((r) => myRoomIds.has(r.id))
+      .map(({ dmKey: _dk, ...r }) => ({ ...r }));
+  }
+
+  async getChatRoom(roomId: string): Promise<ChatRoom | null> {
+    const found = this.db.chatRooms.find((r) => r.id === roomId);
+    if (!found) return null;
+    const { dmKey: _dk, ...r } = found;
+    return { ...r };
+  }
+
+  async listChatMembers(roomIds: string[]): Promise<ChatMember[]> {
+    return this.db.chatMembers.filter((m) => roomIds.includes(m.roomId)).map((m) => ({ ...m }));
+  }
+
+  async getOrCreateDmRoom(staffA: string, staffB: string): Promise<ChatRoom> {
+    const dmKey = `dm:${[staffA, staffB].sort().join(":")}`;
+    const found = this.db.chatRooms.find((r) => r.dmKey === dmKey);
+    if (found) {
+      const { dmKey: _dk, ...r } = found;
+      return { ...r };
+    }
+    const created = {
+      id: randomUUID(),
+      name: "",
+      isGroup: false,
+      dmKey,
+      createdBy: staffA,
+      createdAt: new Date(),
+    };
+    this.db.chatRooms.push(created);
+    // 作成直後に相手側が「全部未読」にならないよう、既読は作成時刻から始める
+    this.db.chatMembers.push(
+      { roomId: created.id, staffId: staffA, lastReadAt: new Date() },
+      { roomId: created.id, staffId: staffB, lastReadAt: new Date() }
+    );
+    const { dmKey: _dk, ...r } = created;
+    return { ...r };
+  }
+
+  async createGroupRoom(name: string, createdBy: string, memberIds: string[]): Promise<ChatRoom> {
+    const created = {
+      id: randomUUID(),
+      name,
+      isGroup: true,
+      dmKey: "",
+      createdBy,
+      createdAt: new Date(),
+    };
+    this.db.chatRooms.push(created);
+    const ids = [...new Set([createdBy, ...memberIds])];
+    for (const staffId of ids) {
+      this.db.chatMembers.push({ roomId: created.id, staffId, lastReadAt: new Date() });
+    }
+    const { dmKey: _dk, ...r } = created;
+    return { ...r };
+  }
+
+  async listChatMessages(roomId: string, limit = 100): Promise<ChatMessage[]> {
+    return this.db.chatMessages
+      .filter((m) => m.roomId === roomId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(-limit)
+      .map((m) => ({ ...m }));
+  }
+
+  async listChatMessagesForRooms(roomIds: string[], limit = 300): Promise<ChatMessage[]> {
+    return this.db.chatMessages
+      .filter((m) => roomIds.includes(m.roomId))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((m) => ({ ...m }));
+  }
+
+  async createChatMessage(input: {
+    roomId: string;
+    senderId: string;
+    body: string;
+    image: string;
+  }): Promise<ChatMessage> {
+    const created: ChatMessage = {
+      id: randomUUID(),
+      roomId: input.roomId,
+      senderId: input.senderId,
+      body: input.body,
+      image: input.image,
+      deleted: false,
+      createdAt: new Date(),
+    };
+    this.db.chatMessages.push(created);
+    // 自分の送信は既読扱いにする
+    const me = this.db.chatMembers.find(
+      (m) => m.roomId === input.roomId && m.staffId === input.senderId
+    );
+    if (me) me.lastReadAt = new Date();
+    return { ...created };
+  }
+
+  async deleteChatMessage(id: string, staffId: string): Promise<void> {
+    const found = this.db.chatMessages.find((m) => m.id === id && m.senderId === staffId);
+    if (found) {
+      found.deleted = true;
+      found.body = "";
+      found.image = "";
+    }
+  }
+
+  async markChatRead(roomId: string, staffId: string): Promise<void> {
+    const found = this.db.chatMembers.find((m) => m.roomId === roomId && m.staffId === staffId);
+    if (found) found.lastReadAt = new Date();
+  }
+
+  async toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void> {
+    const idx = this.db.chatReactions.findIndex(
+      (r) => r.messageId === messageId && r.staffId === staffId && r.emoji === emoji
+    );
+    if (idx >= 0) this.db.chatReactions.splice(idx, 1);
+    else this.db.chatReactions.push({ messageId, staffId, emoji });
+  }
+
+  async listChatReactions(messageIds: string[]): Promise<ChatReaction[]> {
+    return this.db.chatReactions
+      .filter((r) => messageIds.includes(r.messageId))
+      .map((r) => ({ ...r }));
+  }
+
+  // ---- 社内SNS（サンクスカード） ----
+
+  async createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost> {
+    const created: ThanksPost = { ...input, id: randomUUID(), createdAt: new Date() };
+    this.db.thanksPosts.push(created);
+    return { ...created };
+  }
+
+  async listThanksPosts(filter?: {
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }): Promise<ThanksPost[]> {
+    return this.db.thanksPosts
+      .filter(
+        (p) =>
+          (!filter?.from || p.createdAt >= filter.from) &&
+          (!filter?.to || p.createdAt < filter.to)
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, filter?.limit ?? 100)
+      .map((p) => ({ ...p }));
+  }
+
+  async toggleThanksLike(postId: string, staffId: string): Promise<void> {
+    const idx = this.db.thanksLikes.findIndex(
+      (l) => l.postId === postId && l.staffId === staffId
+    );
+    if (idx >= 0) this.db.thanksLikes.splice(idx, 1);
+    else this.db.thanksLikes.push({ postId, staffId });
+  }
+
+  async listThanksLikes(postIds: string[]): Promise<ThanksLike[]> {
+    return this.db.thanksLikes.filter((l) => postIds.includes(l.postId)).map((l) => ({ ...l }));
+  }
+
+  async createThanksComment(input: Omit<ThanksComment, "id" | "createdAt">): Promise<ThanksComment> {
+    const created: ThanksComment = { ...input, id: randomUUID(), createdAt: new Date() };
+    this.db.thanksComments.push(created);
+    return { ...created };
+  }
+
+  async listThanksComments(postIds: string[]): Promise<ThanksComment[]> {
+    return this.db.thanksComments
+      .filter((c) => postIds.includes(c.postId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((c) => ({ ...c }));
   }
 }
 

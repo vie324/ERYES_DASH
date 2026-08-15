@@ -6,8 +6,10 @@ import { getDataStore, isDemoMode } from "@/lib/data";
 import { getBrand, BRAND_INFO, type Brand } from "@/lib/brand";
 import { getBrandName, getLogoSrc } from "@/lib/logo";
 import { buildMobileTabs, buildNav, type NavContext } from "@/lib/nav";
-import { jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
+import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
+import { getChatOverview } from "@/lib/chat";
+import { getMyTaskSummary, hasExecNotice } from "@/lib/tasks";
 import { AppShell } from "@/components/app-shell";
 import { DemoBanner } from "@/components/ui";
 import type { Session } from "@/lib/auth/session";
@@ -90,6 +92,28 @@ export async function AppFrame({
       if (jobType !== "stylist") badges.weeklyReport = myWeekly ? 0 : 1;
       badges.shift = dayoffEditable && myDayoffs.length === 0 ? 1 : 0;
     }
+  }
+
+  // タスク（今日やること）とチャット（未読）のバッジは業態共通
+  const [taskSummary, chatOverview] = await Promise.all([
+    getMyTaskSummary(db, session.staffId, today),
+    getChatOverview(db, session.staffId),
+  ]);
+  badges.tasks = taskSummary.dueCount;
+  badges.chat = chatOverview.totalUnread;
+
+  // 幹部バッジ：未確認の「日報の気づき」＋期限切れの幹部タスク
+  if (isExecutive) {
+    const noticeReports = (
+      await db.listEniReports("stylist", { from: addDays(today, -30), to: today })
+    ).filter((r) => hasExecNotice(r.answers));
+    const checks = await db.listExecNoticeChecks(noticeReports.map((r) => r.id));
+    const checkedIds = new Set(checks.map((c) => c.reportId));
+    const uncheckedNotices = noticeReports.filter((r) => !checkedIds.has(r.id)).length;
+    const overdueExecTasks = (await db.listStaffTasks({ kind: "exec" })).filter(
+      (t) => !t.repeat && t.dueDate && t.dueDate < today
+    ).length;
+    badges.exec = uncheckedNotices + overdueExecTasks;
   }
 
   const navContext: NavContext = {

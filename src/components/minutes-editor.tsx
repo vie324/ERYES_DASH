@@ -129,6 +129,9 @@ export function MinutesEditor({
             value={minutesText}
             onChange={(e) => setMinutesText(e.target.value)}
             rows={8}
+            placeholder={
+              "例）\n## 決まったこと\n- カラー剤を来週までに発注（岡）\n\n## 話し合った内容\n- …\n\n※ 上の「AIで議事録に整える」を使うと生メモから自動で作れます"
+            }
             className="input min-h-40 font-mono text-xs"
           />
         </div>

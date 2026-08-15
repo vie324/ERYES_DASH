@@ -1,23 +1,13 @@
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { addDays, formatDateJa, todayJst, weekdayOf } from "@/lib/date";
+import { addDays, formatDateJa, todayJst } from "@/lib/date";
 import { STYLIST_REPORT_NUMBERS, STYLIST_REPORT_TEXTS } from "@/lib/eni/forms";
-import { resolveScheduleDay } from "@/lib/schedule";
 import { EniFormFields } from "@/components/eni-form-fields";
 import { PageHeader } from "@/components/ui";
 import { StylistTimeSummary } from "./stylist-time";
 import { saveStylistReportAction } from "./actions";
 
-function minutesFromTimes(start: string, end: string): number {
-  const m = (t: string) => {
-    const [h, mm] = t.split(":").map(Number);
-    return Number.isFinite(h) && Number.isFinite(mm) ? h * 60 + mm : 0;
-  };
-  const diff = m(end) - m(start);
-  return diff > 0 ? diff : 0;
-}
-
-// スタイリスト日報（ENi）：来店ごとの時間から稼働率・施術時間の±を自動計算し、
+// スタイリスト日報（ENi）：客数・入客時間から稼働率と次回予約率を自動計算し、
 // 数字とふりかえりを記録する。同じ日に保存し直すと上書き。
 export default async function StylistReportPage({
   searchParams,
@@ -30,16 +20,10 @@ export default async function StylistReportPage({
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : today;
 
   const db = getDataStore();
-  const [existing, recent, patterns, dayoffs, overrides] = await Promise.all([
+  const [existing, recent] = await Promise.all([
     db.getEniReport("stylist", session.staffId, date),
     db.listEniReports("stylist", { staffId: session.staffId, from: addDays(today, -14), to: today }),
-    db.listWorkPatterns(session.staffId),
-    db.listDayoffRequests({ staffId: session.staffId, from: date, to: date }),
-    db.listScheduleOverrides({ staffId: session.staffId, from: date, to: date }),
   ]);
-
-  const sched = resolveScheduleDay(session.staffId, date, weekdayOf(date), patterns, dayoffs, overrides);
-  const defaultWorkMinutes = sched.working ? minutesFromTimes(sched.startTime, sched.endTime) : 0;
 
   const answers = existing?.answers ?? {};
   const numAnswer = (key: string): number =>
@@ -62,6 +46,11 @@ export default async function StylistReportPage({
       {params.error === "input" && (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           入力内容を確認してください（数字は0以上の整数）
+        </p>
+      )}
+      {params.error === "util" && (
+        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
+          稼働率の計算に必要な「入客時間の合計」を入力してください（必須）
         </p>
       )}
 
@@ -87,11 +76,8 @@ export default async function StylistReportPage({
 
         <StylistTimeSummary
           initialClientCount={numAnswer("client_count")}
-          initialMinutesEarly={numAnswer("minutes_early")}
-          initialMinutesOver={numAnswer("minutes_over")}
-          initialWorkMinutes={numAnswer("work_minutes")}
           initialServiceMinutes={numAnswer("service_minutes")}
-          defaultWorkMinutes={defaultWorkMinutes}
+          initialNextBookings={numAnswer("next_bookings")}
         />
 
         <EniFormFields items={STYLIST_REPORT_NUMBERS} answers={answers} />
