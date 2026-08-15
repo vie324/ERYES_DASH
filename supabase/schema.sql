@@ -61,6 +61,19 @@ create table if not exists counseling_responses (
   confirmed_at timestamptz
 );
 
+-- 来店前カウンセリングの案内（SMSでURLを送る。token付きの公開フォーム /c/[token] で回答）
+create table if not exists counseling_invites (
+  id uuid primary key default gen_random_uuid(),
+  token text not null unique,
+  customer_name text not null default '',
+  phone text not null default '',
+  customer_id uuid references customers(id),           -- 回答時に作成・紐づけ
+  response_id uuid references counseling_responses(id),
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now(),
+  answered_at timestamptz
+);
+
 -- 日報（スタッフ×日付でユニーク。再保存は上書き）
 create table if not exists daily_reports (
   id uuid primary key default gen_random_uuid(),
@@ -527,6 +540,7 @@ create table if not exists schedule_presets (
 -- ---- インデックス ----
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
+create index if not exists idx_counseling_invites_created on counseling_invites (created_at desc);
 create index if not exists idx_reports_date on daily_reports (report_date);
 create index if not exists idx_reports_staff_date on daily_reports (staff_id, report_date);
 create index if not exists idx_cash_reports_date on cash_reports (report_date);
@@ -567,6 +581,7 @@ alter table stores enable row level security;
 alter table staff enable row level security;
 alter table customers enable row level security;
 alter table counseling_responses enable row level security;
+alter table counseling_invites enable row level security;
 alter table daily_reports enable row level security;
 alter table cash_reports enable row level security;
 alter table attendances enable row level security;

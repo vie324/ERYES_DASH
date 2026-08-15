@@ -28,15 +28,17 @@ export function MeetingCreateForm({
 
   const [mode, setMode] = useState<Mode>("committee");
   const [committee, setCommittee] = useState(templates[0]?.key ?? "");
-  const [agenda, setAgenda] = useState(templates[0]?.agenda ?? "");
+  // アジェンダは空で始める。テンプレ文は「例」としてプレースホルダー表示し、
+  // 使いたいときだけボタンで挿入する（勝手に打ち込まれていると消す手間があるため）
+  const [agenda, setAgenda] = useState("");
   const [participants, setParticipants] = useState<Set<string>>(() => membersOf(templates[0]?.key ?? ""));
 
   const template = templates.find((t) => t.key === committee);
 
   const onTemplateChange = (key: string) => {
     setCommittee(key);
-    const t = templates.find((x) => x.key === key);
-    setAgenda(t?.agenda ?? "");
+    // 挿入済みの旧テンプレ議題が残らないよう、自分で書いていない（＝どれかのテンプレのまま）なら空に戻す
+    setAgenda((prev) => (templates.some((t) => t.agenda === prev) ? "" : prev));
     setParticipants(membersOf(key)); // 組織図のチームメンバーを初期選択にする
   };
 
@@ -143,9 +145,20 @@ export function MeetingCreateForm({
           </div>
         )}
 
-        {/* アジェンダ（会議体はテンプレ自動入力・編集可） */}
+        {/* アジェンダ（テンプレは「例」としてプレースホルダー表示。使うときだけボタンで挿入） */}
         <div>
-          <label className="label" htmlFor="agenda">アジェンダ・議題</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="label !mb-0" htmlFor="agenda">アジェンダ・議題（任意）</label>
+            {mode === "committee" && template?.agenda && agenda !== template.agenda && (
+              <button
+                type="button"
+                onClick={() => setAgenda(template.agenda)}
+                className="text-[11px] font-bold text-brand-700 border border-brand-300 rounded-full px-2.5 py-1"
+              >
+                テンプレの議題を入れる
+              </button>
+            )}
+          </div>
           <textarea
             id="agenda"
             name="agenda"
@@ -154,7 +167,11 @@ export function MeetingCreateForm({
             defaultValue={mode === "committee" ? undefined : ""}
             onChange={mode === "committee" ? (e) => setAgenda(e.target.value) : undefined}
             className="input min-h-24"
-            placeholder="議題・話すこと"
+            placeholder={
+              mode === "committee" && template?.agenda
+                ? `例）\n${template.agenda}`
+                : "議題・話すこと"
+            }
           />
         </div>
 

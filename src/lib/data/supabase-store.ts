@@ -2,6 +2,7 @@
 // すべてサーバー側からサービスロールで接続する（認証は自前のセッションCookieで行うため、
 // RLSは全テーブル「拒否」のままでよい。詳細は supabase/schema.sql を参照）。
 
+import { randomBytes } from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
@@ -18,6 +19,7 @@ import type {
   ChatMessage,
   ChatReaction,
   ChatRoom,
+  CounselingInvite,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -103,6 +105,18 @@ const mapCounseling = (r: Row): CounselingResponse => ({
   submittedAt: new Date(r.submitted_at),
   confirmedBy: r.confirmed_by,
   confirmedAt: r.confirmed_at ? new Date(r.confirmed_at) : null,
+});
+
+const mapCounselingInvite = (r: Row): CounselingInvite => ({
+  id: r.id,
+  token: r.token,
+  customerName: r.customer_name ?? "",
+  phone: r.phone ?? "",
+  customerId: r.customer_id ?? null,
+  responseId: r.response_id ?? null,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+  answeredAt: r.answered_at ? new Date(r.answered_at) : null,
 });
 
 const mapReport = (r: Row): DailyReport => ({
@@ -1847,6 +1861,65 @@ class SupabaseStore implements DataStore {
   async deleteSchedulePreset(id: string): Promise<void> {
     const { error } = await this.sb.from("schedule_presets").delete().eq("id", id);
     if (error) throw new Error(`[supabase] 項目削除: ${error.message}`);
+  }
+
+  // ---- 来店前カウンセリングの案内（SMSでURL送付） ----
+
+  async createCounselingInvite(input: {
+    customerName: string;
+    phone: string;
+    createdBy: string;
+  }): Promise<CounselingInvite> {
+    const { data, error } = await this.sb
+      .from("counseling_invites")
+      .insert({
+        token: randomBytes(18).toString("base64url"),
+        customer_name: input.customerName,
+        phone: input.phone,
+        created_by: input.createdBy,
+      })
+      .select()
+      .single();
+    return mapCounselingInvite(must(data, error, "カウンセリング案内の発行"));
+  }
+
+  async getCounselingInviteByToken(token: string): Promise<CounselingInvite | null> {
+    const { data } = await this.sb
+      .from("counseling_invites")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+    return data ? mapCounselingInvite(data) : null;
+  }
+
+  async listCounselingInvites(limit = 30): Promise<CounselingInvite[]> {
+    const { data, error } = await this.sb
+      .from("counseling_invites")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return must(data, error, "カウンセリング案内一覧").map(mapCounselingInvite);
+  }
+
+  async markCounselingInviteAnswered(
+    id: string,
+    customerId: string,
+    responseId: string
+  ): Promise<void> {
+    const { error } = await this.sb
+      .from("counseling_invites")
+      .update({
+        customer_id: customerId,
+        response_id: responseId,
+        answered_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] カウンセリング案内更新: ${error.message}`);
+  }
+
+  async deleteCounselingInvite(id: string): Promise<void> {
+    const { error } = await this.sb.from("counseling_invites").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] カウンセリング案内削除: ${error.message}`);
   }
 
   // ---- タスク管理（ルーティン／依頼／幹部タスク） ----

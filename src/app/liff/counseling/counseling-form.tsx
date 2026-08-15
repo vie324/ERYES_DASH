@@ -4,6 +4,9 @@
 // カウンセリング入力フォーム（顧客がスマホで入力する画面）
 // 項目定義は src/lib/counseling/items.ts にあり、コード修正だけで増減できる。
 // 入力後は「注意事項の確認」ステップに進み、「確認しました」にチェックしてから送信する。
+// 開き方は2通り：
+//  ・LINE（LIFF）経由 …… liffId を渡す。LINEアカウントと自動で紐づく
+//  ・SMSの案内URL経由 …… inviteToken を渡す。LINE不要（来店前カウンセリング）
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -37,15 +40,22 @@ type Step = "form" | "consent";
 export function CounselingForm({
   liffId,
   logoSrc = "/logo.svg",
+  inviteToken = "",
+  initialName = "",
 }: {
   liffId: string;
   logoSrc?: string;
+  /** SMSの案内URL（/c/…）から開いたときのトークン。指定時はLINE連携を使わない */
+  inviteToken?: string;
+  /** 案内の発行時に入力したお客様のお名前（自動入力） */
+  initialName?: string;
 }) {
-  const isMock = !liffId;
-  const [phase, setPhase] = useState<Phase>(isMock ? "ready" : "init");
+  const isInvite = Boolean(inviteToken);
+  const isMock = !liffId && !isInvite;
+  const [phase, setPhase] = useState<Phase>(isMock || isInvite ? "ready" : "init");
   const [step, setStep] = useState<Step>("form");
   const [errors, setErrors] = useState<string[]>([]);
-  const [fullName, setFullName] = useState("");
+  const [fullName, setFullName] = useState(initialName);
   const [menus, setMenus] = useState<string[]>([]); // 選択中のメニュー（セクションの表示切替に使う）
   const [mockUserId, setMockUserId] = useState("mock-user-1");
   const [inLineApp, setInLineApp] = useState(false);
@@ -69,7 +79,7 @@ export function CounselingForm({
     }
   }, []);
 
-  // モックモード：初期表示でテスト用IDのプロフィールを読み込む
+  // モックモード：初期表示でテスト用IDのプロフィールを読み込む（SMS案内経由では不要）
   useEffect(() => {
     if (isMock) void loadProfile({ mockUserId: "mock-user-1" });
   }, [isMock, loadProfile]);
@@ -146,15 +156,20 @@ export function CounselingForm({
     }
 
     try {
-      const res = await fetch("/api/liff/counseling", {
+      // SMS案内経由はトークンで、LINE経由はアクセストークンで本人を識別する
+      const res = await fetch(isInvite ? "/api/counseling/invite" : "/api/liff/counseling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: accessTokenRef.current ?? undefined,
-          mockUserId: isMock ? mockUserId : undefined,
-          answers,
-          consent: { agreed: agree },
-        }),
+        body: JSON.stringify(
+          isInvite
+            ? { token: inviteToken, answers, consent: { agreed: agree } }
+            : {
+                accessToken: accessTokenRef.current ?? undefined,
+                mockUserId: isMock ? mockUserId : undefined,
+                answers,
+                consent: { agreed: agree },
+              }
+        ),
       });
       const data = (await res.json()) as { ok: boolean; errors?: string[] };
       if (data.ok) {
@@ -172,7 +187,7 @@ export function CounselingForm({
 
   return (
     <div className="min-h-dvh bg-brand-50">
-      {!isMock && (
+      {!isMock && !isInvite && (
         <Script
           src="https://static.line-scdn.net/liff/edge/2/sdk.js"
           strategy="afterInteractive"

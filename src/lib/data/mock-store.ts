@@ -2,7 +2,7 @@
 // Supabase の環境変数が未設定のときに使われ、起動のたびにデモデータが再生成される。
 // 本番では supabase-store.ts が使われるため、このファイルは動作確認専用。
 
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
@@ -20,6 +20,7 @@ import type {
   ChatMessage,
   ChatReaction,
   ChatRoom,
+  CounselingInvite,
   CounselingResponse,
   CounselingStatus,
   Customer,
@@ -68,6 +69,7 @@ interface MockDb {
   staff: (StaffWithSecret & { passwordHash: string })[];
   customers: Customer[];
   counseling: CounselingResponse[];
+  counselingInvites: CounselingInvite[];
   reports: DailyReport[];
   cashReports: CashReport[];
   attendances: Attendance[];
@@ -944,6 +946,7 @@ function seed(): MockDb {
     staff,
     customers,
     counseling,
+    counselingInvites: [],
     reports,
     cashReports,
     attendances,
@@ -2055,6 +2058,57 @@ class MockStore implements DataStore {
 
   async deleteSchedulePreset(id: string): Promise<void> {
     this.db.schedulePresets = this.db.schedulePresets.filter((p) => p.id !== id);
+  }
+
+  // ---- 来店前カウンセリングの案内（SMSでURL送付） ----
+
+  async createCounselingInvite(input: {
+    customerName: string;
+    phone: string;
+    createdBy: string;
+  }): Promise<CounselingInvite> {
+    const created: CounselingInvite = {
+      id: randomUUID(),
+      token: randomBytes(18).toString("base64url"),
+      customerName: input.customerName,
+      phone: input.phone,
+      customerId: null,
+      responseId: null,
+      createdBy: input.createdBy,
+      createdAt: new Date(),
+      answeredAt: null,
+    };
+    this.db.counselingInvites.push(created);
+    return { ...created };
+  }
+
+  async getCounselingInviteByToken(token: string): Promise<CounselingInvite | null> {
+    const found = this.db.counselingInvites.find((i) => i.token === token);
+    return found ? { ...found } : null;
+  }
+
+  async listCounselingInvites(limit = 30): Promise<CounselingInvite[]> {
+    return [...this.db.counselingInvites]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((i) => ({ ...i }));
+  }
+
+  async markCounselingInviteAnswered(
+    id: string,
+    customerId: string,
+    responseId: string
+  ): Promise<void> {
+    const found = this.db.counselingInvites.find((i) => i.id === id);
+    if (found) {
+      found.customerId = customerId;
+      found.responseId = responseId;
+      found.answeredAt = new Date();
+    }
+  }
+
+  async deleteCounselingInvite(id: string): Promise<void> {
+    this.db.counselingInvites = this.db.counselingInvites.filter((i) => i.id !== id);
   }
 
   // ---- タスク管理（ルーティン／依頼／幹部タスク） ----

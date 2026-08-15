@@ -66,6 +66,19 @@ export interface CounselingResponse {
   confirmedAt: Date | null;
 }
 
+/** 来店前カウンセリングの案内（SMSでURLを送る。トークン付きの公開フォームで回答できる） */
+export interface CounselingInvite {
+  id: string;
+  token: string; // URL用トークン（推測不可のランダム文字列）
+  customerName: string; // お客様のお名前（送付時に入力）
+  phone: string; // 携帯電話番号（SMS送付先）
+  customerId: string | null; // 回答時に作成・紐づけされる顧客
+  responseId: string | null; // 回答（counseling_responses）への紐づけ
+  createdBy: string; // 発行したスタッフ
+  createdAt: Date;
+  answeredAt: Date | null;
+}
+
 export interface DailyReport {
   id: string;
   staffId: string;
@@ -609,6 +622,17 @@ export interface DataStore {
   }): Promise<CounselingResponse[]>;
   getCounselingResponse(id: string): Promise<CounselingResponse | null>;
   confirmCounselingResponse(id: string, staffId: string): Promise<CounselingResponse>;
+
+  // 来店前カウンセリングの案内（SMSでURL送付）
+  createCounselingInvite(input: {
+    customerName: string;
+    phone: string;
+    createdBy: string;
+  }): Promise<CounselingInvite>;
+  getCounselingInviteByToken(token: string): Promise<CounselingInvite | null>;
+  listCounselingInvites(limit?: number): Promise<CounselingInvite[]>;
+  markCounselingInviteAnswered(id: string, customerId: string, responseId: string): Promise<void>;
+  deleteCounselingInvite(id: string): Promise<void>;
 
   // 日報
   upsertDailyReport(input: DailyReportInput): Promise<DailyReport>;
