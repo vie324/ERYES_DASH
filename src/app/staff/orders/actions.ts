@@ -18,8 +18,13 @@ export async function createOrderRequestAction(formData: FormData): Promise<void
   const itemName = String(formData.get("item_name") ?? "").trim().slice(0, 100);
   const quantity = Number(formData.get("quantity") ?? 1);
   const note = String(formData.get("note") ?? "").trim().slice(0, 300);
+  // 発注先URL（任意）。リンクとして安全な http(s) のみ受け付ける
+  const supplierUrl = String(formData.get("supplier_url") ?? "").trim().slice(0, 500);
 
   if (!itemName || !Number.isFinite(quantity) || quantity <= 0 || quantity > 999) {
+    redirect("/staff/orders?error=input");
+  }
+  if (supplierUrl && !/^https?:\/\//.test(supplierUrl)) {
     redirect("/staff/orders?error=input");
   }
 
@@ -29,6 +34,7 @@ export async function createOrderRequestAction(formData: FormData): Promise<void
     itemName,
     quantity: Math.round(quantity),
     note,
+    supplierUrl,
   });
   revalidatePath("/staff/orders");
   redirect("/staff/orders?saved=1");

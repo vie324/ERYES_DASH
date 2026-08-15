@@ -1,8 +1,8 @@
 "use client";
 
-// シフト希望の入力フォーム。
-// カレンダーの日をタップするたびに 指定なし → 早番 → 遅番 → 休み → 指定なし と切り替わる。
-// 「指定なし」の日は早番・遅番どちらでも勤務できる扱いになる（覚えることを最小限に）。
+// シフト希望（希望休）の入力フォーム。
+// カレンダーの日をタップするたびに 指定なし ⇄ 休み が切り替わる。
+// 早番・遅番の区別は無いため、休みたい日だけを選べばよい。
 
 import { useMemo, useState } from "react";
 import { datesOfMonth, weekdayJa, weekdayOf } from "@/lib/date";
@@ -11,7 +11,6 @@ import type { ShiftPreference } from "@/lib/data/types";
 import { saveShiftRequestAction } from "./actions";
 
 type CellState = ShiftPreference | "none";
-const CYCLE: CellState[] = ["none", "early", "late", "off"];
 
 export function ShiftRequestForm({
   targetMonth,
@@ -37,11 +36,10 @@ export function ShiftRequestForm({
   const cycleDay = (date: string) => {
     if (!editable) return;
     setDays((prev) => {
-      const current: CellState = prev[date] ?? "none";
-      const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
       const updated = { ...prev };
-      if (next === "none") delete updated[date];
-      else updated[date] = next;
+      // 「休み」だけのトグル。旧データに早番・遅番が残っていてもタップで「休み」に整理される
+      if (updated[date] === "off") delete updated[date];
+      else updated[date] = "off";
       return updated;
     });
   };
@@ -56,11 +54,10 @@ export function ShiftRequestForm({
     });
   };
 
-  const counts = useMemo(() => {
-    const c = { early: 0, late: 0, off: 0 };
-    for (const pref of Object.values(days)) c[pref]++;
-    return c;
-  }, [days]);
+  const offCount = useMemo(
+    () => Object.values(days).filter((pref) => pref === "off").length,
+    [days]
+  );
 
   return (
     <form action={saveShiftRequestAction} className="space-y-4">
@@ -68,10 +65,10 @@ export function ShiftRequestForm({
       <input type="hidden" name="days_json" value={JSON.stringify(days)} />
 
       <section className="card">
-        <p className="section-title !mb-1.5">日ごとの希望</p>
+        <p className="section-title !mb-1.5">休みたい日（希望休）</p>
         <p className="text-xs text-ink-400 mb-3">
-          日付をタップするたびに「指定なし → 早番 → 遅番 → 休み」と切り替わります。
-          指定なしの日は早番・遅番どちらでも入れる扱いです。
+          休みたい日をタップして選びます（もう一度タップで取り消し）。
+          選んでいない日は勤務できる扱いです。
         </p>
 
         <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-ink-400 mb-1">
@@ -107,9 +104,7 @@ export function ShiftRequestForm({
         </div>
 
         <p className="text-xs text-ink-500 mt-3">
-          休み希望 <span className="font-bold text-brand-700">{counts.off}日</span>
-          ／ 早番希望 <span className="font-bold text-sky-600">{counts.early}日</span>
-          ／ 遅番希望 <span className="font-bold text-indigo-600">{counts.late}日</span>
+          休み希望 <span className="font-bold text-brand-700">{offCount}日</span>
         </p>
       </section>
 

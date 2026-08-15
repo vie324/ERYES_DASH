@@ -8,7 +8,7 @@ import { todayJst } from "@/lib/date";
 import { computeStylistCalc, STYLIST_REPORT_ITEMS, validateEniAnswers } from "@/lib/eni/forms";
 
 /** 0以上の整数だけ受け取る（空欄は0） */
-function minutesField(formData: FormData, name: string): number {
+function numberField(formData: FormData, name: string): number {
   const n = Math.round(Number(formData.get(name)) || 0);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
@@ -30,13 +30,15 @@ export async function saveStylistReportAction(formData: FormData): Promise<void>
     redirect(`/staff/eni-report?date=${date}&error=input`);
   }
 
-  // 時間はお客様1人ずつではなく、その日の合計を本人が記入する
+  // 稼働率は必須：入客時間の合計が入っていないと保存できない
+  if (String(formData.get("service_minutes") ?? "").trim() === "") {
+    redirect(`/staff/eni-report?date=${date}&error=util`);
+  }
+
   const time = {
-    clientCount: minutesField(formData, "client_count"),
-    minutesEarly: minutesField(formData, "minutes_early"),
-    minutesOver: minutesField(formData, "minutes_over"),
-    workMinutes: minutesField(formData, "work_minutes"),
-    serviceMinutes: minutesField(formData, "service_minutes"),
+    clientCount: numberField(formData, "client_count"),
+    serviceMinutes: numberField(formData, "service_minutes"),
+    nextBookings: numberField(formData, "next_bookings"),
   };
   const calc = computeStylistCalc(time);
 
@@ -47,13 +49,12 @@ export async function saveStylistReportAction(formData: FormData): Promise<void>
     answers: {
       ...result.answers,
       client_count: time.clientCount,
-      minutes_early: time.minutesEarly,
-      minutes_over: time.minutesOver,
-      work_minutes: time.workMinutes,
       service_minutes: time.serviceMinutes,
-      time_diff: calc.timeDiff,
-      // 稼働率は「施術時間の合計」を入れたときだけ記録する
-      ...(calc.utilization !== null ? { utilization: calc.utilization } : {}),
+      next_bookings: time.nextBookings,
+      // 稼働率＝入客時間÷8時間（自動計算・必須）
+      utilization: calc.utilization,
+      // 次回予約率も%で記録（閲覧側の表示用）
+      ...(calc.rebookRate !== null ? { rebook_rate: calc.rebookRate } : {}),
     },
   });
   revalidatePath("/staff/eni-report");

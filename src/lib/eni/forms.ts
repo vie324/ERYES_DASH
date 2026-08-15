@@ -17,13 +17,12 @@ export interface EniFormItem {
 }
 
 // ---- スタイリスト日報（毎日・スタイリスト） ----
-// 客数・稼働率・施術時間の±は「来店ごとの入力」から自動計算する（page側の専用UI）。
-// ここでは数字（売上・次回予約）と、ふりかえりのテキスト項目を定義する。
+// 客数・入客時間・次回予約は page 側の専用UI（稼働率・次回予約率を自動計算して見せる）。
+// ここでは数字（売上）と、ふりかえりのテキスト項目を定義する。
 export const STYLIST_REPORT_NUMBERS: EniFormItem[] = [
   { key: "new_clients", label: "新規", type: "number", required: false, unit: "人" },
   { key: "service_sales", label: "技術売上", type: "number", required: false, unit: "円" },
   { key: "retail_sales", label: "店販売上", type: "number", required: false, unit: "円" },
-  { key: "next_bookings", label: "次回予約が取れた数", type: "number", required: false, unit: "件" },
 ];
 
 export const STYLIST_REPORT_TEXTS: EniFormItem[] = [
@@ -319,41 +318,44 @@ export function formatEniAnswer(item: EniFormItem, value: unknown): string {
   return String(value);
 }
 
-// ---- スタイリスト日報の時間まとめ ----
-// お客様1人ずつの±を書くのは手間なので、その日の合計（早く終わった／オーバー）を本人が記入する。
-// 稼働率は「施術時間の合計」を入れたときだけ出す（任意項目）。
+// ---- スタイリスト日報の稼働率・次回予約率 ----
+// 稼働率は必須：8時間（480分）のうち、どれくらいお客様に入っていたか（入客時間 ÷ 8時間）。
+// 次回予約率 ＝ 次回予約が取れた数 ÷ 客数。どちらも自動計算して%で見せる。
+
+/** 稼働率の基準時間（8時間＝480分） */
+export const STYLIST_STANDARD_MINUTES = 480;
 
 export interface StylistTimeInput {
   /** 今日の客数（人） */
   clientCount: number;
-  /** 予定より早く終わった時間の合計（分） */
-  minutesEarly: number;
-  /** 予定をオーバーした時間の合計（分） */
-  minutesOver: number;
-  /** 今日の勤務時間（分）。シフトから自動で入る */
-  workMinutes: number;
-  /** 施術時間の合計（分）。任意。入れると稼働率を計算する */
+  /** 入客時間の合計（分）。必須。稼働率の分子になる */
   serviceMinutes: number;
+  /** 次回予約が取れた数（件） */
+  nextBookings: number;
 }
 
 export interface StylistCalc {
-  /** 施術時間の合計±（分）。＋はオーバー、−は早く終わった */
-  timeDiff: number;
-  /** 稼働率（%）。施術時間の合計が未入力なら null */
-  utilization: number | null;
+  /** 稼働率（%）＝ 入客時間 ÷ 8時間（480分） */
+  utilization: number;
+  /** 次回予約率（%）。客数0のときは null */
+  rebookRate: number | null;
 }
 
-/**
- * 施術時間の合計± ＝ オーバー − 早く終わった
- * 稼働率 ＝（施術時間の合計 − 客数×60分）÷ 勤務時間
- *   ※ 1人あたり前後30分（受付・仕上げ・お会計＝アシスタント対応分）を除く、という従来の考え方
- */
 export function computeStylistCalc(input: StylistTimeInput): StylistCalc {
-  const timeDiff = input.minutesOver - input.minutesEarly;
-  const busy = Math.max(0, input.serviceMinutes - input.clientCount * 60);
   const utilization =
-    input.serviceMinutes > 0 && input.workMinutes > 0
-      ? Math.round((busy / input.workMinutes) * 1000) / 10
+    Math.round((Math.max(0, input.serviceMinutes) / STYLIST_STANDARD_MINUTES) * 1000) / 10;
+  const rebookRate =
+    input.clientCount > 0
+      ? Math.round((Math.max(0, input.nextBookings) / input.clientCount) * 1000) / 10
       : null;
-  return { timeDiff, utilization };
+  return { utilization, rebookRate };
+}
+
+/** 保存済みの日報から次回予約率を計算（閲覧画面用。旧データも next_bookings/client_count から出せる） */
+export function rebookRateOf(answers: Record<string, unknown>): number | null {
+  const num = (key: string) =>
+    typeof answers[key] === "number" && Number.isFinite(answers[key]) ? (answers[key] as number) : 0;
+  const clients = num("client_count");
+  if (clients <= 0) return null;
+  return Math.round((num("next_bookings") / clients) * 1000) / 10;
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
@@ -15,6 +16,7 @@ import {
 } from "./actions";
 
 // 組織図：会社／サロンの2枚をタブで切り替え、上から下への階層で表示する。
+// 閲覧できるのは管理者・幹部のみ（それ以外には見せない）。
 // 管理者・幹部は、部署の追加・変更・削除、メンバー配置、一人ひとりの役割を画面から編集できる。
 export default async function OrgPage({
   searchParams,
@@ -24,6 +26,7 @@ export default async function OrgPage({
   const session = await requireSession();
   const params = await searchParams;
   const isExec = await isExecutive(session);
+  if (!isExec) redirect("/staff");
   const chartKey = ORG_CHARTS.some((c) => c.key === params.chart) ? params.chart! : "company";
   const chart = ORG_CHARTS.find((c) => c.key === chartKey)!;
 

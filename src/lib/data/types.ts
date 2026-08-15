@@ -356,9 +356,114 @@ export interface OrderRequest {
   itemName: string;
   quantity: number;
   note: string;
+  supplierUrl: string; // 発注先のURL（商品ページなど。空文字は未設定）
   status: OrderStatus;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ============================================================
+// タスク管理（ルーティン／依頼／幹部タスク）
+// ============================================================
+
+// routine=自分で決めたルーティン / request=誰かからお願いされたタスク / exec=幹部タスク
+export type TaskKind = "routine" | "request" | "exec";
+// 単発タスクの進捗。繰り返しタスクは task_completions（日別）で管理する
+export type TaskStatus = "open" | "in_progress" | "done";
+// ""=単発 / daily=毎日 / weekly=毎週（repeatDays=曜日0-6）/ monthly=毎月（repeatDays=日1-31）
+export type TaskRepeat = "" | "daily" | "weekly" | "monthly";
+
+export interface StaffTask {
+  id: string;
+  kind: TaskKind;
+  title: string;
+  note: string;
+  assigneeStaffId: string; // やる人
+  createdBy: string; // 作成者（依頼タスクでは依頼した人）
+  dueDate: string; // 期限 "YYYY-MM-DD"（空文字は期限なし。繰り返しタスクは空）
+  repeat: TaskRepeat;
+  repeatDays: number[]; // weekly: 曜日(0=日〜6=土) / monthly: 日(1〜31)
+  status: TaskStatus;
+  doneAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** 繰り返しタスクの「その日やったか」の記録（タスク×日付でユニーク） */
+export interface TaskCompletion {
+  id: string;
+  taskId: string;
+  date: string; // "YYYY-MM-DD"
+  doneBy: string;
+  doneAt: Date;
+}
+
+/** スタイリスト日報の「気づき・共有」を幹部が確認した記録（レポート単位） */
+export interface ExecNoticeCheck {
+  id: string;
+  reportId: string; // eni_reports.id
+  checkedBy: string;
+  checkedAt: Date;
+}
+
+// ============================================================
+// 社内チャット（DM・グループ／既読／リアクション）
+// ============================================================
+
+export interface ChatRoom {
+  id: string;
+  name: string; // グループ名（DMは空文字＝相手の名前を表示）
+  isGroup: boolean;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export interface ChatMember {
+  roomId: string;
+  staffId: string;
+  lastReadAt: Date; // 既読管理（この日時以前のメッセージは既読）
+}
+
+export interface ChatMessage {
+  id: string;
+  roomId: string;
+  senderId: string;
+  body: string;
+  image: string; // 添付画像（データURL。空文字はなし）
+  deleted: boolean; // 送信取消
+  createdAt: Date;
+}
+
+export interface ChatReaction {
+  messageId: string;
+  staffId: string;
+  emoji: string;
+}
+
+// ============================================================
+// 社内SNS（サンクスカード）
+// ============================================================
+
+export interface ThanksPost {
+  id: string;
+  fromStaffId: string;
+  toStaffId: string;
+  body: string;
+  cardColor: string; // カードの色キー（gold/rose/sky/mint）
+  createdAt: Date;
+}
+
+export interface ThanksLike {
+  postId: string;
+  staffId: string;
+}
+
+export interface ThanksComment {
+  id: string;
+  postId: string;
+  staffId: string;
+  body: string;
+  createdAt: Date;
 }
 
 /** 予約表（タイムテーブル）の1件。d=曜日index（1日だけの場合は0）、s/e="HH:mm" */
@@ -668,6 +773,64 @@ export interface DataStore {
   ): Promise<OrderRequest>;
   listOrderRequests(filter: { staffId?: string; from: Date; to: Date }): Promise<OrderRequest[]>;
   updateOrderStatus(id: string, status: OrderStatus): Promise<void>;
+
+  // ---- タスク管理（ルーティン／依頼／幹部タスク） ----
+  createStaffTask(
+    input: Omit<StaffTask, "id" | "doneAt" | "createdAt" | "updatedAt">
+  ): Promise<StaffTask>;
+  getStaffTask(id: string): Promise<StaffTask | null>;
+  /** includeDone=false なら未完了（open/in_progress と繰り返し）のみ */
+  listStaffTasks(filter?: {
+    kind?: TaskKind;
+    assigneeStaffId?: string;
+    createdBy?: string;
+    includeDone?: boolean;
+  }): Promise<StaffTask[]>;
+  updateStaffTask(
+    id: string,
+    patch: Partial<
+      Pick<StaffTask, "title" | "note" | "assigneeStaffId" | "dueDate" | "repeat" | "repeatDays" | "status">
+    >
+  ): Promise<void>;
+  deleteStaffTask(id: string): Promise<void>;
+  /** 繰り返しタスクの「その日の完了」を付ける／外す */
+  setTaskCompletion(taskId: string, date: string, staffId: string, done: boolean): Promise<void>;
+  listTaskCompletions(filter: { from: string; to: string; taskIds?: string[] }): Promise<TaskCompletion[]>;
+
+  // ---- 幹部：日報の気づき確認 ----
+  listExecNoticeChecks(reportIds: string[]): Promise<ExecNoticeCheck[]>;
+  setExecNoticeChecked(reportId: string, staffId: string, checked: boolean): Promise<void>;
+
+  // ---- 社内チャット ----
+  listChatRooms(staffId: string): Promise<ChatRoom[]>;
+  getChatRoom(roomId: string): Promise<ChatRoom | null>;
+  listChatMembers(roomIds: string[]): Promise<ChatMember[]>;
+  /** 2人のDMルームを取得（無ければ作る） */
+  getOrCreateDmRoom(staffA: string, staffB: string): Promise<ChatRoom>;
+  createGroupRoom(name: string, createdBy: string, memberIds: string[]): Promise<ChatRoom>;
+  /** ルームのメッセージ（古い順・直近limit件） */
+  listChatMessages(roomId: string, limit?: number): Promise<ChatMessage[]>;
+  /** 複数ルームの直近メッセージ（新しい順・未読数と一覧プレビュー用） */
+  listChatMessagesForRooms(roomIds: string[], limit?: number): Promise<ChatMessage[]>;
+  createChatMessage(input: {
+    roomId: string;
+    senderId: string;
+    body: string;
+    image: string;
+  }): Promise<ChatMessage>;
+  /** 自分のメッセージのみ取消できる */
+  deleteChatMessage(id: string, staffId: string): Promise<void>;
+  markChatRead(roomId: string, staffId: string): Promise<void>;
+  toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
+  listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+
+  // ---- 社内SNS（サンクスカード） ----
+  createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost>;
+  listThanksPosts(filter?: { from?: Date; to?: Date; limit?: number }): Promise<ThanksPost[]>;
+  toggleThanksLike(postId: string, staffId: string): Promise<void>;
+  listThanksLikes(postIds: string[]): Promise<ThanksLike[]>;
+  createThanksComment(input: Omit<ThanksComment, "id" | "createdAt">): Promise<ThanksComment>;
+  listThanksComments(postIds: string[]): Promise<ThanksComment[]>;
 
   // 毎朝のスケジュール・理想のスケジュール
   upsertDailyPlan(input: {
