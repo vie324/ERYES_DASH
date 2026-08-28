@@ -4,9 +4,12 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa } from "@/lib/date";
 import { Markdown } from "@/lib/markdown";
-import { findTemplate } from "@/lib/eni/meetings-templates";
+import { findCommitteeTemplate } from "@/lib/eni/committees";
 import { PageHeader } from "@/components/ui";
 import { PrintButton } from "@/components/print-button";
+import { Icon } from "@/components/icons";
+import { getChatOverview } from "@/lib/chat";
+import { forwardMinutesAction } from "@/app/staff/chat/actions";
 
 // 議事録の清書ページ（PDF出力用）。ブラウザの「印刷 → PDFで保存」でそのままPDFになる。
 // ?print=1 で開くと、自動で印刷ダイアログを出す。
@@ -17,16 +20,22 @@ export default async function MinutesPrintPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ print?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
   const query = await searchParams;
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
   if (!meeting) notFound();
 
-  const [staffList, tasks] = await Promise.all([db.listStaff(), db.listMeetingTasks([id])]);
+  const [staffList, tasks, chatOverview, committees] = await Promise.all([
+    db.listStaff(),
+    db.listMeetingTasks([id]),
+    // 議事録の転送先（自分が入っているトークルーム）
+    getChatOverview(db, session.staffId),
+    db.listCommittees(),
+  ]);
   const nameOf = (sid: string | null) => (sid ? (staffList.find((s) => s.id === sid)?.name ?? "") : "");
-  const template = findTemplate(meeting!.committee);
+  const template = findCommitteeTemplate(committees, meeting!.committee);
   const meetingName = template?.name || meeting!.title || (meeting!.meetingType === "1on1" ? "1on1ミーティング" : "ミーティング");
   const participantNames = [
     ...(meeting!.guestStaffId ? [meeting!.guestStaffId] : []),
@@ -101,6 +110,33 @@ export default async function MinutesPrintPage({
           <p className="text-[10px] text-ink-300 mt-6 print:mt-10">AI整形（要確認）／ ENi 議事録</p>
         )}
       </article>
+
+      {/* トークルームへ転送（本文をそのまま送り、ノートにも残す） */}
+      {meeting!.minutesText && chatOverview.rooms.length > 0 && (
+        <form
+          action={forwardMinutesAction}
+          className="card mt-4 print:hidden flex flex-col sm:flex-row sm:items-end gap-2"
+        >
+          <input type="hidden" name="meeting_id" value={meeting!.id} />
+          <input type="hidden" name="back" value={`/staff/meetings/${meeting!.id}`} />
+          <div className="flex-1">
+            <label className="label !text-xs" htmlFor="forward-room">
+              この議事録をトークルームへ転送する
+            </label>
+            <select id="forward-room" name="room_id" className="input !min-h-11 !py-2 text-sm" required>
+              {chatOverview.rooms.map((r) => (
+                <option key={r.room.id} value={r.room.id}>
+                  {r.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" className="btn-secondary !min-h-11 !py-2 !px-4 text-sm shrink-0">
+            <Icon name="send" className="w-4 h-4" />
+            転送する
+          </button>
+        </form>
+      )}
 
       <div className="mt-4 print:hidden">
         <PrintButton auto={query.print === "1"} />

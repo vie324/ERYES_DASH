@@ -108,7 +108,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
         label: "チーム",
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
-          { href: "/staff/chat", label: "チャット", icon: "chat", badge: badge(b.chat) },
+          { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
         ],
       },
@@ -157,15 +157,14 @@ function staffNav(ctx: NavContext): NavGroup[] {
             ]
           : []),
         { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
-        { href: "/staff/morning", label: "今日のスケジュール", short: "今日の予定", icon: "clock", badge: b.plan ? "！" : null },
-        { href: "/staff/ideal", label: "理想のスケジュール", icon: "sparkles" },
-        { href: "/staff/eni-reports", label: "日報・週報を見る", short: "日報週報", icon: "fileText" },
+        // 「今日の予定」と「計画」は1つの画面にまとめた
+        { href: "/staff/plan", label: "スケジュール", short: "予定", icon: "calendar", badge: b.plan ? "！" : null },
       ],
     },
     {
       label: "チーム",
       items: [
-        { href: "/staff/chat", label: "チャット", icon: "chat", badge: badge(b.chat) },
+        { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
         { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
         {
           href: "/staff/meetings",
@@ -189,7 +188,10 @@ function staffNav(ctx: NavContext): NavGroup[] {
       label: "勤務・申請",
       items: [
         { href: "/staff/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
-        { href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" },
+        // 欠勤・早退の報告は幹部以上が対応するので、一般スタッフには出さない
+        ...(ctx.isExecutive
+          ? [{ href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" as IconName }]
+          : []),
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote" },
       ],
     },
@@ -260,7 +262,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         label: "チーム",
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
-          { href: "/staff/chat", label: "チャット", icon: "chat", badge: badge(b.chat) },
+          { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
         ],
       },
@@ -284,7 +286,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
     {
       label: "記録・育成",
       items: [
-        { href: "/staff/eni-reports", label: "日報・週報を見る", short: "日報週報", icon: "fileText" },
+        { href: "/staff/eni-reports", label: "みんなの日報・週報を見る", short: "日報週報", icon: "fileText" },
         { href: "/staff/practice", label: "練習ペアの設定", icon: "sparkles" },
       ],
     },
@@ -292,7 +294,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       label: "チーム",
       items: [
         { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
-        { href: "/staff/chat", label: "チャット", icon: "chat", badge: badge(b.chat) },
+        { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
         { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
         {
           href: "/staff/meetings",
@@ -335,7 +337,7 @@ export function buildMobileTabs(ctx: NavContext): NavItem[] {
         : ["/staff/eni-reports", "/staff/meetings", "/admin/schedule"]
       : ctx.brand === "eyes"
         ? ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"]
-        : ["/staff/eni-report", "/staff/weekly-report", "/staff/morning", "/staff/schedule"];
+        : ["/staff/eni-report", "/staff/weekly-report", "/staff/plan", "/staff/schedule"];
 
   return wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3);
 }

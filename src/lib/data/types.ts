@@ -40,6 +40,10 @@ export interface Staff {
   rank: AssistantRank; // アシスタントのランク（ファースト/ミドル/ファイナル）
   isExecutive: boolean; // 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
   mission: string; // その人の役割・担っていること（組織図に表示）
+  /** 段数＝一人当たり同時に回す席数。稼働率（入客時間 ÷ 段数×8時間）の分母に使う */
+  tiers: number;
+  /** ダッシュボードの配色キー（lib/theme.ts。空文字はブランド既定） */
+  themeColor: string;
   fixedOvertimeHours: number;
   isActive: boolean;
 }
@@ -420,13 +424,15 @@ export interface ExecNoticeCheck {
 }
 
 // ============================================================
-// 社内チャット（DM・グループ／既読／リアクション）
+// 社内トークルーム（全体共有・DM・グループ／既読／リアクション／ノート）
 // ============================================================
 
 export interface ChatRoom {
   id: string;
   name: string; // グループ名（DMは空文字＝相手の名前を表示）
   isGroup: boolean;
+  /** 特別なルームの識別キー（"all"＝全体共有。通常のルームは空文字） */
+  roomKey: string;
   createdBy: string;
   createdAt: Date;
 }
@@ -443,14 +449,93 @@ export interface ChatMessage {
   senderId: string;
   body: string;
   image: string; // 添付画像（データURL。空文字はなし）
+  /** 添付ファイル（PDFなど。データURL。空文字はなし） */
+  file: string;
+  fileName: string; // 添付ファイルの表示名
+  /** 返信元のメッセージID（空文字は通常の投稿） */
+  replyToId: string;
+  /** メンションしたスタッフID（@名前）。本文中の表示にも使う */
+  mentions: string[];
+  /** ノート（ルームに固定して後から一覧で読める投稿） */
+  pinned: boolean;
+  /** 全体共有：アナウンスとしてダッシュボード最上部に出す */
+  announcedAt: Date | null;
+  announcedBy: string | null;
   deleted: boolean; // 送信取消
   createdAt: Date;
+}
+
+/** メッセージ送信の入力（画像・ファイル・返信・メンションは任意） */
+export interface ChatMessageInput {
+  roomId: string;
+  senderId: string;
+  body: string;
+  image: string;
+  file?: string;
+  fileName?: string;
+  replyToId?: string;
+  mentions?: string[];
 }
 
 export interface ChatReaction {
   messageId: string;
   staffId: string;
   emoji: string;
+}
+
+// ============================================================
+// 会議体マスタ（管理者が画面から編集できる）
+// ============================================================
+
+/** 会議体（定例ミーティングの型）。初期値は lib/eni/meetings-templates.ts から流し込む */
+export interface Committee {
+  id: string;
+  committeeKey: string; // meetings.committee と紐づくキー
+  name: string;
+  purpose: string;
+  cadence: string; // 頻度・時間の目安
+  durationMin: number;
+  participantsHint: string; // 組織図に登録が無いときの参加者の目安
+  orgTeams: string[]; // 対応する組織図のチーム（unitKey）
+  memberStaffIds: string[]; // 参加者を直接指定する場合（空なら組織図から引く）
+  agenda: string;
+  prechecks: string[]; // 会議前にシステムで見ておく項目
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ============================================================
+// 店長・副店長のルーティン業務（デイリー／ウィークリー／マンスリー）
+// ============================================================
+
+export type RoutineCycle = "daily" | "weekly" | "monthly";
+
+/** ルーティン業務のマスタ（幹部が追加・編集できる） */
+export interface ManagerRoutine {
+  id: string;
+  title: string;
+  cycle: RoutineCycle;
+  note: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+/** ルーティン業務の実施記録。periodKey は daily=日付 / weekly=週の月曜 / monthly="YYYY-MM" */
+export interface ManagerRoutineCheck {
+  id: string;
+  routineId: string;
+  periodKey: string;
+  staffId: string;
+  checkedAt: Date;
+}
+
+// ============================================================
+// アプリ設定（サロンボードのURLなど、管理者が画面から変えられる値）
+// ============================================================
+
+export interface AppSetting {
+  key: string;
+  value: string;
 }
 
 // ============================================================
@@ -509,7 +594,7 @@ export interface DailyPlan {
   seenAt: Date | null;
 }
 
-/** 理想のスケジュール（scope: month_goal＝今月の目標 / week1〜week4＝各週の理想） */
+/** 計画スケジュール（scope: month_goal＝今月の目標 / week1〜week4＝各週の計画） */
 export interface IdealSchedule {
   id: string;
   staffId: string;
@@ -564,6 +649,7 @@ export interface StaffInput {
   rank?: AssistantRank;
   isExecutive?: boolean;
   mission?: string;
+  tiers?: number;
   fixedOvertimeHours: number;
 }
 
@@ -594,6 +680,8 @@ export interface DataStore {
         | "rank"
         | "isExecutive"
         | "mission"
+        | "tiers"
+        | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
       >
@@ -825,28 +913,66 @@ export interface DataStore {
   listExecNoticeChecks(reportIds: string[]): Promise<ExecNoticeCheck[]>;
   setExecNoticeChecked(reportId: string, staffId: string, checked: boolean): Promise<void>;
 
-  // ---- 社内チャット ----
+  // ---- 社内トークルーム ----
   listChatRooms(staffId: string): Promise<ChatRoom[]>;
   getChatRoom(roomId: string): Promise<ChatRoom | null>;
   listChatMembers(roomIds: string[]): Promise<ChatMember[]>;
   /** 2人のDMルームを取得（無ければ作る） */
   getOrCreateDmRoom(staffA: string, staffB: string): Promise<ChatRoom>;
+  /** グループを作る。自分が入らないグループも作れる（memberIds がそのまま参加者） */
   createGroupRoom(name: string, createdBy: string, memberIds: string[]): Promise<ChatRoom>;
+  /** グループ名・参加者の変更（DMは対象外） */
+  updateGroupRoom(roomId: string, patch: { name?: string; memberIds?: string[] }): Promise<void>;
+  /** 全体共有ルーム（roomKey="all"）を取得。無ければ作り、在籍者を全員参加させる */
+  ensureAllRoom(staffIds: string[]): Promise<ChatRoom>;
   /** ルームのメッセージ（古い順・直近limit件） */
   listChatMessages(roomId: string, limit?: number): Promise<ChatMessage[]>;
   /** 複数ルームの直近メッセージ（新しい順・未読数と一覧プレビュー用） */
   listChatMessagesForRooms(roomIds: string[], limit?: number): Promise<ChatMessage[]>;
-  createChatMessage(input: {
-    roomId: string;
-    senderId: string;
-    body: string;
-    image: string;
-  }): Promise<ChatMessage>;
+  /** IDを指定してメッセージを取り出す（返信元の引用表示に使う） */
+  listChatMessagesByIds(ids: string[]): Promise<ChatMessage[]>;
+  /** ノート（ルームに固定した投稿）の一覧 */
+  listPinnedChatMessages(roomId: string): Promise<ChatMessage[]>;
+  /** アナウンス中のメッセージ（新しい順）。ダッシュボード最上部の全体共有に使う */
+  listAnnouncedChatMessages(limit?: number): Promise<ChatMessage[]>;
+  createChatMessage(input: ChatMessageInput): Promise<ChatMessage>;
   /** 自分のメッセージのみ取消できる */
   deleteChatMessage(id: string, staffId: string): Promise<void>;
+  /** ノートへの固定／解除 */
+  setChatMessagePinned(id: string, pinned: boolean): Promise<void>;
+  /** アナウンス（ダッシュボード掲示）の開始／解除 */
+  setChatMessageAnnounced(id: string, staffId: string, announced: boolean): Promise<void>;
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+
+  // ---- 会議体マスタ ----
+  /** 会議体の一覧（初回はテンプレートから自動で作られる） */
+  listCommittees(): Promise<Committee[]>;
+  /** 会議体の追加・更新（committeeKey で判定。管理者のみ操作する想定） */
+  upsertCommittee(input: Omit<Committee, "id">): Promise<void>;
+  deleteCommittee(committeeKey: string): Promise<void>;
+
+  // ---- 店長・副店長のルーティン業務 ----
+  listManagerRoutines(): Promise<ManagerRoutine[]>;
+  createManagerRoutine(input: Omit<ManagerRoutine, "id">): Promise<ManagerRoutine>;
+  updateManagerRoutine(
+    id: string,
+    patch: Partial<Omit<ManagerRoutine, "id">>
+  ): Promise<void>;
+  deleteManagerRoutine(id: string): Promise<void>;
+  /** 実施記録の付け外し（ルーティン×期間×担当者） */
+  setManagerRoutineChecked(
+    routineId: string,
+    periodKey: string,
+    staffId: string,
+    checked: boolean
+  ): Promise<void>;
+  listManagerRoutineChecks(periodKeys: string[]): Promise<ManagerRoutineCheck[]>;
+
+  // ---- アプリ設定（サロンボードURLなど） ----
+  listAppSettings(): Promise<AppSetting[]>;
+  setAppSetting(key: string, value: string): Promise<void>;
 
   // ---- 社内SNS（サンクスカード） ----
   createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost>;
@@ -856,7 +982,7 @@ export interface DataStore {
   createThanksComment(input: Omit<ThanksComment, "id" | "createdAt">): Promise<ThanksComment>;
   listThanksComments(postIds: string[]): Promise<ThanksComment[]>;
 
-  // 毎朝のスケジュール・理想のスケジュール
+  // その日のスケジュール・計画スケジュール
   upsertDailyPlan(input: {
     staffId: string;
     planDate: string;

@@ -10,6 +10,7 @@ import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStart
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary, hasExecNotice } from "@/lib/tasks";
+import { buildRoutineStatuses, countUndone, currentPeriodKeys } from "@/lib/eni/routines";
 import { AppShell } from "@/components/app-shell";
 import { DemoBanner } from "@/components/ui";
 import type { Session } from "@/lib/auth/session";
@@ -94,7 +95,7 @@ export async function AppFrame({
     }
   }
 
-  // タスク（今日やること）とチャット（未読）のバッジは業態共通
+  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通
   const [taskSummary, chatOverview] = await Promise.all([
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
@@ -113,7 +114,13 @@ export async function AppFrame({
     const overdueExecTasks = (await db.listStaffTasks({ kind: "exec" })).filter(
       (t) => !t.repeat && t.dueDate && t.dueDate < today
     ).length;
-    badges.exec = uncheckedNotices + overdueExecTasks;
+    // 店長・副店長のルーティンの未完了も幹部バッジに足す（毎日の抜けに気づけるように）
+    const [routines, routineChecks] = await Promise.all([
+      db.listManagerRoutines(),
+      db.listManagerRoutineChecks(currentPeriodKeys(today)),
+    ]);
+    const undoneRoutines = countUndone(buildRoutineStatuses(routines, routineChecks, today));
+    badges.exec = uncheckedNotices + overdueExecTasks + undoneRoutines;
   }
 
   const navContext: NavContext = {

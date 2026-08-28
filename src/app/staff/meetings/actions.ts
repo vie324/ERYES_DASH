@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
-import { findTemplate } from "@/lib/eni/meetings-templates";
+import { findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingType } from "@/lib/data/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -14,7 +14,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export async function createMeetingAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const committee = String(formData.get("committee") ?? "");
-  const template = findTemplate(committee);
+  const template = findCommitteeTemplate(await getDataStore().listCommittees(), committee);
 
   const typeRaw = String(formData.get("meeting_type") ?? "1on1");
   const meetingType: MeetingType = typeRaw === "all" || typeRaw === "other" ? typeRaw : "1on1";

@@ -9,6 +9,8 @@ import { getDataStore } from "@/lib/data";
 import { hashPassword } from "@/lib/auth/password";
 import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
 import { multicastText, pushText } from "@/lib/line/client";
+import { normalizeTiers } from "@/lib/eni/forms";
+import { APP_SETTING_DEFS, normalizeSettingValue } from "@/lib/settings";
 import type { AssistantRank, JobType, Role } from "@/lib/data/types";
 
 function jobTypeField(formData: FormData): JobType {
@@ -203,6 +205,11 @@ export async function deleteStoreAction(formData: FormData): Promise<void> {
 
 // ---- マスタ設定：スタッフ ----
 
+/** 段数（一人当たり同時に回す席数）。未指定・壊れた値は1段に丸める */
+function tiersField(formData: FormData): number {
+  return normalizeTiers(formData.get("tiers"));
+}
+
 export async function createStaffAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
@@ -227,6 +234,7 @@ export async function createStaffAction(formData: FormData): Promise<void> {
       jobType: jobTypeField(formData),
       rank: rankField(formData),
       isExecutive: formData.get("is_executive") === "on",
+      tiers: tiersField(formData),
       fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     });
   } catch {
@@ -257,6 +265,7 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
     rank: rankField(formData),
     isExecutive: formData.get("is_executive") === "on",
     mission: String(formData.get("mission") ?? "").trim().slice(0, 500),
+    tiers: tiersField(formData),
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),
@@ -283,4 +292,22 @@ export async function deleteStaffAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/settings");
   if (errorMsg) redirect(`/admin/settings?msg=${encodeURIComponent(errorMsg)}&t=error`);
   redirect(`/admin/settings?msg=${encodeURIComponent("スタッフを削除しました")}&t=ok`);
+}
+
+
+/** アプリ設定（サロンボードのURLなど）の保存 */
+export async function saveAppSettingsAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const db = getDataStore();
+  for (const def of APP_SETTING_DEFS) {
+    const value = normalizeSettingValue(def.key, String(formData.get(def.key) ?? ""));
+    if (value === null) {
+      redirect(`/admin/settings?msg=${encodeURIComponent(`「${def.label}」の形式を確認してください（https:// で始まるURL）`)}&t=error`);
+    }
+    await db.setAppSetting(def.key, value);
+  }
+  revalidatePath("/admin/settings");
+  revalidatePath("/staff");
+  revalidatePath("/admin");
+  redirect(`/admin/settings?msg=${encodeURIComponent("設定を保存しました")}&t=ok`);
 }

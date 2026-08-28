@@ -6,9 +6,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { addMonths } from "@/lib/date";
+import { addMonths, monthRange } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
-import type { ShiftPreference, ShiftType } from "@/lib/data/types";
+import { isAllHands } from "@/lib/eni/committees";
+import { normalizeTiers } from "@/lib/eni/forms";
+import type { JobType, ShiftPreference, ShiftType } from "@/lib/data/types";
 
 function monthParam(formData: FormData): string {
   const month = String(formData.get("target_month") ?? "");
@@ -35,14 +37,17 @@ export async function runAutoAssignAction(formData: FormData): Promise<void> {
     redirect(`/admin/shift/board?month=${month}&error=confirmed`);
   }
 
-  const [stores, staffList, requests, available, rules, prevAssignments] = await Promise.all([
-    db.listStores(),
-    db.listStaff(),
-    db.listShiftRequests(month),
-    db.listAvailableStores(month),
-    db.getShiftRules(),
-    db.listShiftAssignments(addMonths(month, -1)),
-  ]);
+  const [stores, staffList, requests, available, rules, prevAssignments, meetings, committees] =
+    await Promise.all([
+      db.listStores(),
+      db.listStaff(),
+      db.listShiftRequests(month),
+      db.listAvailableStores(month),
+      db.getShiftRules(),
+      db.listShiftAssignments(addMonths(month, -1)),
+      db.listMeetings(monthRange(month)),
+      db.listCommittees(),
+    ]);
 
   const prefs = new Map<string, Map<string, ShiftPreference>>();
   for (const r of requests) {
@@ -60,6 +65,20 @@ export async function runAutoAssignAction(formData: FormData): Promise<void> {
     prevMonthAssignedDates.get(a.staffId)!.add(a.date);
   }
 
+  // 職種・段数（スタイリストの分散／土日に誰を残すかの判断に使う）
+  const jobTypes = new Map<string, JobType>(staffList.map((s) => [s.id, s.jobType]));
+  const tiers = new Map<string, number>(staffList.map((s) => [s.id, normalizeTiers(s.tiers)]));
+
+  // 全員参加イベントの日（しもん塾・全体会議など）は、なるべく全員を出勤にする
+  const allHandsKeys = new Set(
+    committees.filter(isAllHands).map((c) => c.committeeKey)
+  );
+  const allHandsDates = new Set(
+    meetings
+      .filter((m) => m.meetingType === "all" || allHandsKeys.has(m.committee))
+      .map((m) => m.meetingDate)
+  );
+
   const { assignments, warnings } = generateAssignments({
     targetMonth: month,
     storeIds: stores.map((s) => s.id),
@@ -68,6 +87,9 @@ export async function runAutoAssignAction(formData: FormData): Promise<void> {
     availableStores,
     rules,
     prevMonthAssignedDates,
+    jobTypes,
+    tiers,
+    allHandsDates,
   });
 
   await db.replaceMonthAssignments(month, assignments);

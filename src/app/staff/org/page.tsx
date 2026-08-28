@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
 import { ORG_CHARTS, buildOrgTree, buildSynergyLinks } from "@/lib/eni/org";
-import { MEETING_TEMPLATES, findTemplate } from "@/lib/eni/meetings-templates";
+import { committeeToTemplate, findCommitteeTemplate } from "@/lib/eni/committees";
 import { PageHeader } from "@/components/ui";
 import { OrgTree } from "@/components/org-tree";
 import {
@@ -31,11 +31,14 @@ export default async function OrgPage({
   const chart = ORG_CHARTS.find((c) => c.key === chartKey)!;
 
   const db = getDataStore();
-  const [staffList, orgUnits, orgMembers] = await Promise.all([
+  const [staffList, orgUnits, orgMembers, committees] = await Promise.all([
     db.listStaff(),
     db.listOrgUnits(),
     db.listOrgMembers(),
+    db.listCommittees(),
   ]);
+  // 会議体は管理者が編集できるマスタから引く
+  const meetingOptions = committees.filter((c) => c.isActive).map(committeeToTemplate);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
   const activeStaff = staffList.filter((s) => s.isActive);
   const unitsInChart = orgUnits.filter((u) => u.chartKey === chartKey);
@@ -162,7 +165,7 @@ export default async function OrgPage({
         {unitsInChart.map((unit) => {
           const ids = membersByTeam.get(unit.unitKey) ?? [];
           const leaderId = leaderOf.get(unit.unitKey) ?? "";
-          const meeting = findTemplate(unit.meetingKey);
+          const meeting = findCommitteeTemplate(committees, unit.meetingKey);
           const parent = orgUnits.find((u) => u.unitKey === unit.parentKey);
           return (
             <div key={unit.unitKey} className="card">
@@ -274,7 +277,7 @@ export default async function OrgPage({
                           <label className="label !text-xs" htmlFor={`meeting-${unit.unitKey}`}>会議体</label>
                           <select id={`meeting-${unit.unitKey}`} name="meeting_key" defaultValue={unit.meetingKey} className="input !min-h-10 !py-2 text-sm">
                             <option value="">（なし）</option>
-                            {MEETING_TEMPLATES.map((t) => (<option key={t.key} value={t.key}>{t.name}</option>))}
+                            {meetingOptions.map((t) => (<option key={t.key} value={t.key}>{t.name}</option>))}
                           </select>
                         </div>
                       </div>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { addDays, formatDateJa, todayJst } from "@/lib/date";
@@ -20,9 +21,10 @@ export default async function StylistReportPage({
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : today;
 
   const db = getDataStore();
-  const [existing, recent] = await Promise.all([
+  const [existing, recent, me] = await Promise.all([
     db.getEniReport("stylist", session.staffId, date),
     db.listEniReports("stylist", { staffId: session.staffId, from: addDays(today, -14), to: today }),
+    db.getStaff(session.staffId),
   ]);
 
   const answers = existing?.answers ?? {};
@@ -31,7 +33,15 @@ export default async function StylistReportPage({
 
   return (
     <div className="page-narrow">
-      <PageHeader title="日報を入力（スタイリスト）" backHref="/staff" />
+      <PageHeader
+        title="日報を入力（スタイリスト）"
+        backHref="/staff"
+        actions={
+          <Link href="/staff/eni-reports?tab=stylist" className="chip !py-2.5 !px-4">
+            みんなの日報・週報を見る
+          </Link>
+        }
+      />
 
       {params.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
@@ -78,6 +88,7 @@ export default async function StylistReportPage({
           initialClientCount={numAnswer("client_count")}
           initialServiceMinutes={numAnswer("service_minutes")}
           initialNextBookings={numAnswer("next_bookings")}
+          tiers={me?.tiers ?? 1}
         />
 
         <EniFormFields items={STYLIST_REPORT_NUMBERS} answers={answers} />

@@ -4,12 +4,15 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
+import { isExecutive } from "@/lib/eni/access";
 import { todayJst, addDays } from "@/lib/date";
 import type { AbsenceKind } from "@/lib/data/types";
 
 /** 欠勤・早退・遅刻の報告を送信 */
 export async function createAbsenceReportAction(formData: FormData): Promise<void> {
   const session = await requireSession();
+  // 記録できるのは幹部メンバー以上（画面と同じ条件をサーバー側でも守る）
+  if (!(await isExecutive(session))) redirect("/staff");
   const staffId = String(formData.get("staff_id") ?? "") || session.staffId;
   const date = String(formData.get("absence_date") ?? "");
   const kindRaw = String(formData.get("kind") ?? "");

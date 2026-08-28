@@ -11,6 +11,9 @@ import { BigMenuLink, IconMenuLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
 import { Dashboard } from "@/components/dashboard";
+import { AnnouncementBoard } from "@/components/announcement-board";
+import { ThemePicker } from "@/components/theme-picker";
+import { getSalonBoardUrl } from "@/lib/settings";
 
 /** ホームのメニュー1項目。スマホ＝アイコングリッド／PC＝大きなボタンの両方で使う */
 interface HomeMenuItem {
@@ -40,12 +43,13 @@ export default async function StaffHomePage() {
   // 希望休：3ヶ月後の月の申請期間中（毎月5日まで）で、まだ1日も登録がなければ知らせる
   const dayoffTarget = defaultDayoffTargetMonth(today);
   const dayoffEditable = isDayoffEditable(dayoffTarget, today);
-  const [myDayoffs, taskSummary, chatOverview] = await Promise.all([
+  const [myDayoffs, taskSummary, chatOverview, salonBoardUrl] = await Promise.all([
     dayoffEditable
       ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
       : Promise.resolve([]),
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
+    getSalonBoardUrl(db),
   ]);
   const shiftBadge = dayoffEditable && myDayoffs.length === 0 ? "！" : null;
   const taskBadge = taskSummary.dueCount > 0 ? taskSummary.dueCount : null;
@@ -75,12 +79,26 @@ export default async function StaffHomePage() {
         <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
       </div>
 
+      {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
+      <AnnouncementBoard />
+
       <ShiftNoticeBanner staffId={session.staffId} />
 
       {/* スマホもPCも「今の状況」を上に、メニューはその下に */}
       <section>
-        <h2 className="section-title">今の状況</h2>
-        <Dashboard brand={brand} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="section-title flex-1">今の状況</h2>
+        </div>
+        <ThemePicker current={me?.themeColor ?? ""} back="/staff" />
+        <Dashboard
+          brand={brand}
+          viewer={{
+            staffId: session.staffId,
+            jobType,
+            isExec,
+            themeColor: me?.themeColor ?? "",
+          }}
+        />
       </section>
 
       <section className="mt-2">
@@ -115,6 +133,16 @@ export default async function StaffHomePage() {
       </section>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        {/* 予約管理はサロンボードで行うので、ここからすぐ開けるようにする */}
+        <a
+          href={salonBoardUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="chip !py-2.5 !px-4 border-brand-400 text-brand-800"
+        >
+          <Icon name="link" className="w-4 h-4 text-brand-500" />
+          サロンボードを開く
+        </a>
         <Link href="/staff/help" className="chip !py-2.5 !px-4">
           <Icon name="help" className="w-4 h-4 text-brand-500" />
           使い方ガイド（困ったときはこちら）
@@ -188,9 +216,9 @@ async function eyesMenuItems(
     {
       href: "/staff/chat",
       icon: "chat",
-      title: "チャット",
-      short: "チャット",
-      description: "スタッフ同士の連絡（DM・グループ）",
+      title: "トークルーム",
+      short: "トーク",
+      description: "スタッフ同士の連絡（DM・グループ・全体共有）",
       badge: flags.chatBadge,
     },
     {
@@ -247,7 +275,7 @@ async function eyesMenuItems(
             icon: "crown" as IconName,
             title: "幹部メニュー",
             short: "幹部",
-            description: "幹部タスクの進捗・日報の気づき確認",
+            description: "幹部タスク・店長/副店長のルーティン・日報の気づき",
           },
         ]
       : []),
@@ -319,21 +347,21 @@ async function eniMenuItems(
       badge: flags.taskBadge,
     },
     {
-      href: "/staff/morning",
-      icon: "clock",
-      title: "今日のスケジュール",
-      short: "今日の予定",
+      href: "/staff/plan",
+      icon: "calendar",
+      title: "スケジュール",
+      short: "予定",
       description: todayPlan
-        ? "入力済み（みんなの予定も見られます）"
+        ? "入力済み（計画と見比べられます）"
         : "今日の予定をまだ入力していません",
       badge: todayPlan ? null : "！",
     },
     {
       href: "/staff/chat",
       icon: "chat",
-      title: "チャット",
-      short: "チャット",
-      description: "スタッフ同士の連絡（DM・グループ）",
+      title: "トークルーム",
+      short: "トーク",
+      description: "スタッフ同士の連絡（DM・グループ・全体共有）",
       badge: flags.chatBadge,
     },
     {
@@ -342,13 +370,6 @@ async function eniMenuItems(
       title: "サンクスカード",
       short: "サンクス",
       description: "ありがとうをカードで贈り合う",
-    },
-    {
-      href: "/staff/eni-reports",
-      icon: "fileText",
-      title: "日報・週報を見る",
-      short: "日報週報",
-      description: flags.jobType === "assistant" ? "みんなの週報を見る" : "みんなの日報・週報を見る",
     },
     {
       href: "/staff/meetings",
@@ -376,22 +397,22 @@ async function eniMenuItems(
       short: "発注",
       description: "ウィッグ・社販・商材の申請",
     },
-    {
-      href: "/staff/absence",
-      icon: "alertTriangle",
-      title: "欠勤・早退の報告",
-      short: "欠勤報告",
-      description: flags.isExec ? "報告の送信・全員分の確認（幹部）" : "体調不良や早退の報告はこちら",
-    },
-    // 組織図・幹部メニューは管理者・幹部のみ
+    // 組織図・幹部メニュー・欠勤の報告は管理者・幹部のみ
     ...(flags.isExec
       ? [
+          {
+            href: "/staff/absence",
+            icon: "alertTriangle" as IconName,
+            title: "欠勤・早退の報告",
+            short: "欠勤報告",
+            description: "報告の送信・全員分の確認（幹部）",
+          },
           {
             href: "/staff/exec",
             icon: "crown" as IconName,
             title: "幹部メニュー",
             short: "幹部",
-            description: "幹部タスクの進捗・日報の気づき確認",
+            description: "幹部タスク・店長/副店長のルーティン・日報の気づき",
           },
           {
             href: "/staff/org",

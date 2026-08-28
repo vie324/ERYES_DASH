@@ -6,8 +6,11 @@ import { randomBytes } from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
+import { committeesFromTemplates } from "@/lib/eni/committees";
+import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
 import type {
   AbsenceReport,
+  AppSetting,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -17,8 +20,10 @@ import type {
   CashReportInput,
   ChatMember,
   ChatMessage,
+  ChatMessageInput,
   ChatReaction,
   ChatRoom,
+  Committee,
   CounselingInvite,
   CounselingResponse,
   CounselingStatus,
@@ -32,6 +37,8 @@ import type {
   EniReport,
   ExecNoticeCheck,
   IdealSchedule,
+  ManagerRoutine,
+  ManagerRoutineCheck,
   Meeting,
   MeetingTask,
   NewShiftAssignment,
@@ -43,6 +50,7 @@ import type {
   OrgUnit,
   PracticePair,
   PracticeRecord,
+  RoutineCycle,
   ScheduleOverride,
   SchedulePreset,
   ShiftAssignment,
@@ -86,6 +94,8 @@ const mapStaff = (r: Row): Staff => ({
   rank: r.rank ?? "",
   isExecutive: r.is_executive ?? false,
   mission: r.mission ?? "",
+  tiers: Number(r.tiers ?? 1) || 1,
+  themeColor: r.theme_color ?? "",
   fixedOvertimeHours: r.fixed_overtime_hours,
   isActive: r.is_active,
 });
@@ -346,6 +356,7 @@ const mapChatRoom = (r: Row): ChatRoom => ({
   id: r.id,
   name: r.name ?? "",
   isGroup: r.is_group ?? false,
+  roomKey: r.room_key ?? "",
   createdBy: r.created_by,
   createdAt: new Date(r.created_at),
 });
@@ -362,8 +373,48 @@ const mapChatMessage = (r: Row): ChatMessage => ({
   senderId: r.sender_id,
   body: r.body ?? "",
   image: r.image ?? "",
+  file: r.file ?? "",
+  fileName: r.file_name ?? "",
+  replyToId: r.reply_to_id ?? "",
+  mentions: Array.isArray(r.mentions) ? r.mentions : [],
+  pinned: r.pinned ?? false,
+  announcedAt: r.announced_at ? new Date(r.announced_at) : null,
+  announcedBy: r.announced_by ?? null,
   deleted: r.deleted ?? false,
   createdAt: new Date(r.created_at),
+});
+
+const mapCommittee = (r: Row): Committee => ({
+  id: r.id,
+  committeeKey: r.committee_key,
+  name: r.name ?? "",
+  purpose: r.purpose ?? "",
+  cadence: r.cadence ?? "",
+  durationMin: r.duration_min ?? 60,
+  participantsHint: r.participants_hint ?? "",
+  orgTeams: Array.isArray(r.org_teams) ? r.org_teams : [],
+  memberStaffIds: Array.isArray(r.member_staff_ids) ? r.member_staff_ids : [],
+  agenda: r.agenda ?? "",
+  prechecks: Array.isArray(r.prechecks) ? r.prechecks : [],
+  sortOrder: r.sort_order ?? 0,
+  isActive: r.is_active ?? true,
+});
+
+const mapManagerRoutine = (r: Row): ManagerRoutine => ({
+  id: r.id,
+  title: r.title,
+  cycle: (r.cycle ?? "daily") as RoutineCycle,
+  note: r.note ?? "",
+  sortOrder: r.sort_order ?? 0,
+  isActive: r.is_active ?? true,
+});
+
+const mapManagerRoutineCheck = (r: Row): ManagerRoutineCheck => ({
+  id: r.id,
+  routineId: r.routine_id,
+  periodKey: r.period_key,
+  staffId: r.staff_id,
+  checkedAt: new Date(r.checked_at),
 });
 
 const mapChatReaction = (r: Row): ChatReaction => ({
@@ -572,6 +623,7 @@ class SupabaseStore implements DataStore {
         rank: input.rank ?? "",
         is_executive: input.isExecutive ?? false,
         mission: input.mission ?? "",
+        tiers: input.tiers ?? 1,
         fixed_overtime_hours: input.fixedOvertimeHours,
       })
       .select()
@@ -591,6 +643,8 @@ class SupabaseStore implements DataStore {
         | "rank"
         | "isExecutive"
         | "mission"
+        | "tiers"
+        | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
       >
@@ -605,6 +659,8 @@ class SupabaseStore implements DataStore {
     if (patch.rank !== undefined) row.rank = patch.rank;
     if (patch.isExecutive !== undefined) row.is_executive = patch.isExecutive;
     if (patch.mission !== undefined) row.mission = patch.mission;
+    if (patch.tiers !== undefined) row.tiers = patch.tiers;
+    if (patch.themeColor !== undefined) row.theme_color = patch.themeColor;
     if (patch.fixedOvertimeHours !== undefined) row.fixed_overtime_hours = patch.fixedOvertimeHours;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     if (patch.passwordHash !== undefined) row.password_hash = patch.passwordHash;
@@ -2059,17 +2115,17 @@ class SupabaseStore implements DataStore {
     }
   }
 
-  // ---- 社内チャット ----
+  // ---- 社内トークルーム ----
 
   async listChatRooms(staffId: string): Promise<ChatRoom[]> {
     const { data: memberRows, error: memberError } = await this.sb
       .from("chat_members")
       .select("room_id")
       .eq("staff_id", staffId);
-    const roomIds = must(memberRows, memberError, "チャット参加一覧").map((r: Row) => r.room_id);
+    const roomIds = must(memberRows, memberError, "トークルーム参加一覧").map((r: Row) => r.room_id);
     if (roomIds.length === 0) return [];
     const { data, error } = await this.sb.from("chat_rooms").select("*").in("id", roomIds);
-    return must(data, error, "チャットルーム一覧").map(mapChatRoom);
+    return must(data, error, "トークルーム一覧").map(mapChatRoom);
   }
 
   async getChatRoom(roomId: string): Promise<ChatRoom | null> {
@@ -2083,7 +2139,7 @@ class SupabaseStore implements DataStore {
       .from("chat_members")
       .select("*")
       .in("room_id", roomIds);
-    return must(data, error, "チャットメンバー一覧").map(mapChatMember);
+    return must(data, error, "トークルームのメンバー一覧").map(mapChatMember);
   }
 
   async getOrCreateDmRoom(staffA: string, staffB: string): Promise<ChatRoom> {
@@ -2111,15 +2167,99 @@ class SupabaseStore implements DataStore {
   async createGroupRoom(name: string, createdBy: string, memberIds: string[]): Promise<ChatRoom> {
     const { data, error } = await this.sb
       .from("chat_rooms")
-      .insert({ name, is_group: true, dm_key: "", created_by: createdBy })
+      .insert({ name, is_group: true, dm_key: "", room_key: "", created_by: createdBy })
       .select()
       .single();
     const room = mapChatRoom(must(data, error, "グループ作成"));
-    const ids = [...new Set([createdBy, ...memberIds])];
-    const { error: memberError } = await this.sb.from("chat_members").insert(
-      ids.map((id) => ({ room_id: room.id, staff_id: id }))
-    );
-    if (memberError) throw new Error(`[supabase] グループメンバー登録: ${memberError.message}`);
+    // 自分が入らないグループも作れる（memberIds がそのまま参加者になる）
+    const ids = [...new Set(memberIds)];
+    if (ids.length > 0) {
+      const { error: memberError } = await this.sb.from("chat_members").insert(
+        ids.map((id) => ({ room_id: room.id, staff_id: id }))
+      );
+      if (memberError) throw new Error(`[supabase] グループメンバー登録: ${memberError.message}`);
+    }
+    return room;
+  }
+
+  async updateGroupRoom(
+    roomId: string,
+    patch: { name?: string; memberIds?: string[] }
+  ): Promise<void> {
+    if (patch.name !== undefined) {
+      const { error } = await this.sb
+        .from("chat_rooms")
+        .update({ name: patch.name })
+        .eq("id", roomId)
+        .eq("is_group", true);
+      if (error) throw new Error(`[supabase] グループ名変更: ${error.message}`);
+    }
+    if (!patch.memberIds) return;
+
+    const next = [...new Set(patch.memberIds)];
+    const { data: current } = await this.sb
+      .from("chat_members")
+      .select("staff_id")
+      .eq("room_id", roomId);
+    const currentIds = (current ?? []).map((r: Row) => r.staff_id as string);
+    const removed = currentIds.filter((id) => !next.includes(id));
+    const added = next.filter((id) => !currentIds.includes(id));
+
+    if (removed.length > 0) {
+      const { error } = await this.sb
+        .from("chat_members")
+        .delete()
+        .eq("room_id", roomId)
+        .in("staff_id", removed);
+      if (error) throw new Error(`[supabase] メンバー削除: ${error.message}`);
+    }
+    if (added.length > 0) {
+      const { error } = await this.sb
+        .from("chat_members")
+        .insert(added.map((id) => ({ room_id: roomId, staff_id: id })));
+      if (error) throw new Error(`[supabase] メンバー追加: ${error.message}`);
+    }
+  }
+
+  async ensureAllRoom(staffIds: string[]): Promise<ChatRoom> {
+    const { data: existing } = await this.sb
+      .from("chat_rooms")
+      .select("*")
+      .eq("room_key", ALL_ROOM_KEY)
+      .maybeSingle();
+
+    let room: ChatRoom;
+    if (existing) {
+      room = mapChatRoom(existing);
+    } else {
+      const { data, error } = await this.sb
+        .from("chat_rooms")
+        .insert({
+          name: ALL_ROOM_NAME,
+          is_group: true,
+          dm_key: "",
+          room_key: ALL_ROOM_KEY,
+          created_by: staffIds[0],
+        })
+        .select()
+        .single();
+      room = mapChatRoom(must(data, error, "全体共有ルーム作成"));
+    }
+
+    // 在籍者は全員参加（あとから入った人も自動で入る）。既読の位置は触らない
+    const { data: members } = await this.sb
+      .from("chat_members")
+      .select("staff_id")
+      .eq("room_id", room.id);
+    const joined = new Set((members ?? []).map((r: Row) => r.staff_id as string));
+    const missing = staffIds.filter((id) => !joined.has(id));
+    if (missing.length > 0) {
+      // 参加直後に過去ログが全部未読にならないよう、既読の起点は「今」にする
+      const { error } = await this.sb.from("chat_members").insert(
+        missing.map((id) => ({ room_id: room.id, staff_id: id }))
+      );
+      if (error) throw new Error(`[supabase] 全体共有への参加: ${error.message}`);
+    }
     return room;
   }
 
@@ -2144,12 +2284,35 @@ class SupabaseStore implements DataStore {
     return must(data, error, "メッセージ一覧").map(mapChatMessage);
   }
 
-  async createChatMessage(input: {
-    roomId: string;
-    senderId: string;
-    body: string;
-    image: string;
-  }): Promise<ChatMessage> {
+  async listChatMessagesByIds(ids: string[]): Promise<ChatMessage[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.sb.from("chat_messages").select("*").in("id", ids);
+    return must(data, error, "メッセージ取得").map(mapChatMessage);
+  }
+
+  async listPinnedChatMessages(roomId: string): Promise<ChatMessage[]> {
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("pinned", true)
+      .eq("deleted", false)
+      .order("created_at", { ascending: false });
+    return must(data, error, "ノート一覧").map(mapChatMessage);
+  }
+
+  async listAnnouncedChatMessages(limit = 5): Promise<ChatMessage[]> {
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("*")
+      .not("announced_at", "is", null)
+      .eq("deleted", false)
+      .order("announced_at", { ascending: false })
+      .limit(limit);
+    return must(data, error, "アナウンス一覧").map(mapChatMessage);
+  }
+
+  async createChatMessage(input: ChatMessageInput): Promise<ChatMessage> {
     const { data, error } = await this.sb
       .from("chat_messages")
       .insert({
@@ -2157,6 +2320,10 @@ class SupabaseStore implements DataStore {
         sender_id: input.senderId,
         body: input.body,
         image: input.image,
+        file: input.file ?? "",
+        file_name: input.fileName ?? "",
+        reply_to_id: input.replyToId || null,
+        mentions: input.mentions ?? [],
       })
       .select()
       .single();
@@ -2168,10 +2335,39 @@ class SupabaseStore implements DataStore {
   async deleteChatMessage(id: string, staffId: string): Promise<void> {
     const { error } = await this.sb
       .from("chat_messages")
-      .update({ deleted: true, body: "", image: "" })
+      .update({
+        deleted: true,
+        body: "",
+        image: "",
+        file: "",
+        file_name: "",
+        pinned: false,
+        announced_at: null,
+      })
       .eq("id", id)
       .eq("sender_id", staffId);
     if (error) throw new Error(`[supabase] メッセージ取消: ${error.message}`);
+  }
+
+  async setChatMessagePinned(id: string, pinned: boolean): Promise<void> {
+    const { error } = await this.sb
+      .from("chat_messages")
+      .update({ pinned })
+      .eq("id", id)
+      .eq("deleted", false);
+    if (error) throw new Error(`[supabase] ノート固定: ${error.message}`);
+  }
+
+  async setChatMessageAnnounced(id: string, staffId: string, announced: boolean): Promise<void> {
+    const { error } = await this.sb
+      .from("chat_messages")
+      .update({
+        announced_at: announced ? new Date().toISOString() : null,
+        announced_by: announced ? staffId : null,
+      })
+      .eq("id", id)
+      .eq("deleted", false);
+    if (error) throw new Error(`[supabase] アナウンス: ${error.message}`);
   }
 
   async markChatRead(roomId: string, staffId: string): Promise<void> {
@@ -2214,6 +2410,162 @@ class SupabaseStore implements DataStore {
       .select("*")
       .in("message_id", messageIds);
     return must(data, error, "リアクション一覧").map(mapChatReaction);
+  }
+
+  // ---- 会議体マスタ ----
+
+  async listCommittees(): Promise<Committee[]> {
+    const { data, error } = await this.sb.from("committees").select("*").order("sort_order");
+    const rows = must(data, error, "会議体一覧");
+    if (rows.length > 0) return rows.map(mapCommittee);
+
+    // 初回だけテンプレートから流し込む（以降は画面から編集できる）
+    const seeds = committeesFromTemplates();
+    const { error: seedError } = await this.sb.from("committees").insert(
+      seeds.map((c) => ({
+        committee_key: c.committeeKey,
+        name: c.name,
+        purpose: c.purpose,
+        cadence: c.cadence,
+        duration_min: c.durationMin,
+        participants_hint: c.participantsHint,
+        org_teams: c.orgTeams,
+        member_staff_ids: c.memberStaffIds,
+        agenda: c.agenda,
+        prechecks: c.prechecks,
+        sort_order: c.sortOrder,
+        is_active: c.isActive,
+      }))
+    );
+    if (seedError) throw new Error(`[supabase] 会議体の初期化: ${seedError.message}`);
+    const { data: seeded, error: reloadError } = await this.sb
+      .from("committees")
+      .select("*")
+      .order("sort_order");
+    return must(seeded, reloadError, "会議体一覧").map(mapCommittee);
+  }
+
+  async upsertCommittee(input: Omit<Committee, "id">): Promise<void> {
+    const { error } = await this.sb.from("committees").upsert(
+      {
+        committee_key: input.committeeKey,
+        name: input.name,
+        purpose: input.purpose,
+        cadence: input.cadence,
+        duration_min: input.durationMin,
+        participants_hint: input.participantsHint,
+        org_teams: input.orgTeams,
+        member_staff_ids: input.memberStaffIds,
+        agenda: input.agenda,
+        prechecks: input.prechecks,
+        sort_order: input.sortOrder,
+        is_active: input.isActive,
+      },
+      { onConflict: "committee_key" }
+    );
+    if (error) throw new Error(`[supabase] 会議体の保存: ${error.message}`);
+  }
+
+  async deleteCommittee(committeeKey: string): Promise<void> {
+    const { error } = await this.sb
+      .from("committees")
+      .delete()
+      .eq("committee_key", committeeKey);
+    if (error) throw new Error(`[supabase] 会議体の削除: ${error.message}`);
+  }
+
+  // ---- 店長・副店長のルーティン業務 ----
+
+  async listManagerRoutines(): Promise<ManagerRoutine[]> {
+    const { data, error } = await this.sb
+      .from("manager_routines")
+      .select("*")
+      .order("cycle")
+      .order("sort_order");
+    const order: Record<RoutineCycle, number> = { daily: 0, weekly: 1, monthly: 2 };
+    return must(data, error, "ルーティン業務一覧")
+      .map(mapManagerRoutine)
+      .sort((a, b) => order[a.cycle] - order[b.cycle] || a.sortOrder - b.sortOrder);
+  }
+
+  async createManagerRoutine(input: Omit<ManagerRoutine, "id">): Promise<ManagerRoutine> {
+    const { data, error } = await this.sb
+      .from("manager_routines")
+      .insert({
+        title: input.title,
+        cycle: input.cycle,
+        note: input.note,
+        sort_order: input.sortOrder,
+        is_active: input.isActive,
+      })
+      .select()
+      .single();
+    return mapManagerRoutine(must(data, error, "ルーティン業務の追加"));
+  }
+
+  async updateManagerRoutine(
+    id: string,
+    patch: Partial<Omit<ManagerRoutine, "id">>
+  ): Promise<void> {
+    const row: Row = {};
+    if (patch.title !== undefined) row.title = patch.title;
+    if (patch.cycle !== undefined) row.cycle = patch.cycle;
+    if (patch.note !== undefined) row.note = patch.note;
+    if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+    if (patch.isActive !== undefined) row.is_active = patch.isActive;
+    if (Object.keys(row).length === 0) return;
+    const { error } = await this.sb.from("manager_routines").update(row).eq("id", id);
+    if (error) throw new Error(`[supabase] ルーティン業務の更新: ${error.message}`);
+  }
+
+  async deleteManagerRoutine(id: string): Promise<void> {
+    const { error } = await this.sb.from("manager_routines").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] ルーティン業務の削除: ${error.message}`);
+  }
+
+  async setManagerRoutineChecked(
+    routineId: string,
+    periodKey: string,
+    staffId: string,
+    checked: boolean
+  ): Promise<void> {
+    if (checked) {
+      const { error } = await this.sb.from("manager_routine_checks").upsert(
+        { routine_id: routineId, period_key: periodKey, staff_id: staffId, checked_at: new Date().toISOString() },
+        { onConflict: "routine_id,period_key" }
+      );
+      if (error) throw new Error(`[supabase] ルーティンの記録: ${error.message}`);
+    } else {
+      const { error } = await this.sb
+        .from("manager_routine_checks")
+        .delete()
+        .eq("routine_id", routineId)
+        .eq("period_key", periodKey);
+      if (error) throw new Error(`[supabase] ルーティンの記録取消: ${error.message}`);
+    }
+  }
+
+  async listManagerRoutineChecks(periodKeys: string[]): Promise<ManagerRoutineCheck[]> {
+    if (periodKeys.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("manager_routine_checks")
+      .select("*")
+      .in("period_key", periodKeys);
+    return must(data, error, "ルーティンの記録一覧").map(mapManagerRoutineCheck);
+  }
+
+  // ---- アプリ設定 ----
+
+  async listAppSettings(): Promise<AppSetting[]> {
+    const { data, error } = await this.sb.from("app_settings").select("*");
+    return must(data, error, "アプリ設定").map((r: Row) => ({ key: r.key, value: r.value ?? "" }));
+  }
+
+  async setAppSetting(key: string, value: string): Promise<void> {
+    const { error } = await this.sb
+      .from("app_settings")
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+    if (error) throw new Error(`[supabase] アプリ設定の保存: ${error.message}`);
   }
 
   // ---- 社内SNS（サンクスカード） ----

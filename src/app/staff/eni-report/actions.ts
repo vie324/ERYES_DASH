@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst } from "@/lib/date";
-import { computeStylistCalc, STYLIST_REPORT_ITEMS, validateEniAnswers } from "@/lib/eni/forms";
+import {
+  computeStylistCalc,
+  normalizeTiers,
+  STYLIST_REPORT_ITEMS,
+  validateEniAnswers,
+} from "@/lib/eni/forms";
 
 /** 0以上の整数だけ受け取る（空欄は0） */
 function numberField(formData: FormData, name: string): number {
@@ -35,14 +40,20 @@ export async function saveStylistReportAction(formData: FormData): Promise<void>
     redirect(`/staff/eni-report?date=${date}&error=util`);
   }
 
+  // 段数はスタッフマスタの値を使う（フォームからは変えられない）
+  const db = getDataStore();
+  const me = await db.getStaff(session.staffId);
+  const tiers = normalizeTiers(me?.tiers);
+
   const time = {
     clientCount: numberField(formData, "client_count"),
     serviceMinutes: numberField(formData, "service_minutes"),
     nextBookings: numberField(formData, "next_bookings"),
+    tiers,
   };
   const calc = computeStylistCalc(time);
 
-  await getDataStore().upsertEniReport({
+  await db.upsertEniReport({
     kind: "stylist",
     staffId: session.staffId,
     periodKey: date,
@@ -51,7 +62,8 @@ export async function saveStylistReportAction(formData: FormData): Promise<void>
       client_count: time.clientCount,
       service_minutes: time.serviceMinutes,
       next_bookings: time.nextBookings,
-      // 稼働率＝入客時間÷8時間（自動計算・必須）
+      // 稼働率＝入客時間 ÷（段数×8時間）。段数は当時の値も残しておく
+      tiers,
       utilization: calc.utilization,
       // 次回予約率も%で記録（閲覧側の表示用）
       ...(calc.rebookRate !== null ? { rebook_rate: calc.rebookRate } : {}),

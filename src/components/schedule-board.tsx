@@ -29,6 +29,8 @@ export function ScheduleBoard({
   dayLabels,
   startHour = 8,
   endHour = 22,
+  ghostBlocks = [],
+  ghostLabel = "計画",
 }: {
   name: string;
   initial: ScheduleBlock[];
@@ -36,9 +38,36 @@ export function ScheduleBoard({
   dayLabels: string[]; // ["今日"] または ["月","火",…,"日"]
   startHour?: number;
   endHour?: number;
+  /** 後ろに薄く重ねて見せる予定（計画スケジュール）。比べながら入れられるようにする */
+  ghostBlocks?: ScheduleBlock[];
+  ghostLabel?: string;
 }) {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [showGhost, setShowGhost] = useState(true);
+
+  const ghostByDay = useMemo(
+    () =>
+      dayLabels.map((_, d) =>
+        placeBlocks(
+          ghostBlocks,
+          ghostBlocks.map((_, i) => i).filter((i) => ghostBlocks[i].d === d),
+          startHour,
+          endHour
+        )
+      ),
+    [ghostBlocks, dayLabels, startHour, endHour]
+  );
+
+  /** 計画をそのまま今日の予定として取り込む（そこから直せばよい状態にする） */
+  const importGhost = () => {
+    if (ghostBlocks.length === 0) return;
+    setBlocks((prev) => {
+      const keys = new Set(prev.map((b) => `${b.d}|${b.s}|${b.e}|${b.a}`));
+      const added = ghostBlocks.filter((b) => !keys.has(`${b.d}|${b.s}|${b.e}|${b.a}`));
+      return [...prev, ...added].sort((x, y) => x.d - y.d || toMin(x.s) - toMin(y.s));
+    });
+  };
 
   const hours = useMemo(
     () => Array.from({ length: endHour - startHour }, (_, i) => startHour + i),
@@ -142,6 +171,25 @@ export function ScheduleBoard({
                     </div>
                   ))}
 
+                  {/* 計画スケジュール（薄い破線の帯。タップしても反応しない＝背景あつかい） */}
+                  {showGhost &&
+                    ghostByDay[d].map((p, i) => (
+                      <div
+                        key={`ghost-${i}-${p.block.s}`}
+                        style={{
+                          top: `${p.top}%`,
+                          height: `calc(${p.height}% - 2px)`,
+                          left: "2px",
+                          right: "2px",
+                        }}
+                        className="absolute rounded-md border border-dashed border-ink-300 bg-ink-50/60 px-1 py-0.5 overflow-hidden leading-tight pointer-events-none"
+                      >
+                        <span className="block text-[9px] font-bold text-ink-400 truncate">
+                          {ghostLabel}：{p.block.a}
+                        </span>
+                      </div>
+                    ))}
+
                   {/* 予定の帯 */}
                   {placedByDay[d].map((p) => (
                     <button
@@ -173,6 +221,22 @@ export function ScheduleBoard({
           </div>
         </div>
       </div>
+
+      {/* 計画と見比べるための操作（計画が入っているときだけ出す） */}
+      {ghostBlocks.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => setShowGhost((v) => !v)}
+            className={`chip ${showGhost ? "chip-active" : ""}`}
+          >
+            {ghostLabel}を重ねて表示
+          </button>
+          <button type="button" onClick={importGhost} className="chip">
+            {ghostLabel}をこの日に取り込む
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2 mt-2">
         <p className="text-[11px] text-ink-400">

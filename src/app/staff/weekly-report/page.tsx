@@ -38,7 +38,15 @@ export default async function WeeklyReportPage({
 
   return (
     <div className="page-narrow">
-      <PageHeader title="週報を入力（アシスタント）" backHref="/staff" />
+      <PageHeader
+        title="週報を入力（アシスタント）"
+        backHref="/staff"
+        actions={
+          <Link href="/staff/eni-reports?tab=weekly" className="chip !py-2.5 !px-4">
+            みんなの週報を見る
+          </Link>
+        }
+      />
 
       {params.saved === "settings" ? (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">

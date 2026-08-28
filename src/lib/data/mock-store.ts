@@ -7,8 +7,11 @@ import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
+import { committeesFromTemplates } from "@/lib/eni/committees";
+import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
 import type {
   AbsenceReport,
+  AppSetting,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -18,8 +21,10 @@ import type {
   CashReportInput,
   ChatMember,
   ChatMessage,
+  ChatMessageInput,
   ChatReaction,
   ChatRoom,
+  Committee,
   CounselingInvite,
   CounselingResponse,
   CounselingStatus,
@@ -33,6 +38,8 @@ import type {
   EniReport,
   ExecNoticeCheck,
   IdealSchedule,
+  ManagerRoutine,
+  ManagerRoutineCheck,
   Meeting,
   MeetingTask,
   NewShiftAssignment,
@@ -44,6 +51,7 @@ import type {
   OrgUnit,
   PracticePair,
   PracticeRecord,
+  RoutineCycle,
   ScheduleOverride,
   SchedulePreset,
   ShiftAssignment,
@@ -103,10 +111,30 @@ interface MockDb {
   chatMembers: ChatMember[];
   chatMessages: ChatMessage[];
   chatReactions: ChatReaction[];
+  committees: Committee[];
+  managerRoutines: ManagerRoutine[];
+  managerRoutineChecks: ManagerRoutineCheck[];
+  appSettings: AppSetting[];
   thanksPosts: ThanksPost[];
   thanksLikes: ThanksLike[];
   thanksComments: ThanksComment[];
 }
+
+/**
+ * 店長・副店長のルーティン業務の初期値。
+ * デイリーの4項目は運用で必ず回すもの。ウィークリー・マンスリーは例として入れておき、
+ * 実際の運用に合わせて幹部メニューから追加・編集してもらう。
+ */
+const DEFAULT_MANAGER_ROUTINES: Omit<ManagerRoutine, "id">[] = [
+  { title: "公式LINEチェック", cycle: "daily", note: "返信もれ・予約の問い合わせが残っていないか", sortOrder: 10, isActive: true },
+  { title: "労務管理（早退・遅刻・欠勤など）", cycle: "daily", note: "当日の勤怠のズレを把握し、必要なら申し送りする", sortOrder: 20, isActive: true },
+  { title: "レジ締め・エクセルの入力の確認", cycle: "daily", note: "現金残高とエクセルの数字が合っているか", sortOrder: 30, isActive: true },
+  { title: "日報・週報の入力・確認", cycle: "daily", note: "全員の提出状況を見て、未提出には声をかける", sortOrder: 40, isActive: true },
+  { title: "シフトの提出状況の確認", cycle: "weekly", note: "翌月分の希望休・シフト希望がそろっているか", sortOrder: 10, isActive: true },
+  { title: "材料の在庫チェック・発注", cycle: "weekly", note: "切らしそうな商材がないか", sortOrder: 20, isActive: true },
+  { title: "月次の数字のまとめ・共有", cycle: "monthly", note: "売上・客数・次回予約率を幹部会議で共有する", sortOrder: 10, isActive: true },
+  { title: "スタッフ全員との1on1の実施確認", cycle: "monthly", note: "今月まだ話せていない人がいないか", sortOrder: 20, isActive: true },
+];
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
 function jstAt(dateStr: string, hour: number, minute = 0): Date {
@@ -162,6 +190,8 @@ function seed(): MockDb {
       rank: "",
       isExecutive: true,
       mission: "",
+      tiers: 1,
+      themeColor: "",
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("admin1234"),
@@ -176,6 +206,8 @@ function seed(): MockDb {
       rank: "",
       isExecutive: false,
       mission: "",
+      tiers: 1,
+      themeColor: "",
       // デモで残業超過アラートの動作が見えるよう、あえて少なめに設定している
       fixedOvertimeHours: 10,
       isActive: true,
@@ -191,6 +223,8 @@ function seed(): MockDb {
       rank: "",
       isExecutive: false,
       mission: "",
+      tiers: 1,
+      themeColor: "",
       fixedOvertimeHours: 20,
       isActive: true,
       passwordHash: hashPassword("staff1234"),
@@ -206,6 +240,7 @@ function seed(): MockDb {
           "",
           true,
           "理念の体現者。ENiの想いを伝え続け、幹部候補を育成する。全ての目標の進捗と実行に責任を持つ執行責任者。",
+          2,
         ],
         [
           "staff-4",
@@ -215,9 +250,10 @@ function seed(): MockDb {
           "",
           false,
           "現場の要であるアシスタントを統括。率先垂範モデルとして、サロンワーク・接客・技術・価値観の教育と底上げを行う。",
+          2,
         ],
-        ["staff-5", "小林 蒼", "aoi", "assistant", "first", false, ""],
-        ["staff-6", "藤田 ひかり", "hikari", "assistant", "middle", false, ""],
+        ["staff-5", "小林 蒼", "aoi", "assistant", "first", false, "", 1],
+        ["staff-6", "藤田 ひかり", "hikari", "assistant", "middle", false, "", 1],
       ] as [
         string,
         string,
@@ -226,9 +262,10 @@ function seed(): MockDb {
         "" | "first" | "middle" | "final",
         boolean,
         string,
+        number,
       ][]
     ).map(
-      ([id, name, loginId, jobType, rank, isExecutive, mission]): StaffWithSecret => ({
+      ([id, name, loginId, jobType, rank, isExecutive, mission, tiers]): StaffWithSecret => ({
         id,
         storeId: store.id,
         name,
@@ -238,6 +275,8 @@ function seed(): MockDb {
         rank,
         isExecutive,
         mission,
+        tiers,
+        themeColor: "",
         fixedOvertimeHours: 20,
         isActive: true,
         passwordHash: hashPassword("staff1234"),
@@ -696,13 +735,14 @@ function seed(): MockDb {
     },
   ];
 
-  // ---- チャットのデモデータ ----
+  // ---- トークルームのデモデータ ----
   const chatRooms: (ChatRoom & { dmKey: string })[] = [
     {
       id: "room-all",
-      name: "ENi 全体",
+      name: ALL_ROOM_NAME,
       isGroup: true,
       dmKey: "",
+      roomKey: ALL_ROOM_KEY,
       createdBy: "staff-3",
       createdAt: jstAt(addDays(today, -30), 9),
     },
@@ -711,46 +751,66 @@ function seed(): MockDb {
       name: "",
       isGroup: false,
       dmKey: "dm:staff-3:staff-4",
+      roomKey: "",
       createdBy: "staff-3",
       createdAt: jstAt(addDays(today, -10), 9),
     },
   ];
   const chatMembers: ChatMember[] = [
-    { roomId: "room-all", staffId: "staff-3", lastReadAt: jstAt(today, 8) },
-    { roomId: "room-all", staffId: "staff-4", lastReadAt: jstAt(addDays(today, -1), 21) },
-    { roomId: "room-all", staffId: "staff-5", lastReadAt: jstAt(today, 7) },
-    { roomId: "room-all", staffId: "staff-6", lastReadAt: jstAt(addDays(today, -1), 20) },
+    // 全体共有は在籍者を全員入れる（強制参加）
+    ...staff.map((s) => ({
+      roomId: "room-all",
+      staffId: s.id,
+      lastReadAt: jstAt(addDays(today, -1), 20),
+    })),
     { roomId: "room-dm-1", staffId: "staff-3", lastReadAt: jstAt(today, 8) },
     { roomId: "room-dm-1", staffId: "staff-4", lastReadAt: jstAt(addDays(today, -1), 22) },
   ];
+  /** デモ用のメッセージを作る（新しく足した項目の既定値をここで埋める） */
+  const message = (
+    m: Pick<ChatMessage, "roomId" | "senderId" | "body" | "createdAt"> & Partial<ChatMessage>
+  ): ChatMessage => ({
+    id: randomUUID(),
+    image: "",
+    file: "",
+    fileName: "",
+    replyToId: "",
+    mentions: [],
+    pinned: false,
+    announcedAt: null,
+    announcedBy: null,
+    deleted: false,
+    ...m,
+  });
+
   const chatMessages: ChatMessage[] = [
-    {
-      id: randomUUID(),
+    message({
+      roomId: "room-all",
+      senderId: "staff-3",
+      body: "【今週の全体連絡】しもん塾は金曜19時からです。全員参加でお願いします！",
+      createdAt: jstAt(addDays(today, -1), 18, 10),
+      pinned: true,
+      announcedAt: jstAt(addDays(today, -1), 18, 12),
+      announcedBy: "staff-3",
+    }),
+    message({
       roomId: "room-all",
       senderId: "staff-3",
       body: "おはようございます！今日もよろしくお願いします。本日の朝礼は9:30からです",
-      image: "",
-      deleted: false,
       createdAt: jstAt(today, 7, 50),
-    },
-    {
-      id: randomUUID(),
+    }),
+    message({
       roomId: "room-all",
       senderId: "staff-5",
       body: "よろしくお願いします！",
-      image: "",
-      deleted: false,
       createdAt: jstAt(today, 7, 55),
-    },
-    {
-      id: randomUUID(),
+    }),
+    message({
       roomId: "room-dm-1",
       senderId: "staff-4",
       body: "明日のモデル撮影、17時からで大丈夫ですか？",
-      image: "",
-      deleted: false,
       createdAt: jstAt(addDays(today, -1), 21, 30),
-    },
+    }),
   ];
 
   // ---- サンクスカードのデモデータ ----
@@ -861,6 +921,9 @@ function seed(): MockDb {
     availableStores: currentAvailable,
     rules: shiftRules,
     prevMonthAssignedDates: new Map(),
+    jobTypes: new Map(staff.map((s) => [s.id, s.jobType])),
+    tiers: new Map(staff.map((s) => [s.id, s.tiers])),
+    allHandsDates: new Set(),
   });
   const shiftAssignments: ShiftAssignment[] = generated.assignments.map((a) => ({
     id: randomUUID(),
@@ -980,6 +1043,10 @@ function seed(): MockDb {
     chatMembers,
     chatMessages,
     chatReactions: [],
+    committees: committeesFromTemplates().map((c) => ({ id: randomUUID(), ...c })),
+    managerRoutines: DEFAULT_MANAGER_ROUTINES.map((r) => ({ id: randomUUID(), ...r })),
+    managerRoutineChecks: [],
+    appSettings: [],
     thanksPosts,
     thanksLikes,
     thanksComments,
@@ -1070,6 +1137,8 @@ class MockStore implements DataStore {
       rank: input.rank ?? "",
       isExecutive: input.isExecutive ?? false,
       mission: input.mission ?? "",
+      tiers: input.tiers ?? 1,
+      themeColor: "",
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
       passwordHash: input.passwordHash,
@@ -1090,6 +1159,8 @@ class MockStore implements DataStore {
         | "rank"
         | "isExecutive"
         | "mission"
+        | "tiers"
+        | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
       >
@@ -2220,7 +2291,7 @@ class MockStore implements DataStore {
     }
   }
 
-  // ---- 社内チャット ----
+  // ---- 社内トークルーム ----
 
   async listChatRooms(staffId: string): Promise<ChatRoom[]> {
     const myRoomIds = new Set(
@@ -2254,6 +2325,7 @@ class MockStore implements DataStore {
       name: "",
       isGroup: false,
       dmKey,
+      roomKey: "",
       createdBy: staffA,
       createdAt: new Date(),
     };
@@ -2273,15 +2345,70 @@ class MockStore implements DataStore {
       name,
       isGroup: true,
       dmKey: "",
+      roomKey: "",
       createdBy,
       createdAt: new Date(),
     };
     this.db.chatRooms.push(created);
-    const ids = [...new Set([createdBy, ...memberIds])];
-    for (const staffId of ids) {
+    // 自分が入らないグループも作れる（memberIds がそのまま参加者になる）
+    for (const staffId of [...new Set(memberIds)]) {
       this.db.chatMembers.push({ roomId: created.id, staffId, lastReadAt: new Date() });
     }
     const { dmKey: _dk, ...r } = created;
+    return { ...r };
+  }
+
+  async updateGroupRoom(
+    roomId: string,
+    patch: { name?: string; memberIds?: string[] }
+  ): Promise<void> {
+    const room = this.db.chatRooms.find((r) => r.id === roomId);
+    if (!room || !room.isGroup) return;
+    if (patch.name !== undefined) room.name = patch.name;
+    if (patch.memberIds) {
+      const next = new Set(patch.memberIds);
+      const current = this.db.chatMembers.filter((m) => m.roomId === roomId);
+      // 外れた人を消し、増えた人を足す（既読の位置は残す）
+      for (const m of current) {
+        if (!next.has(m.staffId)) {
+          this.db.chatMembers.splice(this.db.chatMembers.indexOf(m), 1);
+        }
+      }
+      const existing = new Set(
+        this.db.chatMembers.filter((m) => m.roomId === roomId).map((m) => m.staffId)
+      );
+      for (const staffId of next) {
+        if (!existing.has(staffId)) {
+          this.db.chatMembers.push({ roomId, staffId, lastReadAt: new Date() });
+        }
+      }
+    }
+  }
+
+  async ensureAllRoom(staffIds: string[]): Promise<ChatRoom> {
+    let room = this.db.chatRooms.find((r) => r.roomKey === ALL_ROOM_KEY);
+    if (!room) {
+      room = {
+        id: randomUUID(),
+        name: ALL_ROOM_NAME,
+        isGroup: true,
+        dmKey: "",
+        roomKey: ALL_ROOM_KEY,
+        createdBy: staffIds[0] ?? "",
+        createdAt: new Date(),
+      };
+      this.db.chatRooms.push(room);
+    }
+    // 在籍者は全員参加（あとから入った人も自動で入る）
+    const joined = new Set(
+      this.db.chatMembers.filter((m) => m.roomId === room!.id).map((m) => m.staffId)
+    );
+    for (const staffId of staffIds) {
+      if (!joined.has(staffId)) {
+        this.db.chatMembers.push({ roomId: room.id, staffId, lastReadAt: new Date(0) });
+      }
+    }
+    const { dmKey: _dk, ...r } = room;
     return { ...r };
   }
 
@@ -2301,18 +2428,39 @@ class MockStore implements DataStore {
       .map((m) => ({ ...m }));
   }
 
-  async createChatMessage(input: {
-    roomId: string;
-    senderId: string;
-    body: string;
-    image: string;
-  }): Promise<ChatMessage> {
+  async listChatMessagesByIds(ids: string[]): Promise<ChatMessage[]> {
+    return this.db.chatMessages.filter((m) => ids.includes(m.id)).map((m) => ({ ...m }));
+  }
+
+  async listPinnedChatMessages(roomId: string): Promise<ChatMessage[]> {
+    return this.db.chatMessages
+      .filter((m) => m.roomId === roomId && m.pinned && !m.deleted)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((m) => ({ ...m }));
+  }
+
+  async listAnnouncedChatMessages(limit = 5): Promise<ChatMessage[]> {
+    return this.db.chatMessages
+      .filter((m) => m.announcedAt && !m.deleted)
+      .sort((a, b) => b.announcedAt!.getTime() - a.announcedAt!.getTime())
+      .slice(0, limit)
+      .map((m) => ({ ...m }));
+  }
+
+  async createChatMessage(input: ChatMessageInput): Promise<ChatMessage> {
     const created: ChatMessage = {
       id: randomUUID(),
       roomId: input.roomId,
       senderId: input.senderId,
       body: input.body,
       image: input.image,
+      file: input.file ?? "",
+      fileName: input.fileName ?? "",
+      replyToId: input.replyToId ?? "",
+      mentions: input.mentions ?? [],
+      pinned: false,
+      announcedAt: null,
+      announcedBy: null,
       deleted: false,
       createdAt: new Date(),
     };
@@ -2331,7 +2479,23 @@ class MockStore implements DataStore {
       found.deleted = true;
       found.body = "";
       found.image = "";
+      found.file = "";
+      found.fileName = "";
+      found.pinned = false;
+      found.announcedAt = null;
     }
+  }
+
+  async setChatMessagePinned(id: string, pinned: boolean): Promise<void> {
+    const found = this.db.chatMessages.find((m) => m.id === id);
+    if (found && !found.deleted) found.pinned = pinned;
+  }
+
+  async setChatMessageAnnounced(id: string, staffId: string, announced: boolean): Promise<void> {
+    const found = this.db.chatMessages.find((m) => m.id === id);
+    if (!found || found.deleted) return;
+    found.announcedAt = announced ? new Date() : null;
+    found.announcedBy = announced ? staffId : null;
   }
 
   async markChatRead(roomId: string, staffId: string): Promise<void> {
@@ -2351,6 +2515,97 @@ class MockStore implements DataStore {
     return this.db.chatReactions
       .filter((r) => messageIds.includes(r.messageId))
       .map((r) => ({ ...r }));
+  }
+
+  // ---- 会議体マスタ ----
+
+  async listCommittees(): Promise<Committee[]> {
+    return this.db.committees
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((c) => ({ ...c, orgTeams: [...c.orgTeams], memberStaffIds: [...c.memberStaffIds], prechecks: [...c.prechecks] }));
+  }
+
+  async upsertCommittee(input: Omit<Committee, "id">): Promise<void> {
+    const found = this.db.committees.find((c) => c.committeeKey === input.committeeKey);
+    if (found) Object.assign(found, input);
+    else this.db.committees.push({ id: randomUUID(), ...input });
+  }
+
+  async deleteCommittee(committeeKey: string): Promise<void> {
+    const idx = this.db.committees.findIndex((c) => c.committeeKey === committeeKey);
+    if (idx >= 0) this.db.committees.splice(idx, 1);
+  }
+
+  // ---- 店長・副店長のルーティン業務 ----
+
+  async listManagerRoutines(): Promise<ManagerRoutine[]> {
+    const order: Record<RoutineCycle, number> = { daily: 0, weekly: 1, monthly: 2 };
+    return this.db.managerRoutines
+      .slice()
+      .sort((a, b) => order[a.cycle] - order[b.cycle] || a.sortOrder - b.sortOrder)
+      .map((r) => ({ ...r }));
+  }
+
+  async createManagerRoutine(input: Omit<ManagerRoutine, "id">): Promise<ManagerRoutine> {
+    const created: ManagerRoutine = { id: randomUUID(), ...input };
+    this.db.managerRoutines.push(created);
+    return { ...created };
+  }
+
+  async updateManagerRoutine(
+    id: string,
+    patch: Partial<Omit<ManagerRoutine, "id">>
+  ): Promise<void> {
+    const found = this.db.managerRoutines.find((r) => r.id === id);
+    if (found) Object.assign(found, patch);
+  }
+
+  async deleteManagerRoutine(id: string): Promise<void> {
+    const idx = this.db.managerRoutines.findIndex((r) => r.id === id);
+    if (idx >= 0) this.db.managerRoutines.splice(idx, 1);
+    this.db.managerRoutineChecks = this.db.managerRoutineChecks.filter((c) => c.routineId !== id);
+  }
+
+  async setManagerRoutineChecked(
+    routineId: string,
+    periodKey: string,
+    staffId: string,
+    checked: boolean
+  ): Promise<void> {
+    const idx = this.db.managerRoutineChecks.findIndex(
+      (c) => c.routineId === routineId && c.periodKey === periodKey
+    );
+    if (checked) {
+      if (idx >= 0) return;
+      this.db.managerRoutineChecks.push({
+        id: randomUUID(),
+        routineId,
+        periodKey,
+        staffId,
+        checkedAt: new Date(),
+      });
+    } else if (idx >= 0) {
+      this.db.managerRoutineChecks.splice(idx, 1);
+    }
+  }
+
+  async listManagerRoutineChecks(periodKeys: string[]): Promise<ManagerRoutineCheck[]> {
+    return this.db.managerRoutineChecks
+      .filter((c) => periodKeys.includes(c.periodKey))
+      .map((c) => ({ ...c }));
+  }
+
+  // ---- アプリ設定 ----
+
+  async listAppSettings(): Promise<AppSetting[]> {
+    return this.db.appSettings.map((a) => ({ ...a }));
+  }
+
+  async setAppSetting(key: string, value: string): Promise<void> {
+    const found = this.db.appSettings.find((a) => a.key === key);
+    if (found) found.value = value;
+    else this.db.appSettings.push({ key, value });
   }
 
   // ---- 社内SNS（サンクスカード） ----

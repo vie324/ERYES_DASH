@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import {
@@ -19,19 +20,21 @@ const KIND_LABEL: Record<AbsenceKind, string> = {
   late: "遅刻",
 };
 
-// 欠勤・早退の報告：誰が・いつ・何時間・どんな理由かを報告であげる。
-// 全員分の一覧（月別カレンダー）は幹部・管理者だけが見られる。
+// 欠勤・早退の報告：誰が・いつ・何時間・どんな理由かを記録する。
+// 対応するのは幹部メンバー以上なので、この画面は幹部・管理者だけが開ける
+// （アシスタント・スタイリストにはメニューにも出さない）。
 export default async function AbsencePage({
   searchParams,
 }: {
   searchParams: Promise<{ month?: string; saved?: string; error?: string }>;
 }) {
   const session = await requireSession();
+  if (!(await isExecutive(session))) redirect("/staff");
+
   const params = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
   const { from, to } = monthRange(month);
   const today = todayJst();
-  const isExec = await isExecutive(session);
 
   const db = getDataStore();
   const [reports, staffList] = await Promise.all([
@@ -40,10 +43,7 @@ export default async function AbsencePage({
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s.name]));
   const activeStaff = staffList.filter((s) => s.isActive);
-  // 幹部以外は「自分が対象」または「自分が報告した」ものだけ見える
-  const visible = isExec
-    ? reports
-    : reports.filter((r) => r.staffId === session.staffId || r.reportedBy === session.staffId);
+  const visible = reports;
 
   const kindBadge = (kind: AbsenceKind) =>
     kind === "absence" ? (
@@ -56,7 +56,12 @@ export default async function AbsencePage({
 
   return (
     <div className="page-narrow">
-      <PageHeader title="欠勤・早退の報告" backHref="/staff" />
+      <PageHeader
+        title="欠勤・早退の報告"
+        backHref="/staff"
+        description="幹部メンバー以上が記録・確認します"
+        icon="alertTriangle"
+      />
 
       {params.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
@@ -163,9 +168,7 @@ export default async function AbsencePage({
       />
 
       <section className="card">
-        <h2 className="section-title">
-          {isExec ? `全員の報告（${formatMonthJa(month)}・幹部メニュー）` : `自分の報告（${formatMonthJa(month)}）`}
-        </h2>
+        <h2 className="section-title">全員の報告（{formatMonthJa(month)}）</h2>
         {visible.length === 0 ? (
           <EmptyState message="この月の報告はありません" />
         ) : (
@@ -185,9 +188,6 @@ export default async function AbsencePage({
               </div>
             ))}
           </div>
-        )}
-        {!isExec && (
-          <p className="text-xs text-ink-400 mt-2">※ 全員分の一覧は幹部・管理者のみ見られます</p>
         )}
       </section>
     </div>

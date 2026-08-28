@@ -272,10 +272,11 @@ export function CompositionBar({
   format = "yen",
 }: {
   parts: { label: string; value: number }[];
-  format?: "number" | "yen";
+  format?: "number" | "yen" | "hour";
 }) {
   const total = parts.reduce((s, p) => s + p.value, 0);
-  const fmt = (v: number) => (format === "yen" ? yen(v) : String(v));
+  const fmt = (v: number) =>
+    format === "yen" ? yen(v) : format === "hour" ? `${Math.round(v * 10) / 10}h` : String(v);
   if (total === 0) {
     return <p className="text-xs text-ink-500 py-6 text-center">データがまだありません</p>;
   }
