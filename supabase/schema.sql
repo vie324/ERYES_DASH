@@ -31,6 +31,8 @@ create table if not exists staff (
   rank text not null default '' check (rank in ('', 'first', 'middle', 'final')),  -- アシスタントのランク
   is_executive boolean not null default false,
   mission text not null default '',                   -- その人の役割・担っていること（組織図に表示）
+  tiers integer not null default 1,                   -- 段数（一人当たり同時に回す席数。稼働率の分母に使う）
+  theme_color text not null default '',               -- ダッシュボードの配色キー（空文字はブランド既定）
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
   created_at timestamptz not null default now()
@@ -41,6 +43,8 @@ create table if not exists staff (
 --   alter table staff add column if not exists rank text not null default '';
 --   alter table staff add column if not exists is_executive boolean not null default false;
 --   alter table staff add column if not exists mission text not null default '';
+--   alter table staff add column if not exists tiers integer not null default 1;
+--   alter table staff add column if not exists theme_color text not null default '';
 
 -- 顧客（LINE友だち追加時に自動登録）
 create table if not exists customers (
@@ -443,10 +447,15 @@ create table if not exists chat_rooms (
   name text not null default '',
   is_group boolean not null default false,
   dm_key text not null default '',
+  room_key text not null default '',          -- 'all'=全体共有（全員強制参加）。通常のルームは空文字
   created_by uuid not null references staff(id),
   created_at timestamptz not null default now()
 );
 create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
+create unique index if not exists idx_chat_rooms_room_key on chat_rooms (room_key) where room_key <> '';
+
+-- 既存DBに後から列を足す場合：
+--   alter table chat_rooms add column if not exists room_key text not null default '';
 
 create table if not exists chat_members (
   room_id uuid not null references chat_rooms(id) on delete cascade,
@@ -461,9 +470,25 @@ create table if not exists chat_messages (
   sender_id uuid not null references staff(id),
   body text not null default '',
   image text not null default '',            -- 添付画像（データURL）
+  file text not null default '',             -- 添付ファイル（PDF等のデータURL）
+  file_name text not null default '',        -- 添付ファイルの表示名
+  reply_to_id uuid references chat_messages(id) on delete set null,  -- 返信元
+  mentions jsonb not null default '[]',      -- メンションしたスタッフIDの配列
+  pinned boolean not null default false,     -- ノート（ルームに固定した投稿）
+  announced_at timestamptz,                  -- 全体共有：ダッシュボードに掲示中
+  announced_by uuid references staff(id),
   deleted boolean not null default false,    -- 送信取消
   created_at timestamptz not null default now()
 );
+
+-- 既存DBに後から列を足す場合：
+--   alter table chat_messages add column if not exists file text not null default '';
+--   alter table chat_messages add column if not exists file_name text not null default '';
+--   alter table chat_messages add column if not exists reply_to_id uuid references chat_messages(id) on delete set null;
+--   alter table chat_messages add column if not exists mentions jsonb not null default '[]';
+--   alter table chat_messages add column if not exists pinned boolean not null default false;
+--   alter table chat_messages add column if not exists announced_at timestamptz;
+--   alter table chat_messages add column if not exists announced_by uuid references staff(id);
 
 create table if not exists chat_reactions (
   message_id uuid not null references chat_messages(id) on delete cascade,
@@ -537,6 +562,55 @@ create table if not exists schedule_presets (
   created_at timestamptz not null default now()
 );
 
+-- ============================================================
+-- 会議体マスタ・店長ルーティン業務・アプリ設定
+-- ============================================================
+
+-- 会議体（定例ミーティングの型）。初回起動時に lib/eni/meetings-templates.ts の内容が入る
+create table if not exists committees (
+  id uuid primary key default gen_random_uuid(),
+  committee_key text not null unique,           -- meetings.committee と紐づくキー
+  name text not null,
+  purpose text not null default '',
+  cadence text not null default '',
+  duration_min integer not null default 60,
+  participants_hint text not null default '',
+  org_teams jsonb not null default '[]',        -- 対応する組織図のチーム（unit_key の配列）
+  member_staff_ids jsonb not null default '[]', -- 参加者を直接指定する場合
+  agenda text not null default '',
+  prechecks jsonb not null default '[]',
+  sort_order integer not null default 0,
+  is_active boolean not null default true
+);
+
+-- 店長・副店長のルーティン業務マスタ（デイリー／ウィークリー／マンスリー）
+create table if not exists manager_routines (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  cycle text not null default 'daily' check (cycle in ('daily', 'weekly', 'monthly')),
+  note text not null default '',
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- ルーティン業務の実施記録。period_key は daily=日付 / weekly=週の月曜 / monthly='YYYY-MM'
+create table if not exists manager_routine_checks (
+  id uuid primary key default gen_random_uuid(),
+  routine_id uuid not null references manager_routines(id) on delete cascade,
+  period_key text not null,
+  staff_id uuid not null references staff(id) on delete cascade,
+  checked_at timestamptz not null default now(),
+  unique (routine_id, period_key)
+);
+
+-- アプリ設定（サロンボードのURLなど、管理者が画面から変えられる値）
+create table if not exists app_settings (
+  key text primary key,
+  value text not null default '',
+  updated_at timestamptz not null default now()
+);
+
 -- ---- インデックス ----
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
@@ -573,6 +647,11 @@ create index if not exists idx_chat_messages_room on chat_messages (room_id, cre
 create index if not exists idx_thanks_posts_created on thanks_posts (created_at desc);
 create index if not exists idx_thanks_posts_to on thanks_posts (to_staff_id, created_at desc);
 create index if not exists idx_thanks_comments_post on thanks_comments (post_id);
+create index if not exists idx_chat_messages_pinned on chat_messages (room_id) where pinned;
+create index if not exists idx_chat_messages_announced on chat_messages (announced_at desc) where announced_at is not null;
+create index if not exists idx_committees_sort on committees (sort_order);
+create index if not exists idx_manager_routines_sort on manager_routines (cycle, sort_order);
+create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、
@@ -618,6 +697,10 @@ alter table chat_reactions enable row level security;
 alter table thanks_posts enable row level security;
 alter table thanks_likes enable row level security;
 alter table thanks_comments enable row level security;
+alter table committees enable row level security;
+alter table manager_routines enable row level security;
+alter table manager_routine_checks enable row level security;
+alter table app_settings enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。
@@ -639,6 +722,17 @@ insert into schedule_presets (label, sort_order)
 values ('朝礼', 10), ('入客アシスト', 20), ('施術', 30), ('練習', 40), ('MTG', 50),
        ('休憩', 60), ('事務', 70), ('撮影', 80), ('掃除', 90), ('退勤', 100)
 on conflict (label) do nothing;
+
+-- 店長・副店長のルーティン業務の初期値（毎日チェックする4項目）
+insert into manager_routines (title, cycle, note, sort_order)
+select v.title, 'daily', v.note, v.sort_order
+from (values
+  ('公式LINEチェック', '返信もれ・予約の問い合わせが残っていないか', 10),
+  ('労務管理（早退・遅刻・欠勤など）', '当日の勤怠のズレを把握し、必要なら申し送りする', 20),
+  ('レジ締め・エクセルの入力の確認', '現金残高とエクセルの数字が合っているか', 30),
+  ('日報・週報の入力・確認', '全員の提出状況を見て、未提出には声をかける', 40)
+) as v(title, note, sort_order)
+where not exists (select 1 from manager_routines);
 
 -- 初期管理者アカウント
 --   ログインID: admin ／ パスワード: admin1234

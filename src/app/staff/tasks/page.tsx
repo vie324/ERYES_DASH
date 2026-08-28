@@ -94,7 +94,7 @@ export default async function TasksPage({
     companyLinks.push({ href: "/staff/weekly-report", label: "今週の週報が未入力です", detail: "会社のタスク" });
   }
   if (brand === "eni" && !todayPlan) {
-    companyLinks.push({ href: "/staff/morning", label: "今日のスケジュールが未入力です", detail: "会社のタスク" });
+    companyLinks.push({ href: "/staff/plan", label: "今日のスケジュールが未入力です", detail: "会社のタスク" });
   }
   if (myMissingMinutes.length > 0) {
     companyLinks.push({

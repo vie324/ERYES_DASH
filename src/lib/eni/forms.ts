@@ -13,7 +13,10 @@ export interface EniFormItem {
   options?: string[]; // radio用
   unit?: string; // number用（人・円・件・分）
   placeholder?: string;
+  /** 入力欄の下に薄く出す例示・補足 */
   note?: string;
+  /** 数字項目をまとめる見出し（同じ見出しの項目が1つの枠に並ぶ） */
+  group?: string;
 }
 
 // ---- スタイリスト日報（毎日・スタイリスト） ----
@@ -113,7 +116,7 @@ const WEEKLY_SUPPORT_ITEMS: EniFormItem[] = [
     label: "誰に何回見てもらえているのか",
     type: "textarea",
     required: false,
-    placeholder: "例）大輝さん3回、結菜さん1回",
+    placeholder: "例）〇〇さん3回、〇〇さん1回",
   },
   {
     key: "support_people",
@@ -123,14 +126,68 @@ const WEEKLY_SUPPORT_ITEMS: EniFormItem[] = [
   },
 ];
 
-// 今週の取り組み状況（ミドル・ファイナル共通の数字）
+// 今週の練習時間。「何に時間を使ったか」が分かるよう3本に分ける（全ランク共通）。
+// note は入力欄の下に薄く出る例示。何を書けばよいか迷わないようにするためのもの。
+export const WEEKLY_PRACTICE_GROUP = "今週の練習時間";
+
+export const WEEKLY_PRACTICE_ITEMS: EniFormItem[] = [
+  {
+    key: "practice_hours",
+    label: "練習",
+    type: "number",
+    required: false,
+    unit: "時間",
+    note: "例）ウィッグ練習やモデル練習など",
+    group: WEEKLY_PRACTICE_GROUP,
+  },
+  {
+    key: "sns_hours",
+    label: "SNS",
+    type: "number",
+    required: false,
+    unit: "時間",
+    note: "例）何時間更新作業や投稿作成に使用したか",
+    group: WEEKLY_PRACTICE_GROUP,
+  },
+  {
+    key: "other_hours",
+    label: "その他",
+    type: "number",
+    required: false,
+    unit: "時間",
+    note: "例）まとめ作業・スケジュール作成・振り返り・整理の時間など",
+    group: WEEKLY_PRACTICE_GROUP,
+  },
+];
+
+/** 週報の「今週の練習時間」に含めるキー（ダッシュボードの集計と揃える） */
+export const WEEKLY_PRACTICE_KEYS = WEEKLY_PRACTICE_ITEMS.map((i) => i.key);
+
+/** 回答から今週の練習時間の合計（時間）を出す */
+export function practiceHoursOf(answers: Record<string, unknown>): number {
+  return WEEKLY_PRACTICE_KEYS.reduce((sum, key) => {
+    const v = answers[key];
+    return sum + (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  }, 0);
+}
+
+/** 内訳（練習・SNS・その他）を表示用に取り出す */
+export function practiceBreakdownOf(
+  answers: Record<string, unknown>
+): { label: string; hours: number }[] {
+  return WEEKLY_PRACTICE_ITEMS.map((item) => ({
+    label: item.label,
+    hours: typeof answers[item.key] === "number" ? (answers[item.key] as number) : 0,
+  }));
+}
+
+// 今週の取り組み状況（ミドル・ファイナル共通の数字）。
+// 時間の内訳は「今週の練習時間」（練習／SNS／その他）に集約したので、ここでは件数・人数だけを聞く。
 const WEEKLY_ACTIVITY_ITEMS: EniFormItem[] = [
   { key: "model_count", label: "モデル", type: "number", required: false, unit: "人" },
   { key: "wig_hours", label: "ウィッグ", type: "number", required: false, unit: "時間" },
-  { key: "sns_hours", label: "SNS", type: "number", required: false, unit: "時間" },
   { key: "sns_posts", label: "SNS投稿", type: "number", required: false, unit: "投稿" },
   { key: "roleplay_count", label: "ロープレ", type: "number", required: false, unit: "回" },
-  { key: "other_hours", label: "撮影・勉強など その他", type: "number", required: false, unit: "時間" },
   {
     key: "other_activity",
     label: "その他の取り組み（自由記入）",
@@ -143,25 +200,20 @@ const WEEKLY_ACTIVITY_ITEMS: EniFormItem[] = [
 const WEEKLY_ITEMS_BY_RANK: Record<Exclude<AssistantRank, "">, EniFormItem[]> = {
   // ファースト：基礎の習得期。練習量と、見てもらった回数を大切にする
   first: [
-    {
-      key: "practice_hours",
-      label: "今週の練習時間",
-      type: "number",
-      required: false,
-      unit: "時間",
-      note: "だいたいの合計でOK",
-    },
+    ...WEEKLY_PRACTICE_ITEMS,
     ...WEEKLY_SUPPORT_ITEMS,
     ...weeklyReflection("できるようになったこと・良かったこと"),
   ],
   // ミドル：モデル・SNS・ロープレなど取り組みの量を見える化する
   middle: [
+    ...WEEKLY_PRACTICE_ITEMS,
     ...WEEKLY_ACTIVITY_ITEMS,
     ...WEEKLY_SUPPORT_ITEMS,
     ...weeklyReflection("頑張ったこと、嬉しかったこと、人に喜んでもらえたこと"),
   ],
   // ファイナル：ミドルと同じ取り組み＋デビュー設定（設定は週報の先頭に常時表示）
   final: [
+    ...WEEKLY_PRACTICE_ITEMS,
     ...WEEKLY_ACTIVITY_ITEMS,
     ...WEEKLY_SUPPORT_ITEMS,
     ...weeklyReflection("頑張ったこと、嬉しかったこと、人に喜んでもらえたこと"),
@@ -170,7 +222,7 @@ const WEEKLY_ITEMS_BY_RANK: Record<Exclude<AssistantRank, "">, EniFormItem[]> = 
 
 // 未設定ランク（ランク付け前）のフォールバック
 const WEEKLY_ITEMS_DEFAULT: EniFormItem[] = [
-  { key: "practice_hours", label: "今週の練習時間", type: "number", required: false, unit: "時間" },
+  ...WEEKLY_PRACTICE_ITEMS,
   ...WEEKLY_SUPPORT_ITEMS,
   ...weeklyReflection("できるようになったこと・良かったこと"),
 ];
@@ -319,11 +371,30 @@ export function formatEniAnswer(item: EniFormItem, value: unknown): string {
 }
 
 // ---- スタイリスト日報の稼働率・次回予約率 ----
-// 稼働率は必須：8時間（480分）のうち、どれくらいお客様に入っていたか（入客時間 ÷ 8時間）。
+// 稼働率は「その人が回せる枠のうち、どれだけお客様で埋まっていたか」。
+// 回せる枠 ＝ 段数（同時に回す席数）× 8時間 なので、
+//   稼働率 ＝ 入客時間 ÷（段数 × 8時間）
+// 2段の人は16時間ぶん回せる前提になるため、1段の人と同じ入客時間なら稼働率は半分になる。
 // 次回予約率 ＝ 次回予約が取れた数 ÷ 客数。どちらも自動計算して%で見せる。
 
-/** 稼働率の基準時間（8時間＝480分） */
+/** 稼働率の基準時間（1段あたり8時間＝480分） */
 export const STYLIST_STANDARD_MINUTES = 480;
+
+/** 段数の既定値・上限（マスタ未設定のスタッフは1段として扱う） */
+export const DEFAULT_TIERS = 1;
+export const MAX_TIERS = 6;
+
+/** 段数を1〜MAX_TIERSの整数に丸める（未設定・壊れた値は1段） */
+export function normalizeTiers(value: unknown): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_TIERS;
+  return Math.min(MAX_TIERS, n);
+}
+
+/** その段数で1日に回せる時間（分）＝ 段数 × 8時間 */
+export function capacityMinutes(tiers: number): number {
+  return normalizeTiers(tiers) * STYLIST_STANDARD_MINUTES;
+}
 
 export interface StylistTimeInput {
   /** 今日の客数（人） */
@@ -332,10 +403,12 @@ export interface StylistTimeInput {
   serviceMinutes: number;
   /** 次回予約が取れた数（件） */
   nextBookings: number;
+  /** 段数（同時に回す席数）。稼働率の分母 ＝ 段数 × 8時間 */
+  tiers: number;
 }
 
 export interface StylistCalc {
-  /** 稼働率（%）＝ 入客時間 ÷ 8時間（480分） */
+  /** 稼働率（%）＝ 入客時間 ÷（段数 × 8時間） */
   utilization: number;
   /** 次回予約率（%）。客数0のときは null */
   rebookRate: number | null;
@@ -343,12 +416,22 @@ export interface StylistCalc {
 
 export function computeStylistCalc(input: StylistTimeInput): StylistCalc {
   const utilization =
-    Math.round((Math.max(0, input.serviceMinutes) / STYLIST_STANDARD_MINUTES) * 1000) / 10;
+    Math.round((Math.max(0, input.serviceMinutes) / capacityMinutes(input.tiers)) * 1000) / 10;
   const rebookRate =
     input.clientCount > 0
       ? Math.round((Math.max(0, input.nextBookings) / input.clientCount) * 1000) / 10
       : null;
   return { utilization, rebookRate };
+}
+
+/** 保存済みの日報から稼働率を出し直す（段数を後から変えても閲覧側の数字が揃うように） */
+export function utilizationOf(answers: Record<string, unknown>, tiers: number): number | null {
+  const minutes = answers.service_minutes;
+  if (typeof minutes !== "number" || !Number.isFinite(minutes)) {
+    // 入客時間が無い古いデータは、保存済みの稼働率をそのまま見せる
+    return typeof answers.utilization === "number" ? answers.utilization : null;
+  }
+  return Math.round((Math.max(0, minutes) / capacityMinutes(tiers)) * 1000) / 10;
 }
 
 /** 保存済みの日報から次回予約率を計算（閲覧画面用。旧データも next_bookings/client_count から出せる） */

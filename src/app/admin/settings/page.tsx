@@ -7,9 +7,16 @@ import {
   createStoreAction,
   deleteStaffAction,
   deleteStoreAction,
+  saveAppSettingsAction,
   updateStaffAction,
   updateStoreAction,
 } from "../actions";
+import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
+
+import { MAX_TIERS } from "@/lib/eni/forms";
+
+/** 段数の選択肢（1〜MAX_TIERS段） */
+const TIER_OPTIONS = Array.from({ length: MAX_TIERS }, (_, i) => i + 1);
 
 const FLASH_MESSAGES: Record<string, { type: "ok" | "error"; text: string }> = {
   "saved=store": { type: "ok", text: "店舗情報を保存しました" },
@@ -35,7 +42,12 @@ export default async function AdminSettingsPage({
     : FLASH_MESSAGES[flashKey];
 
   const db = getDataStore();
-  const [stores, staffList] = await Promise.all([db.listStores(), db.listStaff()]);
+  const [stores, staffList, appSettings] = await Promise.all([
+    db.listStores(),
+    db.listStaff(),
+    db.listAppSettings(),
+  ]);
+  const settings = settingsMap(appSettings);
 
   return (
     <div>
@@ -174,6 +186,7 @@ export default async function AdminSettingsPage({
                 {s.isExecutive && <StatusBadge label="幹部" tone="warning" />}
                 {s.jobType === "stylist" && <StatusBadge label="スタイリスト" tone="ok" />}
                 {s.jobType === "assistant" && <StatusBadge label="アシスタント" tone="ok" />}
+                <StatusBadge label={`${s.tiers}段`} tone="muted" />
                 {!s.isActive && <StatusBadge label="無効" tone="danger" />}
                 <Icon name="chevronDown" className="w-4 h-4 text-brand-400 transition-transform duration-200 group-open:rotate-180" />
               </summary>
@@ -225,6 +238,20 @@ export default async function AdminSettingsPage({
                       <option value="final">ファイナル</option>
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="label">段数（一人当たり同時に回す席数）</label>
+                  <select name="tiers" defaultValue={String(s.tiers)} className="input">
+                    {TIER_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}段（1日に回せる枠 {n * 8}時間）
+                      </option>
+                    ))}
+                  </select>
+                  <p className="hint">
+                    日報の稼働率は「入客時間 ÷（段数 × 8時間）」で計算します。
+                    2段の人は16時間ぶん回せる前提になります。
+                  </p>
                 </div>
                 <div>
                   <label className="label">役割・担っていること（組織図に表示）</label>
@@ -351,14 +378,51 @@ export default async function AdminSettingsPage({
                 <option value="assistant">アシスタント</option>
               </select>
             </div>
-            <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
-                <input type="checkbox" name="is_executive" className="h-5 w-5 accent-brand-500" />
-                幹部メンバー
-              </label>
+            <div>
+              <label className="label" htmlFor="new_tiers">段数（同時に回す席数）</label>
+              <select id="new_tiers" name="tiers" className="input" defaultValue="1">
+                {TIER_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}段
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm font-bold text-ink-600">
+            <input type="checkbox" name="is_executive" className="h-5 w-5 accent-brand-500" />
+            幹部メンバー
+          </label>
           <button type="submit" className="btn-primary w-full">スタッフを追加</button>
+        </form>
+      </section>
+
+      {/* 外部サービスへのリンク（サロンボードなど） */}
+      <section className="card mt-5">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">外部サービスのリンク</h2>
+        <form action={saveAppSettingsAction} className="space-y-3">
+          {APP_SETTING_DEFS.map((def) => (
+            <div key={def.key}>
+              <label className="label" htmlFor={def.key}>
+                {def.label}
+              </label>
+              <input
+                id={def.key}
+                name={def.key}
+                type="url"
+                inputMode="url"
+                defaultValue={settings[def.key]}
+                placeholder={def.placeholder}
+                className="input"
+              />
+              <p className="hint">{def.note}</p>
+            </div>
+          ))}
+          <button type="submit" className="btn-secondary w-full">リンクを保存</button>
+          <p className="text-[11px] text-ink-400">
+            ※ ダッシュボードの「サロンボードを開く」ボタンからこのURLを新しいタブで開きます。
+            空欄で保存すると既定のログインページに戻ります。
+          </p>
         </form>
       </section>
 

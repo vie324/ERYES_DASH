@@ -7,8 +7,11 @@ import {
   RANK_LABEL,
   STYLIST_REPORT_NUMBERS,
   STYLIST_REPORT_TEXTS,
+  capacityMinutes,
   formatEniAnswer,
+  normalizeTiers,
   rebookRateOf,
+  utilizationOf,
 } from "@/lib/eni/forms";
 import { EniAnswersView } from "@/components/eni-form-fields";
 import { EmptyState, MonthNav, PageHeader } from "@/components/ui";
@@ -48,12 +51,19 @@ export default async function EniReportsViewPage({
     db.listStaff(),
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s.name]));
+  // 稼働率は「段数×8時間」を分母に出し直す（マスタで段数を変えたら過去分も揃う）
+  const tiersMap = new Map(staffList.map((s) => [s.id, normalizeTiers(s.tiers)]));
 
   const reports = tab === "stylist" ? stylistReports : weeklyReports;
 
+  // アシスタントは週報だけ、スタイリスト以上は日報・週報の両方
+  const title = canSeeStylist ? "みんなの日報・週報を見る" : "みんなの週報を見る";
+  const backHref = canSeeStylist ? "/staff/eni-report" : "/staff/weekly-report";
+  const backLabel = canSeeStylist ? "日報の入力へ戻る" : "週報の入力へ戻る";
+
   return (
     <div>
-      <PageHeader title="日報・週報を見る" backHref="/staff" />
+      <PageHeader title={title} backHref={backHref} backLabel={backLabel} icon="fileText" />
 
       {params.commented && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
@@ -107,7 +117,9 @@ export default async function EniReportsViewPage({
                 )}
               </p>
 
-              {tab === "stylist" ? <StylistView answers={r.answers} /> : (
+              {tab === "stylist" ? (
+                <StylistView answers={r.answers} tiers={tiersMap.get(r.staffId) ?? 1} />
+              ) : (
                 <EniAnswersView items={ALL_WEEKLY_ITEMS} answers={r.answers} />
               )}
 
@@ -192,20 +204,21 @@ function RateBadge({
 }
 
 /** スタイリスト日報の表示（稼働率・次回予約率＋数字＋テキスト） */
-function StylistView({ answers }: { answers: Record<string, unknown> }) {
+function StylistView({ answers, tiers }: { answers: Record<string, unknown>; tiers: number }) {
   const numAnswer = (key: string): number | null =>
     typeof answers[key] === "number" && Number.isFinite(answers[key]) ? (answers[key] as number) : null;
-  const util = numAnswer("utilization");
+  const util = utilizationOf(answers, tiers);
   const clients = numAnswer("client_count");
   const nextBookings = numAnswer("next_bookings");
   const service = numAnswer("service_minutes");
   const rebookRate = rebookRateOf(answers);
+  const capacityHours = capacityMinutes(tiers) / 60;
 
   return (
     <div className="space-y-2.5">
       {/* 稼働率・次回予約率をひと目で */}
       <div className="flex flex-wrap gap-2">
-        <RateBadge label="稼働率（÷8h）" rate={util} goodFrom={70} />
+        <RateBadge label={`稼働率（÷${tiers}段×8h＝${capacityHours}h）`} rate={util} goodFrom={70} />
         <RateBadge label="次回予約率" rate={rebookRate} goodFrom={50} />
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">

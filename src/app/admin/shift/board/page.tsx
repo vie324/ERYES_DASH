@@ -165,10 +165,23 @@ export default async function AdminShiftBoardPage({
             <button type="submit" className="btn-secondary w-full">
               自動割当を実行（下書きを作り直す）
             </button>
-            <p className="text-xs text-ink-400 mt-1.5">
-              ※ 希望（休み・店舗・早遅）と連勤上限{rules.maxConsecutiveDays}日・各店舗{rules.minStaffPerStoreDay}名を考慮します。
-              実行すると現在の下書き・手動調整は消えます。
-            </p>
+            <div className="text-xs text-ink-400 mt-1.5 space-y-1">
+              <p>
+                ※ 希望（休み・店舗・早遅）と連勤上限{rules.maxConsecutiveDays}日・各店舗
+                {rules.minStaffPerStoreDay}名を守ったうえで、次の考え方で組み立てます。
+              </p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>スタイリストが特定の日に固まらないよう、日ごとに散らす</li>
+                <li>しもん塾・全体会議など全員参加のイベント日は、出られる人を全員出勤にする</li>
+                <li>土日はなるべく全員出勤。休みになる場合は段数の少ない人（1段）から</li>
+                <li>平日は、土日が連勤上限に当たらないよう調整する</li>
+              </ul>
+              <p>
+                ぶつかったときは「各店舗にスタイリストがいること」を先に守ります。
+                下書きなので、気になるところは下の表から手で入れ替えてください。
+              </p>
+              <p>実行すると現在の下書き・手動調整は消えます。</p>
+            </div>
           </form>
         )}
 

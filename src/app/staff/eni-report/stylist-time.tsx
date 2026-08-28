@@ -1,11 +1,12 @@
 "use client";
 
 // スタイリスト日報の「客数・入客時間・次回予約」の入力。
-// 稼働率（入客時間 ÷ 8時間）と次回予約率（次回予約 ÷ 客数）はその場で自動計算して大きく見せる。
+// 稼働率（入客時間 ÷ 段数×8時間）と次回予約率（次回予約 ÷ 客数）はその場で自動計算して大きく見せる。
+// 段数（同時に回す席数）はスタッフマスタの値。ここでは変えられず、分母の説明として表示する。
 // 稼働率は任意ではなく必須（入客時間を入れないと保存できない）。
 
 import { useState } from "react";
-import { computeStylistCalc, STYLIST_STANDARD_MINUTES } from "@/lib/eni/forms";
+import { capacityMinutes, computeStylistCalc, normalizeTiers } from "@/lib/eni/forms";
 
 /** 数値入力（未入力は空欄のまま扱う） */
 function NumberField({
@@ -110,10 +111,13 @@ export function StylistTimeSummary({
   initialClientCount,
   initialServiceMinutes,
   initialNextBookings,
+  tiers,
 }: {
   initialClientCount: number;
   initialServiceMinutes: number;
   initialNextBookings: number;
+  /** 段数（マスタ設定の「一人当たり同時に回す席数」） */
+  tiers: number;
 }) {
   const num = (v: number) => (v > 0 ? String(v) : "");
   const [clientCount, setClientCount] = useState(num(initialClientCount));
@@ -121,15 +125,24 @@ export function StylistTimeSummary({
   const [nextBookings, setNextBookings] = useState(num(initialNextBookings));
 
   const n = (v: string) => Math.max(0, Number(v) || 0);
+  const myTiers = normalizeTiers(tiers);
+  const capacity = capacityMinutes(myTiers);
+  const capacityLabel = `${myTiers}段 × 8時間 ＝ ${capacity / 60}時間（${capacity}分）`;
   const calc = computeStylistCalc({
     clientCount: n(clientCount),
     serviceMinutes: n(serviceMinutes),
     nextBookings: n(nextBookings),
+    tiers: myTiers,
   });
 
   return (
     <div className="card space-y-4">
-      <p className="section-title !mb-0">今日の入客（稼働率・次回予約率は自動計算）</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="section-title !mb-0">今日の入客（稼働率・次回予約率は自動計算）</p>
+        <span className="chip !py-1 !px-3 !min-h-0 border-brand-300 text-brand-700">
+          段数 {myTiers}段
+        </span>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <NumberField
@@ -161,7 +174,7 @@ export function StylistTimeSummary({
         unit="分"
         step={30}
         placeholder="360"
-        hint={`8時間（${STYLIST_STANDARD_MINUTES}分）のうち、お客様に入っていた時間の合計`}
+        hint={`回せる枠 ${capacityLabel} のうち、お客様に入っていた時間の合計`}
         required
       />
 
@@ -169,7 +182,7 @@ export function StylistTimeSummary({
         <RateDisplay
           label="稼働率"
           rate={serviceMinutes === "" ? null : calc.utilization}
-          sub={`入客時間 ÷ 8時間（${STYLIST_STANDARD_MINUTES}分）で自動計算`}
+          sub={`入客時間 ÷（${capacityLabel}）で自動計算`}
           goodFrom={70}
         />
         <RateDisplay

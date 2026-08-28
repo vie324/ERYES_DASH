@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa } from "@/lib/date";
 import { generateMinutes } from "@/lib/anthropic";
-import { findTemplate } from "@/lib/eni/meetings-templates";
+import { findCommitteeTemplate } from "@/lib/eni/committees";
 
 export const dynamic = "force-dynamic";
 // AI整形は数十秒かかることがあるため、実行時間の上限を延ばす（Vercelの既定は短い）
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .map(nameOf)
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
 
-  const template = findTemplate(meeting.committee);
+  const template = findCommitteeTemplate(await db.listCommittees(), meeting.committee);
   const meetingName = template?.name || meeting.title || (meeting.meetingType === "1on1" ? "1on1" : "ミーティング");
 
   const { markdown, tasks, ai } = await generateMinutes({

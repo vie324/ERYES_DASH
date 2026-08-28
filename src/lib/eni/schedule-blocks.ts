@@ -1,6 +1,7 @@
 // 予約表（タイムテーブル）の共通ロジック。サーバー・クライアント双方から使う純粋関数だけを置く。
 // ScheduleBlock = { d: 曜日index, s: "HH:mm", e: "HH:mm", a: 内容 }
 
+import { weekdayOf } from "@/lib/date";
 import type { ScheduleBlock } from "@/lib/data/types";
 
 export const PX_PER_HOUR = 56; // グリッド1時間の高さ（px）
@@ -72,7 +73,7 @@ export function blocksFromLegacyRows(rows: { t: string; a: string }[] | undefine
 }
 
 /**
- * 理想のスケジュール（1週間）の保存形式。
+ * 計画スケジュール（1週間）の保存形式。
  * 新：{"v":2,"blocks":[...]} ／ 旧：[{t,a}]（1日ぶんのみ）も読めるようにしておく。
  */
 export function parseWeekContent(content: string): ScheduleBlock[] {
@@ -202,3 +203,74 @@ export function blockColor(label: string): string {
 
 /** 曜日ラベル（月はじまり） */
 export const WEEK_DAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
+
+// ---- 「今日のスケジュール」と「計画スケジュール」を突き合わせるための計算 ----
+
+/** 計画スケジュールの週（第1〜4週）のキー */
+export const PLAN_WEEK_SCOPES = ["week1", "week2", "week3", "week4"] as const;
+export type PlanWeekScope = (typeof PLAN_WEEK_SCOPES)[number];
+
+/** 日付 "YYYY-MM-DD" → 計画スケジュールの週スコープ（第1〜4週。第5週は第4週を使う） */
+export function planScopeOfDate(dateStr: string): PlanWeekScope {
+  const day = Number(dateStr.slice(8, 10));
+  const index = Math.min(3, Math.max(0, Math.floor((day - 1) / 7)));
+  return PLAN_WEEK_SCOPES[index];
+}
+
+/** 日付 → 計画スケジュールの列index（月曜=0 〜 日曜=6） */
+export function planDayIndexOfDate(dateStr: string): number {
+  const weekday = weekdayOf(dateStr); // 0=日
+  return (weekday + 6) % 7;
+}
+
+/** 計画（1週間ぶん）から、その日にあたる列だけを1日ぶんの帯に取り出す */
+export function planBlocksForDate(weekBlocks: ScheduleBlock[], dateStr: string): ScheduleBlock[] {
+  const d = planDayIndexOfDate(dateStr);
+  return weekBlocks.filter((b) => b.d === d).map((b) => ({ ...b, d: 0 }));
+}
+
+/** 帯の合計時間（分） */
+export function totalMinutes(blocks: ScheduleBlock[]): number {
+  return blocks.reduce((sum, b) => sum + Math.max(0, toMin(b.e) - toMin(b.s)), 0);
+}
+
+export interface PlanDiffRow {
+  label: string;
+  planMin: number;
+  actualMin: number;
+  diffMin: number;
+}
+
+/**
+ * 計画と当日の予定を「内容ごとの時間」で突き合わせる。
+ * 何にどれだけ時間を使う計画で、実際どうなっているのかを、ひと目で見比べられるようにする。
+ */
+export function comparePlan(plan: ScheduleBlock[], actual: ScheduleBlock[]): PlanDiffRow[] {
+  const minutesByLabel = (blocks: ScheduleBlock[]) => {
+    const map = new Map<string, number>();
+    for (const b of blocks) {
+      const min = Math.max(0, toMin(b.e) - toMin(b.s));
+      map.set(b.a, (map.get(b.a) ?? 0) + min);
+    }
+    return map;
+  };
+  const planMap = minutesByLabel(plan);
+  const actualMap = minutesByLabel(actual);
+  const labels = [...new Set([...planMap.keys(), ...actualMap.keys()])];
+  return labels
+    .map((label) => {
+      const planMin = planMap.get(label) ?? 0;
+      const actualMin = actualMap.get(label) ?? 0;
+      return { label, planMin, actualMin, diffMin: actualMin - planMin };
+    })
+    .sort((a, b) => Math.max(b.planMin, b.actualMin) - Math.max(a.planMin, a.actualMin));
+}
+
+/** 分 → 「1h30」形式（差分表示にも使うので符号は呼び出し側で付ける） */
+export function minutesLabel(min: number): string {
+  const abs = Math.abs(Math.round(min));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${m}分`;
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`;
+}

@@ -12,16 +12,24 @@ export function EniFormFields({
 }) {
   const numberItems = items.filter((i) => i.type === "number");
   const otherItems = items.filter((i) => i.type !== "number");
+  // group を持つ数字項目は、その見出しごとに別の枠にまとめる（例：今週の練習時間）
+  const groups: { label: string; items: EniFormItem[] }[] = [];
+  for (const item of numberItems) {
+    const label = item.group ?? "数字の報告";
+    const found = groups.find((g) => g.label === label);
+    if (found) found.items.push(item);
+    else groups.push({ label, items: [item] });
+  }
 
   return (
     <>
-      {numberItems.length > 0 && (
-        <div className="card">
-          <p className="section-title">数字の報告</p>
+      {groups.map((group) => (
+        <div key={group.label} className="card">
+          <p className="section-title">{group.label}</p>
           <div className="grid grid-cols-2 gap-3">
-            {numberItems.map((item) => (
+            {group.items.map((item) => (
               <div key={item.key}>
-                <label className="label" htmlFor={item.key}>
+                <label className="label !mb-1" htmlFor={item.key}>
                   {item.label}
                 </label>
                 <div className="relative">
@@ -44,11 +52,15 @@ export function EniFormFields({
                     {item.unit}
                   </span>
                 </div>
+                {/* 何を書けばよいか迷わないよう、例を薄く添える */}
+                {item.note && (
+                  <p className="text-[11px] text-ink-400 mt-1 leading-snug">{item.note}</p>
+                )}
               </div>
             ))}
           </div>
         </div>
-      )}
+      ))}
 
       {otherItems.map((item) => (
         <div key={item.key} className="card">

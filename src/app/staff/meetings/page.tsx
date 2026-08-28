@@ -13,7 +13,8 @@ import {
   weekdayOf,
 } from "@/lib/date";
 import { isExecutive } from "@/lib/eni/access";
-import { MEETING_TEMPLATES, findTemplate } from "@/lib/eni/meetings-templates";
+import { committeeToTemplate, findCommitteeTemplate } from "@/lib/eni/committees";
+import type { MeetingTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Markdown } from "@/lib/markdown";
 import { MinutesEditor } from "@/components/minutes-editor";
@@ -36,14 +37,18 @@ export default async function MeetingsPage({
   const isExec = await isExecutive(session);
 
   const db = getDataStore();
-  const [meetings, missingMinutes, staffList, openTasks, orgMembers] = await Promise.all([
+  const [meetings, missingMinutes, staffList, openTasks, orgMembers, committees] = await Promise.all([
     db.listMeetings({ from, to }),
     db.listMeetingsMissingMinutes(today),
     db.listStaff(),
     db.listOpenMeetingTasks(),
     db.listOrgMembers(),
+    db.listCommittees(),
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
+  // 会議体は管理者が編集できるマスタから引く（削除済みの会議体は初期テンプレにフォールバック）
+  const templates: MeetingTemplate[] = committees.filter((c) => c.isActive).map(committeeToTemplate);
+  const findTemplate = (key: string) => findCommitteeTemplate(committees, key);
   const activeStaff = staffList.filter((s) => s.isActive);
   // 組織図のチーム所属（会議体を選んだときの参加者の初期選択に使う）
   const teamMembers: Record<string, string[]> = {};
@@ -130,7 +135,7 @@ export default async function MeetingsPage({
           <p className="text-sm font-bold text-red-700 mb-1">議事録が未提出（{missingMinutes.length}件）</p>
           <ul className="text-xs font-bold text-red-600 space-y-0.5">
             {missingMinutes.slice(0, 8).map((m) => (
-              <li key={m.id}>・{formatDateJa(m.meetingDate)}：{meetingLabel(m, staffMap)}</li>
+              <li key={m.id}>・{formatDateJa(m.meetingDate)}：{meetingLabel(m, staffMap, findTemplate)}</li>
             ))}
           </ul>
         </div>
@@ -166,7 +171,7 @@ export default async function MeetingsPage({
       <MeetingCreateForm
         staff={activeStaff}
         defaultHostId={session.staffId}
-        templates={MEETING_TEMPLATES}
+        templates={templates}
         today={today}
         teamMembers={teamMembers}
       />
@@ -233,7 +238,7 @@ export default async function MeetingsPage({
                       <summary className="cursor-pointer list-none">
                         <div className="flex items-center gap-2 flex-wrap">
                           {m.startTime && <span className="font-bold text-sm">{m.startTime}</span>}
-                          <span className="font-bold text-sm">{meetingLabel(m, staffMap)}</span>
+                          <span className="font-bold text-sm">{meetingLabel(m, staffMap, findTemplate)}</span>
                           <span className="ml-auto">
                             {m.minutesDone ? (
                               <StatusBadge label="議事録あり" tone="ok" />
@@ -362,7 +367,11 @@ export default async function MeetingsPage({
   );
 }
 
-function meetingLabel(m: Meeting, staffMap: Map<string, Staff>): string {
+function meetingLabel(
+  m: Meeting,
+  staffMap: Map<string, Staff>,
+  findTemplate: (key: string) => MeetingTemplate | undefined
+): string {
   const t = findTemplate(m.committee);
   if (t) return t.name;
   const host = staffMap.get(m.hostStaffId)?.name ?? "？";

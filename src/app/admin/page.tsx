@@ -17,13 +17,18 @@ import { getBrand } from "@/lib/brand";
 import { BigMenuLink, StatCard } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
+import { AnnouncementBoard } from "@/components/announcement-board";
+import { ThemePicker } from "@/components/theme-picker";
+import { getSalonBoardUrl } from "@/lib/settings";
 
 // 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える
 export default async function AdminHomePage() {
-  await requireAdmin();
+  const session = await requireAdmin();
   const brand = await getBrand();
   if (!brand) redirect("/select");
   const today = todayJst();
+  const me = await getDataStore().getStaff(session.staffId);
+  const salonBoardUrl = await getSalonBoardUrl(getDataStore());
 
   return (
     <div>
@@ -42,6 +47,9 @@ export default async function AdminHomePage() {
         <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
       </div>
 
+      {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
+      <AnnouncementBoard />
+
       {/* スマホは「アラート・数字・メニュー」を先に、グラフはその下に。
           PCは画面が広いので、これまで通りグラフを上に置く。 */}
       <div className="flex flex-col">
@@ -50,11 +58,29 @@ export default async function AdminHomePage() {
         </div>
         <div className="order-2 lg:order-1 mt-7 lg:mt-0">
           <h2 className="section-title lg:hidden">今の状況</h2>
-          <Dashboard brand={brand} />
+          <ThemePicker current={me?.themeColor ?? ""} back="/admin" />
+          <Dashboard
+            brand={brand}
+            viewer={{
+              staffId: session.staffId,
+              jobType: me?.jobType ?? "",
+              isExec: true,
+              themeColor: me?.themeColor ?? "",
+            }}
+          />
         </div>
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        <a
+          href={salonBoardUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="chip !py-2.5 !px-4 border-brand-400 text-brand-800"
+        >
+          <Icon name="link" className="w-4 h-4 text-brand-500" />
+          サロンボードを開く
+        </a>
         <Link href="/admin/help" className="chip !py-2.5 !px-4">
           <Icon name="help" className="w-4 h-4 text-brand-500" />
           使い方ガイド（運用の流れ・各機能の説明）

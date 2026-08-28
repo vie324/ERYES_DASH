@@ -5,6 +5,8 @@
 
 import Link from "next/link";
 import { getDataStore } from "@/lib/data";
+import { practiceHoursOf } from "@/lib/eni/forms";
+import { themeVars } from "@/lib/theme";
 import {
   addDays,
   addMonths,
@@ -27,8 +29,21 @@ import {
   StatTile,
 } from "@/components/charts";
 
-export async function Dashboard({ brand }: { brand: Brand }) {
-  return brand === "eyes" ? <EyesDashboard /> : <EniDashboard />;
+/** ダッシュボードを見ている人（誰の目線で数字を出すかを決める） */
+export interface DashboardViewer {
+  staffId: string;
+  jobType: "" | "stylist" | "assistant";
+  isExec: boolean;
+  /** 配色キー（lib/theme.ts） */
+  themeColor: string;
+}
+
+export async function Dashboard({ brand, viewer }: { brand: Brand; viewer: DashboardViewer }) {
+  return (
+    <div className="dash-themed" style={themeVars(viewer.themeColor)}>
+      {brand === "eyes" ? <EyesDashboard /> : <EniDashboard viewer={viewer} />}
+    </div>
+  );
 }
 
 /** 前月比（％）。前月が0のときは出さない */
@@ -199,7 +214,7 @@ async function EyesDashboard() {
 
 // ================================================================ ENi
 
-async function EniDashboard() {
+async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
   const db = getDataStore();
   const today = todayJst();
   const month = thisMonthJst();
@@ -220,31 +235,55 @@ async function EniDashboard() {
   const assistants = active.filter((s) => s.jobType === "assistant");
   const stylists = active.filter((s) => s.jobType === "stylist");
 
+  // 練習時間の見せ方は立場で変える。
+  //  ・アシスタント …… 自分の練習時間だけ（週単位）
+  //  ・スタイリスト・幹部・管理者 …… アシスタント一人ひとりの練習時間
+  // スタイリスト以上は練習時間を入力しないので、自分の練習時間は出さない。
+  const seesEveryonePractice = viewer.isExec || viewer.jobType === "stylist";
+  const seesOwnPractice = viewer.jobType === "assistant";
+
   // 今週の週報の提出状況
   const thisWeekReports = weeklyReports.filter((r) => r.periodKey === thisWeek);
   // 今日のスタイリスト日報
   const todayStylist = stylistReports.filter((r) => r.periodKey === today);
 
-  // 練習時間（週報の practice_hours / ウィッグ時間などを合算）の直近6週推移
+  // 練習時間（週報の 練習／SNS／その他 の合計）の直近6週推移
   const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, -35 + i * 7));
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-  const practiceOf = (a: Record<string, unknown>) =>
-    num(a.practice_hours) + num(a.wig_hours) + num(a.other_hours);
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const weekLabel = (w: string) => `${Number(w.slice(5, 7))}/${Number(w.slice(8, 10))}`;
+
+  // 全員合計の推移（スタイリスト・幹部向け）
   const practiceTrend = weeks.map((w) => {
     const rs = weeklyReports.filter((r) => r.periodKey === w);
-    const hours = rs.reduce((s, r) => s + practiceOf(r.answers), 0);
-    return {
-      label: `${Number(w.slice(5, 7))}/${Number(w.slice(8, 10))}`,
-      value: Math.round(hours * 10) / 10,
-      hint: `提出 ${rs.length}名`,
-    };
+    const hours = rs.reduce((s, r) => s + practiceHoursOf(r.answers), 0);
+    return { label: weekLabel(w), value: round1(hours), hint: `提出 ${rs.length}名` };
   });
 
-  // メンバー別の今週の練習時間
+  // 自分だけの推移（アシスタント向け）
+  const myReports = weeklyReports.filter((r) => r.staffId === viewer.staffId);
+  const myPracticeTrend = weeks.map((w) => {
+    const r = myReports.find((x) => x.periodKey === w);
+    return {
+      label: weekLabel(w),
+      value: r ? round1(practiceHoursOf(r.answers)) : 0,
+      hint: r ? "提出済み" : "未提出",
+    };
+  });
+  const myThisWeek = myReports.find((r) => r.periodKey === thisWeek);
+  const myPracticeParts = myThisWeek
+    ? [
+        { label: "練習", value: num(myThisWeek.answers.practice_hours) },
+        { label: "SNS", value: num(myThisWeek.answers.sns_hours) },
+        { label: "その他", value: num(myThisWeek.answers.other_hours) },
+      ]
+    : [];
+
+  // メンバー別の今週の練習時間（スタイリスト・幹部向け）
   const practiceBars = assistants
     .map((s) => {
       const r = thisWeekReports.find((x) => x.staffId === s.id);
-      return { name: s.name.split(" ")[0], value: r ? Math.round(practiceOf(r.answers) * 10) / 10 : 0 };
+      return { name: s.name.split(" ")[0], value: r ? round1(practiceHoursOf(r.answers)) : 0 };
     })
     .sort((a, b) => b.value - a.value);
 
@@ -277,14 +316,25 @@ async function EniDashboard() {
           }
           sub="今週分の提出状況"
         />
-        <StatTile
-          label="今週の練習時間（全員）"
-          value={practiceTrend.at(-1)?.value ?? 0}
-          unit="h"
-          spark={practiceTrend.map((t) => t.value)}
-          tone="accent"
-          sub="モデル・ウィッグ・その他の合計"
-        />
+        {seesOwnPractice ? (
+          <StatTile
+            label="今週の自分の練習時間"
+            value={myPracticeTrend.at(-1)?.value ?? 0}
+            unit="h"
+            spark={myPracticeTrend.map((t) => t.value)}
+            tone="accent"
+            sub="練習・SNS・その他の合計"
+          />
+        ) : (
+          <StatTile
+            label="今週の練習時間（アシスタント合計）"
+            value={practiceTrend.at(-1)?.value ?? 0}
+            unit="h"
+            spark={practiceTrend.map((t) => t.value)}
+            tone="accent"
+            sub="練習・SNS・その他の合計"
+          />
+        )}
         <StatTile
           label="議事録の未提出"
           value={heldMeetings.length - minutesDone}
@@ -301,36 +351,65 @@ async function EniDashboard() {
         />
       </div>
 
-      {/* 練習時間の推移 */}
-      <ChartCard
-        title="練習時間の推移（直近6週・全員の合計）"
-        action={
-          <Link href="/staff/eni-reports?tab=weekly" className="text-[11px] font-bold text-brand-700 underline">
-            週報を見る
-          </Link>
-        }
-      >
-        <ColumnChart data={practiceTrend} format="hour" />
-      </ChartCard>
+      {/* 練習時間：アシスタントは自分の分だけ、スタイリスト以上は一人ひとりを見る */}
+      {seesOwnPractice && (
+        <>
+          <ChartCard
+            title="自分の練習時間（直近6週）"
+            action={
+              <Link href="/staff/weekly-report" className="text-[11px] font-bold text-brand-700 underline">
+                週報を入力する
+              </Link>
+            }
+          >
+            <ColumnChart data={myPracticeTrend} format="hour" />
+          </ChartCard>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {/* メンバー別 練習時間 */}
-        <ChartCard title="今週の練習時間（メンバー別）">
-          <HBarList data={practiceBars} format="hour" emptyText="今週の週報がまだありません" />
-        </ChartCard>
+          <ChartCard title="今週の内訳（練習・SNS・その他）">
+            {myPracticeParts.length > 0 ? (
+              <CompositionBar format="hour" parts={myPracticeParts} />
+            ) : (
+              <p className="text-xs text-ink-400">
+                今週の週報がまだ未提出です。週報を出すとここに内訳が出ます。
+              </p>
+            )}
+          </ChartCard>
+        </>
+      )}
 
-        {/* 今週の取り組み */}
-        <ChartCard title="今週の取り組み（全員の合計）">
-          <CompositionBar
-            format="number"
-            parts={[
-              { label: "モデル（人）", value: totals.model },
-              { label: "SNS投稿（件）", value: totals.sns },
-              { label: "ロープレ（回）", value: totals.roleplay },
-            ]}
-          />
-        </ChartCard>
-      </div>
+      {seesEveryonePractice && (
+        <>
+          <ChartCard
+            title="練習時間の推移（直近6週・アシスタント合計）"
+            action={
+              <Link href="/staff/eni-reports?tab=weekly" className="text-[11px] font-bold text-brand-700 underline">
+                週報を見る
+              </Link>
+            }
+          >
+            <ColumnChart data={practiceTrend} format="hour" />
+          </ChartCard>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {/* アシスタント一人ひとりの練習時間 */}
+            <ChartCard title="今週の練習時間（アシスタント別）">
+              <HBarList data={practiceBars} format="hour" emptyText="今週の週報がまだありません" />
+            </ChartCard>
+
+            {/* 今週の取り組み */}
+            <ChartCard title="今週の取り組み（全員の合計）">
+              <CompositionBar
+                format="number"
+                parts={[
+                  { label: "モデル（人）", value: totals.model },
+                  { label: "SNS投稿（件）", value: totals.sns },
+                  { label: "ロープレ（回）", value: totals.roleplay },
+                ]}
+              />
+            </ChartCard>
+          </div>
+        </>
+      )}
 
       {/* 提出・実施の進捗 */}
       <ChartCard title="提出・実施の状況">
@@ -355,8 +434,8 @@ async function EniDashboard() {
             <Meter
               value={plans.length}
               total={Math.max(active.length, 1)}
-              label="今日のスケジュール入力"
-              hint="朝礼で全員が入力できているか"
+              label="今日の予定の入力"
+              hint="朝礼で全員が入力できているか（スケジュール画面）"
             />
           </div>
         </div>

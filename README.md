@@ -10,7 +10,7 @@
 | ④ 売上CSV出力 | 期間指定で日報ベースの売上をCSV出力（Excel対応・UTF-8 BOM付き） |
 | ⑤ 前日リマインド | 毎日19時に翌日予約の顧客へLINE自動送信（二重送信防止つき） |
 | ⑥ 一斉配信 | 登録済みの全顧客へテキストをPush送信。履歴・通数を記録 |
-| ⑦ シフト管理（3店舗） | 希望収集 → 自動割当（下書き）→ 手動調整 → 確定公開。毎月15日に募集を自動通知 |
+| ⑦ シフト管理（3店舗） | 希望収集 → 自動割当（下書き）→ 手動調整 → 確定公開。毎月15日に募集を自動通知。自動割当はスタイリストの分散・全員参加イベント・土日の出勤（休みは段数の少ない人から）を考慮 |
 | ⑧ レジ締め・現金管理 | 店舗ごとに1日1件：現金売上／レジ残高／おつり準備金／金庫移動・残高／銀行預入を記録し検算 |
 
 ログイン後に業態（EREYS＝アイサロン／ENi＝ヘアサロン）を選ぶと、メニューが切り替わります。
@@ -18,13 +18,14 @@ ENi 側には次の機能があります。
 
 | 機能 | 概要 |
 |---|---|
-| 日報・週報 | スタイリストは日報、アシスタントはランク別の週報。相互閲覧と上司コメント |
-| 今日のスケジュール | 予約表（Googleカレンダー風）で1日の予定を入力。よくある項目を登録して選べる |
-| 理想のスケジュール | 今月の目標 → 第1〜4週タブ → 1週間（月〜日）の理想を予約表で作る。画像も貼れる |
-| ミーティング・議事録 | 月カレンダー／会議体テンプレ／AI整形＋タスク整理（誰が・何を・いつまでに）／PDF出力 |
-| 会議体の一覧 | 定例会議の目的・参加メンバー・アジェンダ・今月の実施状況を一覧で確認 |
+| 日報・週報 | スタイリストは日報（稼働率＝入客時間÷段数×8時間）、アシスタントはランク別の週報。入力画面から「みんなの日報・週報」へ入れる |
+| スケジュール | 「その日の予定」「計画スケジュール（第1〜4週）」「みんなの予定」を1画面に統合。計画を薄く重ねて見比べながら入力でき、3ヶ月先まで入れられる |
+| トークルーム | 全体共有（全員強制参加）・グループ・DM。写真／PDF／メンション／返信／ノート／写真・ファイル一覧／議事録の転送。全体共有の投稿は「アナウンス」でダッシュボード最上部に掲示できる |
+| ミーティング・議事録 | 月カレンダー／会議体マスタ／AI整形＋タスク整理（誰が・何を・いつまでに）／PDF出力／トークルームへ転送 |
+| 会議体の一覧 | 自分が参加する会議体だけを表示（「すべて見る」で全件）。内容は管理者アカウントが画面から編集できる |
 | 組織図（シナジーマップ） | チームの役割とメンバー、兼務によるチーム間のつながりを図で確認・編集 |
-| 練習記録・欠勤報告・発注申請 | 練習ペアの割当、欠勤/早退の報告（閲覧は幹部）、ウィッグ/社販/商材の申請 |
+| 幹部メニュー | 幹部タスク／店長・副店長のルーティン業務（デイリー・ウィークリー・マンスリー。未完了はアラート）／日報の気づき確認 |
+| 練習記録・欠勤報告・発注申請 | 練習ペアの割当、欠勤/早退の報告（幹部メンバー以上のみ）、ウィッグ/社販/商材の申請 |
 
 ## 画面構成
 
@@ -144,8 +145,29 @@ PDFは議事録ページの「PDFで保存（印刷）」から出力でき、�
    - `service_role` キー → `SUPABASE_SERVICE_ROLE_KEY`
 
 > **すでに本番DBがある場合**：`supabase/schema.sql` は全テーブルが `create table if not exists` なので、
-> そのまま貼り付けて再実行すれば、足りないテーブル（今回追加した `meeting_tasks`＝議事録のタスク、
-> `org_members`＝組織図のチーム所属）だけが作られます。既存データは消えません。
+> そのまま貼り付けて再実行すれば、足りないテーブルだけが作られます。既存データは消えません。
+> ただし**既存テーブルへの列の追加は行われない**ため、下の `alter table` を続けて実行してください
+> （何度実行しても安全です）。
+>
+> ```sql
+> -- スタッフ：段数（稼働率の分母）・ダッシュボードの配色
+> alter table staff add column if not exists tiers integer not null default 1;
+> alter table staff add column if not exists theme_color text not null default '';
+> -- トークルーム：全体共有の識別キー
+> alter table chat_rooms add column if not exists room_key text not null default '';
+> -- トークルーム：PDF添付・返信・メンション・ノート・アナウンス
+> alter table chat_messages add column if not exists file text not null default '';
+> alter table chat_messages add column if not exists file_name text not null default '';
+> alter table chat_messages add column if not exists reply_to_id uuid references chat_messages(id) on delete set null;
+> alter table chat_messages add column if not exists mentions jsonb not null default '[]';
+> alter table chat_messages add column if not exists pinned boolean not null default false;
+> alter table chat_messages add column if not exists announced_at timestamptz;
+> alter table chat_messages add column if not exists announced_by uuid references staff(id);
+> ```
+>
+> 今回追加されたテーブルは `committees`（会議体マスタ）、`manager_routines` /
+> `manager_routine_checks`（店長・副店長のルーティン業務）、`app_settings`（サロンボードURLなど）です。
+> 会議体は初回アクセス時にテンプレートから自動で作られ、以降は管理者が画面から編集できます。
 
 > セキュリティ構成：DBへのアクセスはすべてサーバー側からサービスロールキーで行います。全テーブルでRLSを有効化しポリシーを作らないため、anonキーからは一切アクセスできません。認証はスタッフマスタのID＋パスワード（scryptハッシュ）＋HMAC署名Cookieによる自前実装です。
 
@@ -284,8 +306,8 @@ src/
 │ ├ select/              業態の選択（EREYS / ENi）
 │ ├ staff/               スタッフ画面（日報・打刻・カウンセリング確認・成績）
 │ │ ├ shift/             シフト（自分のシフト・希望提出・全体シフト）
-│ │ ├ morning/           今日のスケジュール（予約表・みんなの予定）
-│ │ ├ ideal/             理想のスケジュール（今月の目標・第1〜4週）
+│ │ ├ plan/              スケジュール（その日の予定・計画スケジュール・みんなの予定）
+│ │ ├ morning/ ideal/    旧URL（plan へのリダイレクトのみ）
 │ │ ├ meetings/          ミーティング・議事録（カレンダー／会議体一覧／PDF）
 │ │ └ org/               組織図（シナジーマップ）
 │ ├ admin/               管理者画面（成績・顧客・予約・配信・CSV・勤怠・設定）
