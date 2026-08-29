@@ -144,30 +144,13 @@ PDFは議事録ページの「PDFで保存（印刷）」から出力でき、�
    - Project URL → `SUPABASE_URL`
    - `service_role` キー → `SUPABASE_SERVICE_ROLE_KEY`
 
-> **すでに本番DBがある場合**：`supabase/schema.sql` は全テーブルが `create table if not exists` なので、
-> そのまま貼り付けて再実行すれば、足りないテーブルだけが作られます。既存データは消えません。
-> ただし**既存テーブルへの列の追加は行われない**ため、下の `alter table` を続けて実行してください
-> （何度実行しても安全です）。
+> **すでに本番DBがある場合**：`supabase/schema.sql` をそのまま貼り付けて再実行してください。
+> 足りないテーブルが作られ、既存テーブルにも足りない列だけが追加されます（既存データは消えません）。
+> 何度実行しても安全です。手作業での `alter table` は不要です。
 >
-> ```sql
-> -- スタッフ：段数（稼働率の分母）・ダッシュボードの配色
-> alter table staff add column if not exists tiers integer not null default 1;
-> alter table staff add column if not exists theme_color text not null default '';
-> -- トークルーム：全体共有の識別キー
-> alter table chat_rooms add column if not exists room_key text not null default '';
-> -- トークルーム：PDF添付・返信・メンション・ノート・アナウンス
-> alter table chat_messages add column if not exists file text not null default '';
-> alter table chat_messages add column if not exists file_name text not null default '';
-> alter table chat_messages add column if not exists reply_to_id uuid references chat_messages(id) on delete set null;
-> alter table chat_messages add column if not exists mentions jsonb not null default '[]';
-> alter table chat_messages add column if not exists pinned boolean not null default false;
-> alter table chat_messages add column if not exists announced_at timestamptz;
-> alter table chat_messages add column if not exists announced_by uuid references staff(id);
-> ```
->
-> 今回追加されたテーブルは `committees`（会議体マスタ）、`manager_routines` /
-> `manager_routine_checks`（店長・副店長のルーティン業務）、`app_settings`（サロンボードURLなど）です。
-> 会議体は初回アクセス時にテンプレートから自動で作られ、以降は管理者が画面から編集できます。
+> 仕組み：`create table if not exists` は既存テーブルに列を足さないため、ファイル内に
+> 「既存DBへの追従」セクションを置き、`alter table ... add column if not exists` を
+> インデックス作成より前に実行しています。新しく作ったDBでは何も起きません。
 
 > セキュリティ構成：DBへのアクセスはすべてサーバー側からサービスロールキーで行います。全テーブルでRLSを有効化しポリシーを作らないため、anonキーからは一切アクセスできません。認証はスタッフマスタのID＋パスワード（scryptハッシュ）＋HMAC署名Cookieによる自前実装です。
 

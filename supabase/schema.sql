@@ -38,14 +38,6 @@ create table if not exists staff (
   created_at timestamptz not null default now()
 );
 
--- 既存DBに後から列を足す場合（本番に staff が既にある場合）に実行：
---   alter table staff add column if not exists job_type text not null default '';
---   alter table staff add column if not exists rank text not null default '';
---   alter table staff add column if not exists is_executive boolean not null default false;
---   alter table staff add column if not exists mission text not null default '';
---   alter table staff add column if not exists tiers integer not null default 1;
---   alter table staff add column if not exists theme_color text not null default '';
-
 -- 顧客（LINE友だち追加時に自動登録）
 create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
@@ -97,11 +89,6 @@ create table if not exists daily_reports (
   unique (staff_id, report_date)
 );
 
--- 既存DBに後から列を足す場合（本番に daily_reports が既にある場合）に実行：
---   alter table daily_reports add column if not exists good_point text not null default '';
---   alter table daily_reports add column if not exists improvement text not null default '';
---   alter table daily_reports add column if not exists message text not null default '';
-
 -- レジ締め・現金管理（店舗×日付でユニーク。スタッフ個人の日報とは別レコード）
 create table if not exists cash_reports (
   id uuid primary key default gen_random_uuid(),
@@ -147,12 +134,6 @@ create table if not exists next_appointments (
   pre_reminder_sent_at timestamptz,        -- 1週間前の事前案内送信日時
   created_at timestamptz not null default now()
 );
-
--- 既存DBに後から列を足す場合（本番に next_appointments が既にある場合）に実行：
---   alter table next_appointments add column if not exists status text not null default 'scheduled';
---   alter table next_appointments add column if not exists requested_new_at timestamptz;
---   alter table next_appointments add column if not exists change_note text not null default '';
---   alter table next_appointments add column if not exists pre_reminder_sent_at timestamptz;
 
 -- ============================================================
 -- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能）
@@ -311,12 +292,6 @@ create table if not exists meetings (
   created_at timestamptz not null default now()
 );
 
--- 既存DBに後から列を足す場合（本番に meetings が既にある場合）に実行：
---   alter table meetings add column if not exists committee text not null default '';
---   alter table meetings add column if not exists agenda text not null default '';
---   alter table meetings add column if not exists participants jsonb not null default '[]';
---   alter table meetings add column if not exists minutes_ai boolean not null default false;
-
 -- 議事録から整理したタスク（誰が・何を・いつまでに）。議事録の保存ごとに入れ替える
 create table if not exists meeting_tasks (
   id uuid primary key default gen_random_uuid(),
@@ -392,9 +367,6 @@ create table if not exists order_requests (
   updated_at timestamptz not null default now()
 );
 
--- 既存DBに後から列を足す場合（本番に order_requests が既にある場合）に実行：
---   alter table order_requests add column if not exists supplier_url text not null default '';
-
 -- ============================================================
 -- タスク管理（ルーティン／依頼／幹部タスク）
 -- ============================================================
@@ -451,11 +423,6 @@ create table if not exists chat_rooms (
   created_by uuid not null references staff(id),
   created_at timestamptz not null default now()
 );
-create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
-create unique index if not exists idx_chat_rooms_room_key on chat_rooms (room_key) where room_key <> '';
-
--- 既存DBに後から列を足す場合：
---   alter table chat_rooms add column if not exists room_key text not null default '';
 
 create table if not exists chat_members (
   room_id uuid not null references chat_rooms(id) on delete cascade,
@@ -480,15 +447,6 @@ create table if not exists chat_messages (
   deleted boolean not null default false,    -- 送信取消
   created_at timestamptz not null default now()
 );
-
--- 既存DBに後から列を足す場合：
---   alter table chat_messages add column if not exists file text not null default '';
---   alter table chat_messages add column if not exists file_name text not null default '';
---   alter table chat_messages add column if not exists reply_to_id uuid references chat_messages(id) on delete set null;
---   alter table chat_messages add column if not exists mentions jsonb not null default '[]';
---   alter table chat_messages add column if not exists pinned boolean not null default false;
---   alter table chat_messages add column if not exists announced_at timestamptz;
---   alter table chat_messages add column if not exists announced_by uuid references staff(id);
 
 create table if not exists chat_reactions (
   message_id uuid not null references chat_messages(id) on delete cascade,
@@ -550,10 +508,6 @@ create table if not exists ideal_schedules (
   unique (staff_id, scope)
 );
 
--- 既存DBに後から列を足す/制約を緩める場合に実行：
---   alter table ideal_schedules add column if not exists image text not null default '';
---   alter table ideal_schedules drop constraint if exists ideal_schedules_scope_check;
-
 -- タイムテーブルのよくある項目（「MTG」「練習」等）。datalistの候補に使う
 create table if not exists schedule_presets (
   id uuid primary key default gen_random_uuid(),
@@ -611,7 +565,61 @@ create table if not exists app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- ---- 既存DBへの追従（あとから足した列・制約）----
+-- 新しく作ったDBでは「すでにある」ので何も起きません。
+-- 本番DBに貼り付けて再実行したときに、足りない列だけが追加されます。
+-- ※ create table if not exists は既存テーブルに列を足さないため、ここで明示的に追加します。
+--    このセクションはインデックス作成より前に置くこと（列が無いとインデックスが作れないため）。
+
+-- スタッフ：職種・ランク・幹部・役割・段数・ダッシュボードの配色
+alter table staff add column if not exists job_type text not null default '';
+alter table staff add column if not exists rank text not null default '';
+alter table staff add column if not exists is_executive boolean not null default false;
+alter table staff add column if not exists mission text not null default '';
+alter table staff add column if not exists tiers integer not null default 1;
+alter table staff add column if not exists theme_color text not null default '';
+
+-- 日報：ふりかえりの3項目
+alter table daily_reports add column if not exists good_point text not null default '';
+alter table daily_reports add column if not exists improvement text not null default '';
+alter table daily_reports add column if not exists message text not null default '';
+
+-- 次回予約：お客様のセルフ操作・1週間前の事前案内
+alter table next_appointments add column if not exists status text not null default 'scheduled';
+alter table next_appointments add column if not exists requested_new_at timestamptz;
+alter table next_appointments add column if not exists change_note text not null default '';
+alter table next_appointments add column if not exists pre_reminder_sent_at timestamptz;
+
+-- ミーティング：会議体・アジェンダ・参加者・AI整形フラグ
+alter table meetings add column if not exists committee text not null default '';
+alter table meetings add column if not exists agenda text not null default '';
+alter table meetings add column if not exists participants jsonb not null default '[]';
+alter table meetings add column if not exists minutes_ai boolean not null default false;
+
+-- 発注・購入申請：発注先URL
+alter table order_requests add column if not exists supplier_url text not null default '';
+
+-- 計画スケジュール：貼り付け画像／scope の制約を緩める
+alter table ideal_schedules add column if not exists image text not null default '';
+alter table ideal_schedules drop constraint if exists ideal_schedules_scope_check;
+
+-- トークルーム：全体共有の識別キー
+alter table chat_rooms add column if not exists room_key text not null default '';
+
+-- トークルーム：PDF添付・返信・メンション・ノート・アナウンス
+alter table chat_messages add column if not exists file text not null default '';
+alter table chat_messages add column if not exists file_name text not null default '';
+alter table chat_messages add column if not exists reply_to_id uuid references chat_messages(id) on delete set null;
+alter table chat_messages add column if not exists mentions jsonb not null default '[]';
+alter table chat_messages add column if not exists pinned boolean not null default false;
+alter table chat_messages add column if not exists announced_at timestamptz;
+alter table chat_messages add column if not exists announced_by uuid references staff(id);
+
 -- ---- インデックス ----
+-- DMの重複防止と、全体共有ルームが1つだけになるようにする（上で列を足したあとに作る）
+create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
+create unique index if not exists idx_chat_rooms_room_key on chat_rooms (room_key) where room_key <> '';
+
 create index if not exists idx_counseling_status on counseling_responses (status, submitted_at desc);
 create index if not exists idx_counseling_customer on counseling_responses (customer_id);
 create index if not exists idx_counseling_invites_created on counseling_invites (created_at desc);
