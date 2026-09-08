@@ -106,6 +106,18 @@ export default async function MinutesPrintPage({
           />
         )}
 
+        {meeting!.minutesFile && (
+          <a
+            href={meeting!.minutesFile}
+            download={meeting!.minutesFileName || "資料.pdf"}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-bold text-brand-700 print:hidden"
+          >
+            📎 <span className="truncate">{meeting!.minutesFileName || "資料.pdf"}</span>
+          </a>
+        )}
+
         {meeting!.minutesAi && (
           <p className="text-[10px] text-ink-300 mt-6 print:mt-10">AI整形（要確認）／ ENi 議事録</p>
         )}

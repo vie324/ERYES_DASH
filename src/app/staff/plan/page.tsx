@@ -258,7 +258,7 @@ export default async function PlanPage({
             </div>
             <div>
               <p className="label !mb-2">スケジュール帳の写真（貼る場合）</p>
-              <PhotoInput name="photo" initial={myPlan?.photo ?? ""} label="スケジュール帳を撮影・選択" />
+              <PhotoInput name="photo" initial={myPlan?.photo ?? ""} label="写真から選ぶ" />
             </div>
             <div className="form-actions">
               <button type="submit" className="btn-primary w-full">
@@ -530,7 +530,7 @@ function PlanEditor({
 
         <div>
           <p className="label !mb-2">画像を貼る（手帳・イメージ図など・任意）</p>
-          <PhotoInput name="image" initial={current?.image ?? ""} label="画像を撮影・選択" />
+          <PhotoInput name="image" initial={current?.image ?? ""} label="画像を選ぶ" />
         </div>
         <div className="form-actions">
           <button type="submit" className="btn-primary w-full text-lg">{weekLabel}の計画を保存</button>

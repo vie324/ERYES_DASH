@@ -10,9 +10,12 @@ import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStart
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary, hasExecNotice } from "@/lib/tasks";
+import { getAppLinks } from "@/lib/settings";
 import { buildRoutineStatuses, countUndone, currentPeriodKeys } from "@/lib/eni/routines";
 import { AppShell } from "@/components/app-shell";
+import { PushSetup } from "@/components/push-setup";
 import { DemoBanner } from "@/components/ui";
+import { env } from "@/lib/env";
 import type { Session } from "@/lib/auth/session";
 
 export async function AppFrame({
@@ -95,10 +98,11 @@ export async function AppFrame({
     }
   }
 
-  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通
-  const [taskSummary, chatOverview] = await Promise.all([
+  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通。外部リンクは下部タブ用
+  const [taskSummary, chatOverview, links] = await Promise.all([
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
+    getAppLinks(db),
   ]);
   badges.tasks = taskSummary.dueCount;
   badges.chat = chatOverview.totalUnread;
@@ -130,6 +134,7 @@ export async function AppFrame({
     isExecutive,
     attendanceEnabled,
     badges,
+    links,
   };
   const groups = buildNav(navContext);
   const tabs = buildMobileTabs(navContext);
@@ -151,6 +156,8 @@ export async function AppFrame({
       helpHref={isAdmin ? "/admin/help" : "/staff/help"}
       banner={<DemoBanner show={isDemoMode()} />}
     >
+      {/* 通知の案内（未許可のときだけ出る）と、アプリアイコンのバッジ（未読トーク＋今日のタスク） */}
+      <PushSetup publicKey={env.vapidPublicKey} badgeCount={taskSummary.dueCount + chatOverview.totalUnread} />
       {children}
     </AppShell>
   );

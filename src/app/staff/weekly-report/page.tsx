@@ -68,9 +68,14 @@ export default async function WeeklyReportPage({
         </p>
       )}
 
-      {rank !== "" && (
+      {rank !== "" ? (
         <p className="rounded-xl bg-brand-50 text-brand-800 text-xs font-bold px-4 py-2 mb-4 inline-block">
           あなたのランク：{RANK_LABEL[rank]}（この週報はランクに合わせた項目です）
+        </p>
+      ) : (
+        <p className="rounded-xl bg-ink-100 text-ink-600 text-xs font-bold px-4 py-2 mb-4">
+          ランク（ファースト／ミドル／ファイナル）はまだ登録されていません。
+          ランクは管理者がマスタ設定で登録し、ランクに合わせて週報の項目が変わります。
         </p>
       )}
 
@@ -111,6 +116,9 @@ export default async function WeeklyReportPage({
           <p className="text-xs text-amber-600 font-bold">この週は入力済みです。保存すると上書きされます。</p>
         )}
 
+        <p className="text-xs text-ink-500">
+          項目はすべて書いてください（短くてOK。空欄があっても保存はできます）。
+        </p>
         <EniFormFields items={items} answers={existing?.answers ?? {}} />
 
         <div className="form-actions">

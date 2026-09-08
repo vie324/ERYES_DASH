@@ -195,6 +195,17 @@ export interface ShiftRequest {
   targetMonth: string;
   date: string; // "YYYY-MM-DD"
   preference: ShiftPreference;
+  /** 休み希望の理由（希望が重なったときに、どちらを優先するかの判断材料。任意） */
+  reason: string;
+  /** 有休として申請するか（スタイリストの有休は休み希望と同時に申請する） */
+  paidLeave: boolean;
+}
+
+/** 日単位の希望の入力（保存用） */
+export interface ShiftDayRequest {
+  preference: ShiftPreference;
+  reason: string;
+  paidLeave: boolean;
 }
 
 // ---- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能） ----
@@ -213,7 +224,18 @@ export interface DayoffRequest {
   id: string;
   staffId: string;
   date: string; // "YYYY-MM-DD"
+  /** 休み希望の理由（希望が重なったときの判断材料。任意） */
+  reason: string;
+  /** 有休として申請するか */
+  paidLeave: boolean;
   createdAt: Date;
+}
+
+/** 希望休の入力（保存用） */
+export interface DayoffInput {
+  date: string;
+  reason: string;
+  paidLeave: boolean;
 }
 
 /** スケジュールの個別上書き（管理者の手動調整。パターン・希望休より優先） */
@@ -297,6 +319,8 @@ export interface Meeting {
   participants: string[]; // 参加者（会議体の複数参加者。staffIdの配列）
   minutesText: string; // 議事録（整形済みMarkdown）
   minutesPhoto: string; // 議事録の写真（データURL）
+  minutesFile: string; // 議事録の添付ファイル（PDFのデータURL）
+  minutesFileName: string; // 添付ファイルの表示名
   minutesAi: boolean; // AIで整形したか
   minutesDone: boolean; // 議事録の提出済みフラグ
   createdBy: string;
@@ -532,6 +556,17 @@ export interface ManagerRoutineCheck {
 // ============================================================
 // アプリ設定（サロンボードのURLなど、管理者が画面から変えられる値）
 // ============================================================
+
+/** Web Push の購読（端末ごと）。通知（トーク・タスクなど）とアプリアイコンのバッジに使う */
+export interface PushSubscriptionRow {
+  id: string;
+  staffId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent: string;
+  createdAt: Date;
+}
 
 export interface AppSetting {
   key: string;
@@ -785,7 +820,7 @@ export interface DataStore {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftPreference>;
+    days: Record<string, ShiftDayRequest>;
     storeIds: string[];
   }): Promise<void>;
   getShiftRequestMonth(staffId: string, targetMonth: string): Promise<ShiftRequestMonth | null>;
@@ -804,7 +839,7 @@ export interface DataStore {
   /** 希望休（from〜to の日付範囲、"YYYY-MM-DD"） */
   listDayoffRequests(filter: { staffId?: string; from: string; to: string }): Promise<DayoffRequest[]>;
   /** 対象月の希望休を丸ごと入れ替え（再提出は上書き） */
-  replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void>;
+  replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void>;
   /** スケジュールの個別上書き（from〜to の日付範囲） */
   listScheduleOverrides(filter: { staffId?: string; from: string; to: string }): Promise<ScheduleOverride[]>;
   upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void>;
@@ -838,7 +873,10 @@ export interface DataStore {
 
   // ミーティング＋議事録
   createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
+    input: Omit<
+      Meeting,
+      "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesFile" | "minutesFileName" | "minutesAi" | "minutesDone"
+    >
   ): Promise<Meeting>;
   getMeeting(id: string): Promise<Meeting | null>;
   listMeetings(filter: { from: string; to: string }): Promise<Meeting[]>;
@@ -846,7 +884,14 @@ export interface DataStore {
   listMeetingsMissingMinutes(until: string): Promise<Meeting[]>;
   updateMeetingMinutes(
     id: string,
-    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
+    patch: {
+      minutesText: string;
+      minutesPhoto: string;
+      minutesFile: string;
+      minutesFileName: string;
+      minutesAi: boolean;
+      minutesDone: boolean;
+    }
   ): Promise<Meeting>;
   deleteMeeting(id: string): Promise<void>;
 
@@ -973,6 +1018,18 @@ export interface DataStore {
   // ---- アプリ設定（サロンボードURLなど） ----
   listAppSettings(): Promise<AppSetting[]>;
   setAppSetting(key: string, value: string): Promise<void>;
+
+  // Web Push の購読（通知・アプリバッジ）
+  listPushSubscriptions(staffIds: string[]): Promise<PushSubscriptionRow[]>;
+  /** 同じ endpoint があれば持ち主・鍵を更新する */
+  upsertPushSubscription(input: {
+    staffId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent: string;
+  }): Promise<void>;
+  deletePushSubscription(endpoint: string): Promise<void>;
 
   // ---- 社内SNS（サンクスカード） ----
   createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost>;

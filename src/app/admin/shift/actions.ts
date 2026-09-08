@@ -6,11 +6,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { addMonths, monthRange } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
-import { isAllHands } from "@/lib/eni/committees";
-import { normalizeTiers } from "@/lib/eni/forms";
-import type { JobType, ShiftPreference, ShiftType } from "@/lib/data/types";
+import { buildShiftMonthInputs } from "@/lib/shift/context";
+import type { ShiftType } from "@/lib/data/types";
 
 function monthParam(formData: FormData): string {
   const month = String(formData.get("target_month") ?? "");
@@ -37,60 +35,9 @@ export async function runAutoAssignAction(formData: FormData): Promise<void> {
     redirect(`/admin/shift/board?month=${month}&error=confirmed`);
   }
 
-  const [stores, staffList, requests, available, rules, prevAssignments, meetings, committees] =
-    await Promise.all([
-      db.listStores(),
-      db.listStaff(),
-      db.listShiftRequests(month),
-      db.listAvailableStores(month),
-      db.getShiftRules(),
-      db.listShiftAssignments(addMonths(month, -1)),
-      db.listMeetings(monthRange(month)),
-      db.listCommittees(),
-    ]);
-
-  const prefs = new Map<string, Map<string, ShiftPreference>>();
-  for (const r of requests) {
-    if (!prefs.has(r.staffId)) prefs.set(r.staffId, new Map());
-    prefs.get(r.staffId)!.set(r.date, r.preference);
-  }
-  const availableStores = new Map<string, Set<string>>();
-  for (const a of available) {
-    if (!availableStores.has(a.staffId)) availableStores.set(a.staffId, new Set());
-    availableStores.get(a.staffId)!.add(a.storeId);
-  }
-  const prevMonthAssignedDates = new Map<string, Set<string>>();
-  for (const a of prevAssignments) {
-    if (!prevMonthAssignedDates.has(a.staffId)) prevMonthAssignedDates.set(a.staffId, new Set());
-    prevMonthAssignedDates.get(a.staffId)!.add(a.date);
-  }
-
-  // 職種・段数（スタイリストの分散／土日に誰を残すかの判断に使う）
-  const jobTypes = new Map<string, JobType>(staffList.map((s) => [s.id, s.jobType]));
-  const tiers = new Map<string, number>(staffList.map((s) => [s.id, normalizeTiers(s.tiers)]));
-
-  // 全員参加イベントの日（しもん塾・全体会議など）は、なるべく全員を出勤にする
-  const allHandsKeys = new Set(
-    committees.filter(isAllHands).map((c) => c.committeeKey)
-  );
-  const allHandsDates = new Set(
-    meetings
-      .filter((m) => m.meetingType === "all" || allHandsKeys.has(m.committee))
-      .map((m) => m.meetingDate)
-  );
-
-  const { assignments, warnings } = generateAssignments({
-    targetMonth: month,
-    storeIds: stores.map((s) => s.id),
-    staffIds: staffList.filter((s) => s.isActive).map((s) => s.id),
-    prefs,
-    availableStores,
-    rules,
-    prevMonthAssignedDates,
-    jobTypes,
-    tiers,
-    allHandsDates,
-  });
+  // 希望・段数・ランク・会議の参加者など、組み方に必要な前提をまとめて取る（ボードの警告計算と共通）
+  const inputs = await buildShiftMonthInputs(db, month);
+  const { assignments, warnings } = generateAssignments(inputs);
 
   await db.replaceMonthAssignments(month, assignments);
   revalidateShift();

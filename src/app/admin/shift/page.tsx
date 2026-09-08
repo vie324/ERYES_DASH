@@ -44,10 +44,15 @@ export default async function AdminShiftPage({
         : "下書き";
 
   // スタッフごとの希望サマリー
-  const prefsByStaff = new Map<string, { date: string; preference: ShiftPreference }[]>();
+  const prefsByStaff = new Map<
+    string,
+    { date: string; preference: ShiftPreference; reason: string; paidLeave: boolean }[]
+  >();
   for (const r of requests) {
     if (!prefsByStaff.has(r.staffId)) prefsByStaff.set(r.staffId, []);
-    prefsByStaff.get(r.staffId)!.push({ date: r.date, preference: r.preference });
+    prefsByStaff
+      .get(r.staffId)!
+      .push({ date: r.date, preference: r.preference, reason: r.reason, paidLeave: r.paidLeave });
   }
   const storesByStaff = new Map<string, string[]>();
   for (const a of available) {
@@ -58,9 +63,15 @@ export default async function AdminShiftPage({
   const summarizePrefs = (staffId: string, pref: ShiftPreference) =>
     (prefsByStaff.get(staffId) ?? [])
       .filter((p) => p.preference === pref)
-      .map((p) => Number(p.date.slice(8)))
-      .sort((a, b) => a - b)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((p) => `${Number(p.date.slice(8))}${p.paidLeave ? "(有休)" : ""}`)
       .join("・");
+  // 休み希望の理由（重なったときの判断材料）
+  const offReasons = (staffId: string) =>
+    (prefsByStaff.get(staffId) ?? [])
+      .filter((p) => p.preference === "off" && p.reason)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((p) => `${Number(p.date.slice(8))}日：${p.reason}`);
 
   return (
     <div>
@@ -133,6 +144,16 @@ export default async function AdminShiftPage({
                       <dt className="text-rose-600 shrink-0 w-24">{PREFERENCE_LABEL.off}希望</dt>
                       <dd>{offs ? `${offs}日` : "なし"}</dd>
                     </div>
+                    {offReasons(staff.id).length > 0 && (
+                      <div className="flex gap-2">
+                        <dt className="text-ink-500 shrink-0 w-24">休みの理由</dt>
+                        <dd className="text-xs text-ink-600 space-y-0.5">
+                          {offReasons(staff.id).map((line) => (
+                            <p key={line}>{line}</p>
+                          ))}
+                        </dd>
+                      </div>
+                    )}
                     {earls && (
                       <div className="flex gap-2">
                         <dt className="text-sky-600 shrink-0 w-24">{PREFERENCE_LABEL.early}希望</dt>

@@ -34,31 +34,35 @@ export const STYLIST_REPORT_TEXTS: EniFormItem[] = [
     label: "今日の良かったこと・楽しかったこと",
     type: "textarea",
     required: false,
-    placeholder: "例）カラーの提案を喜んでいただけた",
+    placeholder: "例）商品を買ってくれた、施術が15分早く終わった 等",
   },
   {
     key: "self_issue",
     label: "自分自身、課題に感じていることは？",
     type: "textarea",
     required: false,
+    placeholder: "例）次回予約の説明がお会計時だけになる、カットの手数が多い 等",
   },
   {
     key: "improve_idea",
     label: "どんなことをすればよりプラスになりそうですか？",
     type: "textarea",
     required: false,
+    placeholder: "例）カット中に次回予約の説明を入れる、すべての工程のタイムをとる 等",
   },
   {
     key: "onsite_notice",
     label: "現場での何か気付きはありますか？",
     type: "textarea",
     required: false,
+    placeholder: "例）電話対応が暗い、ご来店時は手を止めて直接対応した方が良いと感じた 等",
   },
   {
     key: "staff_share",
     label: "スタッフへの指導や共有したことメモ",
     type: "textarea",
     required: false,
+    placeholder: "例）〇〇の身だしなみについて〇〇と伝えた、挨拶の声が暗いから〇〇と伝えた 等",
   },
 ];
 
@@ -78,16 +82,17 @@ export const RANK_LABEL: Record<AssistantRank, string> = {
 
 // ---- 週報の共通ブロック ----
 
-// ふりかえり部分（全ランク共通の流れ）。ランクで文言だけ少し変える
+// ふりかえり部分（全ランク共通の流れ）。ランクで文言だけ少し変える。
+// 「必須」の印は付けない（一部だけ必須にすると他を書かなくなるため。全部書いてもらう前提）
 const weeklyReflection = (doneLabel: string): EniFormItem[] => [
-  { key: "done_well", label: doneLabel, type: "textarea", required: true },
+  { key: "done_well", label: doneLabel, type: "textarea", required: false },
   {
     key: "feedback",
     label: "フィードバックしてもらったことや教わったこと",
     type: "textarea",
     required: false,
   },
-  { key: "struggle", label: "苦戦していることや自分自身の課題は？", type: "textarea", required: true },
+  { key: "struggle", label: "苦戦していることや自分自身の課題は？", type: "textarea", required: false },
   {
     key: "next_improve",
     label: "来週をさらに良くするためにはどんなことができそう？",
@@ -98,7 +103,7 @@ const weeklyReflection = (doneLabel: string): EniFormItem[] => [
     key: "next_goal",
     label: "来週の目標を具体的に書いてみよう",
     type: "textarea",
-    required: true,
+    required: false,
     placeholder: "例）ワインディングを15分以内で3回、モデル1名",
   },
   {
@@ -123,6 +128,13 @@ const WEEKLY_SUPPORT_ITEMS: EniFormItem[] = [
     label: "ミーティングなどサポートしてくれた人",
     type: "textarea",
     required: false,
+  },
+  {
+    key: "support_decided",
+    label: "そこで決めたこと",
+    type: "textarea",
+    required: false,
+    placeholder: "例）来週は〇〇さんにブローを2回見てもらう、モデルを1名探す",
   },
 ];
 
@@ -238,7 +250,10 @@ export interface AssistantSettingDef {
   withName?: boolean;
 }
 
-/** 3段のピラミッド（下から：大切にしたい価値観 → 理想の未来像 → 目標） */
+/**
+ * 3段のピラミッド（下から：大切にしたい価値観 → 理想の未来像 → 目標）。
+ * ランク・職種に関係なく全員が持ち、週報（アシスタント）と日報（スタイリスト）の先頭に常に出す。
+ */
 export const PYRAMID_SETTINGS: AssistantSettingDef[] = [
   { key: "pyramid_goal", label: "目標", placeholder: "例）来年3月にデビューして指名を10名いただく" },
   { key: "pyramid_future", label: "理想の未来像", placeholder: "例）お客様の人生が明るくなる美容師" },
@@ -277,11 +292,6 @@ export function getAssistantSettingDefs(rank: AssistantRank): AssistantSettingDe
     ];
   }
   return [];
-}
-
-/** ピラミッドを表示するランク（ミドル・ファイナル） */
-export function hasPyramid(rank: AssistantRank): boolean {
-  return rank === "middle" || rank === "final";
 }
 
 /** 設定キーの一覧（保存時の検証に使う） */

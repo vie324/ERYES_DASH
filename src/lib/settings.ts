@@ -1,5 +1,5 @@
 // アプリ設定（管理者が画面から変えられる値）の読み書き。
-// 今のところ「サロンボードのURL」だけだが、増えてもここに定義を足すだけで済むようにしている。
+// 「サロンボードのURL」「カミキュラムのURL」など。増えてもここに定義を足すだけで済むようにしている。
 
 import type { AppSetting, DataStore } from "@/lib/data/types";
 
@@ -12,6 +12,7 @@ export interface AppSettingDef {
 }
 
 export const SALON_BOARD_URL_KEY = "salon_board_url";
+export const CURRICULUM_URL_KEY = "curriculum_url";
 
 export const APP_SETTING_DEFS: AppSettingDef[] = [
   {
@@ -20,6 +21,13 @@ export const APP_SETTING_DEFS: AppSettingDef[] = [
     note: "各画面の「サロンボードを開く」ボタンの飛び先。店舗のログインページを貼ってください",
     placeholder: "https://salonboard.com/login/",
     fallback: "https://salonboard.com/login/",
+  },
+  {
+    key: CURRICULUM_URL_KEY,
+    label: "カミキュラムのURL",
+    note: "スマホの下部タブ「カミキュラム」の飛び先（動画教材サイトのログインページなど）。未設定の間は案内ページが出ます",
+    placeholder: "https://",
+    fallback: "",
   },
 ];
 
@@ -39,11 +47,18 @@ export async function getSalonBoardUrl(db: DataStore): Promise<string> {
   return settingsMap(rows)[SALON_BOARD_URL_KEY];
 }
 
+/** 外部リンクをまとめて取る（下部タブ・メニュー用）。カミキュラムは未設定なら空文字 */
+export async function getAppLinks(db: DataStore): Promise<{ salonBoardUrl: string; curriculumUrl: string }> {
+  const map = settingsMap(await db.listAppSettings());
+  return { salonBoardUrl: map[SALON_BOARD_URL_KEY], curriculumUrl: map[CURRICULUM_URL_KEY] ?? "" };
+}
+
 /** 保存前の検証：http(s) のURLだけ受け付ける（空文字は「既定に戻す」） */
 export function normalizeSettingValue(key: string, raw: string): string | null {
   const value = raw.trim().slice(0, 500);
   if (!value) return "";
-  if (key === SALON_BOARD_URL_KEY) {
+  // URL系の設定は http(s) で始まるものだけ受け付ける
+  if (key.endsWith("_url")) {
     return /^https?:\/\/\S+$/.test(value) ? value : null;
   }
   return value;

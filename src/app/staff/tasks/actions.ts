@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
-import { todayJst } from "@/lib/date";
+import { formatDateJa, todayJst } from "@/lib/date";
+import { notifyQuietly, shortName } from "@/lib/push/notify";
 import type { TaskRepeat, TaskStatus } from "@/lib/data/types";
 
 /** リダイレクト先（アプリ内のみ許可。改ざん対策） */
@@ -95,6 +96,14 @@ export async function createRequestTaskAction(formData: FormData): Promise<void>
     repeatDays: [],
     status: "open",
   });
+  if (assigneeStaffId !== session.staffId) {
+    await notifyQuietly(db, [assigneeStaffId], {
+      title: `${shortName(session.name)}さんからタスクの依頼`,
+      body: `${title}${dueDate ? `（〜${formatDateJa(dueDate)}）` : ""}`,
+      url: "/staff/tasks",
+      tag: "task",
+    });
+  }
   refresh();
   redirect(`${back}?saved=request`);
 }
@@ -130,6 +139,14 @@ export async function createExecTaskAction(formData: FormData): Promise<void> {
     repeatDays,
     status: "open",
   });
+  if (assigneeStaffId !== session.staffId) {
+    await notifyQuietly(db, [assigneeStaffId], {
+      title: "幹部タスクが割り当てられました",
+      body: `${title}${!repeat && dueDate ? `（〜${formatDateJa(dueDate)}）` : ""}`,
+      url: "/staff/exec",
+      tag: "task",
+    });
+  }
   refresh();
   redirect(`${back}?saved=1`);
 }

@@ -11,7 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { logoutAction } from "@/lib/auth/actions";
-import { findCurrent, type NavGroup, type NavItem } from "@/lib/nav";
+import { findCurrent, matchesNav, type NavGroup, type NavItem } from "@/lib/nav";
 
 export type ShellUser = {
   name: string;
@@ -168,7 +168,9 @@ export function AppShell({
               icon={t.icon}
               label={t.short ?? t.label}
               badge={t.badge}
-              active={current?.item.href === t.href}
+              external={t.external}
+              dense={tabs.length >= 4}
+              active={matchesNav(pathname, t)}
             />
           ))}
           <li className="flex-1">
@@ -188,42 +190,60 @@ export function AppShell({
   );
 }
 
-/** 下部タブの1つ。ラベルは2行にせず、はみ出す場合は省略する */
+/**
+ * 下部タブの1つ。ラベルは2行にせず、はみ出す場合は省略する。
+ * 外部リンク（サロンボード・カミキュラム）は新しいタブで開く（ホーム画面に追加したアプリでも戻れるように）。
+ * dense はタブが多いとき（ENiの6つ並び）に文字を少し小さくする。
+ */
 function TabLink({
   href,
   icon,
   label,
   badge,
   active,
+  external,
+  dense,
 }: {
   href: string;
   icon: NavItem["icon"];
   label: string;
   badge?: NavItem["badge"];
   active: boolean;
+  external?: boolean;
+  dense?: boolean;
 }) {
+  const className = `relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${
+    dense ? "px-0.5" : "px-1"
+  } min-h-[3.75rem] transition-colors ${active ? "text-brand-800" : "text-ink-500"} active:bg-brand-100`;
+  const inner = (
+    <>
+      {active && (
+        <span className="absolute top-0 inset-x-3 h-[3px] rounded-b-full bg-gradient-to-r from-brand-400 to-brand-600" />
+      )}
+      <span className="relative">
+        <Icon name={icon} className="w-[22px] h-[22px]" />
+        {badge != null && badge !== 0 && (
+          <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className={`${dense ? "text-[9px]" : "text-[10px]"} font-bold leading-none truncate max-w-full`}>
+        {label}
+      </span>
+    </>
+  );
   return (
     <li className="flex-1 min-w-0">
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 px-1 min-h-[3.75rem] transition-colors ${
-          active ? "text-brand-800" : "text-ink-500"
-        } active:bg-brand-100`}
-      >
-        {active && (
-          <span className="absolute top-0 inset-x-3 h-[3px] rounded-b-full bg-gradient-to-r from-brand-400 to-brand-600" />
-        )}
-        <span className="relative">
-          <Icon name={icon} className="w-[22px] h-[22px]" />
-          {badge != null && badge !== 0 && (
-            <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">
-              {badge}
-            </span>
-          )}
-        </span>
-        <span className="text-[10px] font-bold leading-none truncate max-w-full">{label}</span>
-      </Link>
+      {external ? (
+        <a href={href} target="_blank" rel="noreferrer" className={className}>
+          {inner}
+        </a>
+      ) : (
+        <Link href={href} aria-current={active ? "page" : undefined} className={className}>
+          {inner}
+        </Link>
+      )}
     </li>
   );
 }
@@ -300,25 +320,37 @@ function SidebarBody({
             <p className="nav-group-label">{group.label}</p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const current = item.href === currentHref;
+                const current = !item.external && item.href === currentHref;
+                const inner = (
+                  <>
+                    <Icon
+                      name={item.icon}
+                      className={`w-[18px] h-[18px] shrink-0 ${current ? "text-brand-300" : "text-sidebar-muted"}`}
+                    />
+                    <span className="flex-1 min-w-0 truncate">{item.label}</span>
+                    {item.badge != null && item.badge !== 0 && (
+                      <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-brand-500 text-sidebar-900 text-[11px] font-bold flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    )}
+                    {item.external && <span className="text-[10px] text-sidebar-muted shrink-0">↗</span>}
+                  </>
+                );
                 return (
                   <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={current ? "page" : undefined}
-                      className={`nav-link ${current ? "nav-link-active" : ""}`}
-                    >
-                      <Icon
-                        name={item.icon}
-                        className={`w-[18px] h-[18px] shrink-0 ${current ? "text-brand-300" : "text-sidebar-muted"}`}
-                      />
-                      <span className="flex-1 min-w-0 truncate">{item.label}</span>
-                      {item.badge != null && item.badge !== 0 && (
-                        <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-brand-500 text-sidebar-900 text-[11px] font-bold flex items-center justify-center">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
+                    {item.external ? (
+                      <a href={item.href} target="_blank" rel="noreferrer" className="nav-link">
+                        {inner}
+                      </a>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        aria-current={current ? "page" : undefined}
+                        className={`nav-link ${current ? "nav-link-active" : ""}`}
+                      >
+                        {inner}
+                      </Link>
+                    )}
                   </li>
                 );
               })}

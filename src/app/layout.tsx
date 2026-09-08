@@ -6,6 +6,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "ENi サロン業務システム",
   description: "ENi／EREYS のサロン業務システム（日報・週報／組織図・会議／カウンセリング／シフト）",
+  // ホーム画面に追加（PWA）。通知（Web Push）はホーム画面のアプリから使う
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "ENi" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {

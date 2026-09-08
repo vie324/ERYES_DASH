@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Markdown } from "@/lib/markdown";
 import { PhotoInput } from "@/components/photo-input";
+import { FileInput } from "@/components/file-input";
 import type { Staff } from "@/lib/data/types";
 import { saveMeetingMinutesAction } from "@/app/staff/meetings/actions";
 
@@ -20,6 +21,8 @@ export function MinutesEditor({
   month,
   initialText,
   initialPhoto,
+  initialFile = "",
+  initialFileName = "",
   initialTasks,
   staff,
 }: {
@@ -27,6 +30,8 @@ export function MinutesEditor({
   month: string;
   initialText: string;
   initialPhoto: string;
+  initialFile?: string;
+  initialFileName?: string;
   initialTasks: TaskDraft[];
   staff: Staff[];
 }) {
@@ -200,7 +205,17 @@ export function MinutesEditor({
 
         <div>
           <p className="label !mb-1">議事録の写真（ホワイトボード等・任意）</p>
-          <PhotoInput name="minutes_photo" initial={initialPhoto} label="議事録を撮影・選択" />
+          <PhotoInput name="minutes_photo" initial={initialPhoto} label="写真から選ぶ" />
+        </div>
+
+        <div>
+          <p className="label !mb-1">資料ファイル（PDF・任意）</p>
+          <FileInput
+            name="minutes_file"
+            initial={initialFile}
+            initialName={initialFileName}
+            label="PDFを添付する"
+          />
         </div>
 
         <button type="submit" className="btn-secondary w-full">

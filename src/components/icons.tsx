@@ -38,6 +38,8 @@ export type IconName =
   | "plus"
   | "send"
   | "listTodo"
+  | "bot"
+  | "play"
   | "brandMark";
 
 const PATHS: Record<IconName, JSX.Element> = {
@@ -216,6 +218,23 @@ const PATHS: Record<IconName, JSX.Element> = {
       <rect x="3" y="5" width="6" height="6" rx="1" />
       <path d="m3 17 2 2 4-4" />
       <path d="M13 6h8M13 12h8M13 18h8" />
+    </>
+  ),
+  // AIしもん（ロボットの顔）
+  bot: (
+    <>
+      <rect x="4" y="8" width="16" height="12" rx="3" />
+      <path d="M12 8V5M9 5h6" />
+      <circle cx="9" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="14" r="1" fill="currentColor" stroke="none" />
+      <path d="M9.5 17.5h5M2 13v3M22 13v3" />
+    </>
+  ),
+  // カミキュラム（動画教材）
+  play: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m10 8.5 5.5 3.5-5.5 3.5z" fill="currentColor" stroke="none" />
     </>
   ),
   brandMark: (

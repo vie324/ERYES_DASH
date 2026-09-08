@@ -5,8 +5,11 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
-import { todayJst, addDays } from "@/lib/date";
+import { todayJst, addDays, formatDateJa } from "@/lib/date";
 import type { AbsenceKind } from "@/lib/data/types";
+import { notifyQuietly, pushPreview, shortName } from "@/lib/push/notify";
+
+const KIND_LABEL: Record<AbsenceKind, string> = { absence: "欠勤", early_leave: "早退", late: "遅刻" };
 
 /** 欠勤・早退・遅刻の報告を送信 */
 export async function createAbsenceReportAction(formData: FormData): Promise<void> {
@@ -33,7 +36,8 @@ export async function createAbsenceReportAction(formData: FormData): Promise<voi
     redirect("/staff/absence?error=input");
   }
 
-  await getDataStore().createAbsenceReport({
+  const db = getDataStore();
+  await db.createAbsenceReport({
     staffId,
     absenceDate: date,
     kind,
@@ -41,6 +45,21 @@ export async function createAbsenceReportAction(formData: FormData): Promise<voi
     reason,
     reportedBy: session.staffId,
   });
+  // 他の幹部・管理者へ知らせる（報告した本人には送らない）
+  const staffList = await db.listStaff();
+  const target = staffList.find((s) => s.id === staffId);
+  await notifyQuietly(
+    db,
+    staffList
+      .filter((s) => s.isActive && (s.isExecutive || s.role === "admin") && s.id !== session.staffId)
+      .map((s) => s.id),
+    {
+      title: `${KIND_LABEL[kind]}の報告：${shortName(target?.name ?? "スタッフ")}さん`,
+      body: `${formatDateJa(date)}（${pushPreview(reason, 50)}）`,
+      url: "/staff/absence",
+      tag: "absence",
+    }
+  );
   revalidatePath("/staff/absence");
   redirect("/staff/absence?saved=1");
 }

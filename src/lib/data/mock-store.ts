@@ -12,6 +12,7 @@ import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
 import type {
   AbsenceReport,
   AppSetting,
+  PushSubscriptionRow,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -34,6 +35,7 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  DayoffInput,
   DayoffRequest,
   EniReport,
   ExecNoticeCheck,
@@ -56,6 +58,7 @@ import type {
   SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
+  ShiftDayRequest,
   ShiftRequest,
   ShiftRequestMonth,
   ShiftRules,
@@ -115,6 +118,7 @@ interface MockDb {
   managerRoutines: ManagerRoutine[];
   managerRoutineChecks: ManagerRoutineCheck[];
   appSettings: AppSetting[];
+  pushSubscriptions: PushSubscriptionRow[];
   thanksPosts: ThanksPost[];
   thanksLikes: ThanksLike[];
   thanksComments: ThanksComment[];
@@ -497,12 +501,16 @@ function seed(): MockDb {
       id: randomUUID(),
       staffId: "staff-2",
       date: `${dayoffMonth}-10`,
+      reason: "友人の結婚式",
+      paidLeave: true,
       createdAt: jstAt(today, 9),
     },
     {
       id: randomUUID(),
       staffId: "staff-2",
       date: `${dayoffMonth}-24`,
+      reason: "",
+      paidLeave: false,
       createdAt: jstAt(today, 9),
     },
   ];
@@ -584,6 +592,8 @@ function seed(): MockDb {
       participants: [],
       minutesText: "",
       minutesPhoto: "",
+      minutesFile: "",
+      minutesFileName: "",
       minutesAi: false,
       minutesDone: false, // 議事録が未提出のデモ（一覧で赤く出る）
       createdBy: "staff-3",
@@ -602,6 +612,8 @@ function seed(): MockDb {
       participants: ["staff-3", "staff-4", "staff-5", "staff-6"],
       minutesText: "",
       minutesPhoto: "",
+      minutesFile: "",
+      minutesFileName: "",
       minutesAi: false,
       minutesDone: false,
       createdBy: "staff-4",
@@ -946,7 +958,15 @@ function seed(): MockDb {
       updatedAt: jstAt(addDays(`${month}-01`, -10), 12),
     });
     for (const [date, preference] of currentPrefs.get(staffId)!) {
-      shiftRequests.push({ id: randomUUID(), staffId, targetMonth: month, date, preference });
+      shiftRequests.push({
+        id: randomUUID(),
+        staffId,
+        targetMonth: month,
+        date,
+        preference,
+        reason: "",
+        paidLeave: false,
+      });
     }
     for (const storeId of storeIds) {
       shiftAvailableStores.push({ staffId, targetMonth: month, storeId });
@@ -997,6 +1017,8 @@ function seed(): MockDb {
         targetMonth: nextMonth,
         date,
         preference,
+        reason: preference === "off" && date.endsWith("-20") ? "通院のため" : "",
+        paidLeave: false,
       });
     }
     for (const storeId of sub.storeIds) {
@@ -1047,6 +1069,7 @@ function seed(): MockDb {
     managerRoutines: DEFAULT_MANAGER_ROUTINES.map((r) => ({ id: randomUUID(), ...r })),
     managerRoutineChecks: [],
     appSettings: [],
+    pushSubscriptions: [],
     thanksPosts,
     thanksLikes,
     thanksComments,
@@ -1514,7 +1537,7 @@ class MockStore implements DataStore {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftPreference>;
+    days: Record<string, ShiftDayRequest>;
     storeIds: string[];
   }): Promise<void> {
     const now = new Date();
@@ -1538,13 +1561,15 @@ class MockStore implements DataStore {
     this.db.shiftRequests = this.db.shiftRequests.filter(
       (r) => !(r.staffId === input.staffId && r.targetMonth === input.targetMonth)
     );
-    for (const [date, preference] of Object.entries(input.days)) {
+    for (const [date, day] of Object.entries(input.days)) {
       this.db.shiftRequests.push({
         id: randomUUID(),
         staffId: input.staffId,
         targetMonth: input.targetMonth,
         date,
-        preference,
+        preference: day.preference,
+        reason: day.reason,
+        paidLeave: day.paidLeave,
       });
     }
     this.db.shiftAvailableStores = this.db.shiftAvailableStores.filter(
@@ -1666,12 +1691,19 @@ class MockStore implements DataStore {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void> {
+  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
     this.db.dayoffRequests = this.db.dayoffRequests.filter(
       (r) => !(r.staffId === staffId && r.date.startsWith(targetMonth))
     );
-    for (const date of dates) {
-      this.db.dayoffRequests.push({ id: randomUUID(), staffId, date, createdAt: new Date() });
+    for (const d of dates) {
+      this.db.dayoffRequests.push({
+        id: randomUUID(),
+        staffId,
+        date: d.date,
+        reason: d.reason,
+        paidLeave: d.paidLeave,
+        createdAt: new Date(),
+      });
     }
   }
 
@@ -1825,13 +1857,18 @@ class MockStore implements DataStore {
   }
 
   async createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
+    input: Omit<
+      Meeting,
+      "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesFile" | "minutesFileName" | "minutesAi" | "minutesDone"
+    >
   ): Promise<Meeting> {
     const created: Meeting = {
       id: randomUUID(),
       createdAt: new Date(),
       minutesText: "",
       minutesPhoto: "",
+      minutesFile: "",
+      minutesFileName: "",
       minutesAi: false,
       minutesDone: false,
       ...input,
@@ -1861,12 +1898,21 @@ class MockStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
+    patch: {
+      minutesText: string;
+      minutesPhoto: string;
+      minutesFile: string;
+      minutesFileName: string;
+      minutesAi: boolean;
+      minutesDone: boolean;
+    }
   ): Promise<Meeting> {
     const found = this.db.meetings.find((m) => m.id === id);
     if (!found) throw new Error("ミーティングが見つかりません");
     found.minutesText = patch.minutesText;
     found.minutesPhoto = patch.minutesPhoto;
+    found.minutesFile = patch.minutesFile;
+    found.minutesFileName = patch.minutesFileName;
     found.minutesAi = patch.minutesAi;
     found.minutesDone = patch.minutesDone;
     return found;
@@ -2600,6 +2646,30 @@ class MockStore implements DataStore {
 
   async listAppSettings(): Promise<AppSetting[]> {
     return this.db.appSettings.map((a) => ({ ...a }));
+  }
+
+  async listPushSubscriptions(staffIds: string[]): Promise<PushSubscriptionRow[]> {
+    const ids = new Set(staffIds);
+    return this.db.pushSubscriptions.filter((p) => ids.has(p.staffId)).map((p) => ({ ...p }));
+  }
+
+  async upsertPushSubscription(input: {
+    staffId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent: string;
+  }): Promise<void> {
+    const found = this.db.pushSubscriptions.find((p) => p.endpoint === input.endpoint);
+    if (found) {
+      Object.assign(found, input);
+    } else {
+      this.db.pushSubscriptions.push({ id: randomUUID(), ...input, createdAt: new Date() });
+    }
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    this.db.pushSubscriptions = this.db.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
   }
 
   async setAppSetting(key: string, value: string): Promise<void> {

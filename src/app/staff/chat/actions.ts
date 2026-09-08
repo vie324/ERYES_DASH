@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
-import { ALL_ROOM_KEY, extractMentions } from "@/lib/chat";
+import { ALL_ROOM_KEY, ALL_ROOM_NAME, extractMentions } from "@/lib/chat";
+import { notifyQuietly, pushPreview, shortName } from "@/lib/push/notify";
 
 /** そのルームのメンバーか（メンバー以外は読めない・送れない） */
 async function requireMembership(roomId: string, staffId: string): Promise<void> {
@@ -91,6 +92,7 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
   const [members, staffList] = await Promise.all([db.listChatMembers([roomId]), db.listStaff()]);
   const memberIds = new Set(members.map((m) => m.staffId));
   const roomStaff = staffList.filter((s) => memberIds.has(s.id));
+  const mentions = body ? extractMentions(body, roomStaff) : [];
 
   await db.createChatMessage({
     roomId,
@@ -100,10 +102,31 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
     file,
     fileName: file ? fileName || "資料.pdf" : "",
     replyToId,
-    mentions: body ? extractMentions(body, roomStaff) : [],
+    mentions,
   });
   revalidatePath(`/staff/chat/${roomId}`);
   revalidatePath("/staff/chat");
+
+  // 通知：ルームの他のメンバーへ（メンションされた人には「自分あて」と分かる件名で）
+  const room = await db.getChatRoom(roomId);
+  const senderName = shortName(staffList.find((s) => s.id === session.staffId)?.name ?? session.name);
+  const roomLabel =
+    room?.roomKey === ALL_ROOM_KEY ? ALL_ROOM_NAME : room?.isGroup ? room.name || "グループ" : "";
+  const preview = pushPreview(body || (image ? "📷 画像" : `📎 ${fileName || "ファイル"}`));
+  const others = roomStaff.filter((s) => s.id !== session.staffId).map((s) => s.id);
+  const url = `/staff/chat/${roomId}`;
+  await Promise.all([
+    notifyQuietly(
+      db,
+      others.filter((id) => mentions.includes(id)),
+      { title: `${senderName}さんからメンション${roomLabel ? `（${roomLabel}）` : ""}`, body: preview, url, tag: `chat-${roomId}` }
+    ),
+    notifyQuietly(
+      db,
+      others.filter((id) => !mentions.includes(id)),
+      { title: roomLabel ? `${roomLabel}：${senderName}` : senderName, body: preview, url, tag: `chat-${roomId}` }
+    ),
+  ]);
 }
 
 /** メッセージの送信取消（自分のメッセージのみ） */
@@ -164,6 +187,22 @@ export async function toggleAnnounceAction(formData: FormData): Promise<void> {
   await db.setChatMessageAnnounced(messageId, session.staffId, announced);
   revalidatePath(`/staff/chat/${roomId}`);
   revalidatePath("/staff");
+
+  // アナウンスにしたら全員へ通知（ダッシュボードの一番上に出る大事な連絡）
+  if (announced) {
+    const [messages, staffList] = await Promise.all([db.listChatMessages(roomId, 200), db.listStaff()]);
+    const message = messages.find((m) => m.id === messageId);
+    await notifyQuietly(
+      db,
+      staffList.filter((s) => s.isActive && s.id !== session.staffId).map((s) => s.id),
+      {
+        title: "📣 全体共有のアナウンス",
+        body: pushPreview(message?.body || "新しいアナウンスがあります"),
+        url: "/staff",
+        tag: "announce",
+      }
+    );
+  }
   redirect(`/staff/chat/${roomId}?saved=${announced ? "announced" : "unannounced"}`);
 }
 
