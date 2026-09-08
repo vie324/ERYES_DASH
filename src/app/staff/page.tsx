@@ -397,6 +397,13 @@ async function eniMenuItems(
       short: "発注",
       description: "ウィッグ・社販・商材の申請",
     },
+    {
+      href: "/staff/ai-shimon",
+      icon: "bot",
+      title: "AIしもん（壁打ち相談）",
+      short: "AIしもん",
+      description: "後輩のこと・自分のこと・接客のこと、なんでも相談",
+    },
     // 組織図・幹部メニュー・欠勤の報告は管理者・幹部のみ
     ...(flags.isExec
       ? [

@@ -4,6 +4,7 @@ import { getDataStore } from "@/lib/data";
 import { addDays, formatDateJa, todayJst } from "@/lib/date";
 import { STYLIST_REPORT_NUMBERS, STYLIST_REPORT_TEXTS } from "@/lib/eni/forms";
 import { EniFormFields } from "@/components/eni-form-fields";
+import { PyramidPanel } from "@/components/assistant-settings";
 import { PageHeader } from "@/components/ui";
 import { StylistTimeSummary } from "./stylist-time";
 import { saveStylistReportAction } from "./actions";
@@ -21,11 +22,15 @@ export default async function StylistReportPage({
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : today;
 
   const db = getDataStore();
-  const [existing, recent, me] = await Promise.all([
+  const [existing, recent, me, settings] = await Promise.all([
     db.getEniReport("stylist", session.staffId, date),
     db.listEniReports("stylist", { staffId: session.staffId, from: addDays(today, -14), to: today }),
     db.getStaff(session.staffId),
+    db.listAssistantSettings(session.staffId),
   ]);
+  // ピラミッド（価値観・理想の未来像・目標）は日報の先頭に常時表示する
+  const settingValues: Record<string, string> = {};
+  for (const s of settings) settingValues[s.settingKey] = s.content;
 
   const answers = existing?.answers ?? {};
   const numAnswer = (key: string): number =>
@@ -43,11 +48,15 @@ export default async function StylistReportPage({
         }
       />
 
-      {params.saved && (
+      {params.saved === "settings" ? (
+        <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
+          ピラミッドを保存しました
+        </p>
+      ) : params.saved ? (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
           保存しました（{formatDateJa(date)} の日報）
         </p>
-      )}
+      ) : null}
       {params.error === "date" && (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           未来の日付には入力できません
@@ -63,6 +72,14 @@ export default async function StylistReportPage({
           稼働率の計算に必要な「入客時間の合計」を入力してください（必須）
         </p>
       )}
+
+      <div className="mb-4">
+        <PyramidPanel
+          staffName={(me?.name ?? "").split(" ")[0] || "あなた"}
+          values={settingValues}
+          back="/staff/eni-report"
+        />
+      </div>
 
       {existing?.comment && (
         <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">

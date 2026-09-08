@@ -56,8 +56,11 @@ export function resolveScheduleDay(
       note: override.note,
     };
   }
-  if (dayoffs.some((r) => r.staffId === staffId && r.date === date)) {
-    return { working: false, startTime: "", endTime: "", source: "dayoff", note: "希望休" };
+  const dayoff = dayoffs.find((r) => r.staffId === staffId && r.date === date);
+  if (dayoff) {
+    // 管理者の表では理由・有休も見えるようにする（重なったときの判断材料）
+    const note = `希望休${dayoff.paidLeave ? "（有休）" : ""}${dayoff.reason ? `：${dayoff.reason}` : ""}`;
+    return { working: false, startTime: "", endTime: "", source: "dayoff", note };
   }
   const pattern = patterns.find((p) => p.staffId === staffId && p.weekday === weekday);
   if (pattern?.isWorking) {

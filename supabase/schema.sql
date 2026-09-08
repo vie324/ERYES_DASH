@@ -154,6 +154,8 @@ create table if not exists dayoff_requests (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id) on delete cascade,
   date date not null,
+  reason text not null default '',            -- 休み希望の理由（希望が重なったときの判断材料）
+  paid_leave boolean not null default false,   -- 有休として申請
   created_at timestamptz not null default now(),
   unique (staff_id, date)
 );
@@ -209,6 +211,8 @@ create table if not exists shift_requests (
   target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
   date date not null,
   preference text not null check (preference in ('early', 'late', 'off')),
+  reason text not null default '',            -- 休み希望の理由（希望が重なったときの判断材料）
+  paid_leave boolean not null default false,   -- 有休として申請（スタイリストは休み希望と同時に）
   unique (staff_id, date)
 );
 
@@ -286,6 +290,8 @@ create table if not exists meetings (
   participants jsonb not null default '[]',     -- 会議体の複数参加者（staff_idの配列）
   minutes_text text not null default '',       -- 議事録（整形済みMarkdown）
   minutes_photo text not null default '',      -- 議事録の写真（データURL）
+  minutes_file text not null default '',       -- 議事録の添付ファイル（PDFのデータURL）
+  minutes_file_name text not null default '',  -- 添付ファイルの表示名
   minutes_ai boolean not null default false,   -- AIで整形したか
   minutes_done boolean not null default false,
   created_by uuid not null references staff(id),
@@ -565,6 +571,18 @@ create table if not exists app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- Web Push の購読（端末ごと）。スマホ・PCへの通知とアプリアイコンのバッジに使う
+create table if not exists push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null default '',
+  auth text not null default '',
+  user_agent text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- ---- 既存DBへの追従（あとから足した列・制約）----
 -- 新しく作ったDBでは「すでにある」ので何も起きません。
 -- 本番DBに貼り付けて再実行したときに、足りない列だけが追加されます。
@@ -595,6 +613,14 @@ alter table meetings add column if not exists committee text not null default ''
 alter table meetings add column if not exists agenda text not null default '';
 alter table meetings add column if not exists participants jsonb not null default '[]';
 alter table meetings add column if not exists minutes_ai boolean not null default false;
+alter table meetings add column if not exists minutes_file text not null default '';
+alter table meetings add column if not exists minutes_file_name text not null default '';
+
+-- 希望休・シフト希望：理由と有休フラグ
+alter table dayoff_requests add column if not exists reason text not null default '';
+alter table dayoff_requests add column if not exists paid_leave boolean not null default false;
+alter table shift_requests add column if not exists reason text not null default '';
+alter table shift_requests add column if not exists paid_leave boolean not null default false;
 
 -- 発注・購入申請：発注先URL
 alter table order_requests add column if not exists supplier_url text not null default '';
@@ -660,6 +686,7 @@ create index if not exists idx_chat_messages_announced on chat_messages (announc
 create index if not exists idx_committees_sort on committees (sort_order);
 create index if not exists idx_manager_routines_sort on manager_routines (cycle, sort_order);
 create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
+create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、
@@ -709,6 +736,7 @@ alter table committees enable row level security;
 alter table manager_routines enable row level security;
 alter table manager_routine_checks enable row level security;
 alter table app_settings enable row level security;
+alter table push_subscriptions enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。

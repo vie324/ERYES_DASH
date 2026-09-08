@@ -23,11 +23,11 @@ export default async function DayoffRequestPage({
   const deadline = dayoffDeadline(month);
   const isPastMonth = month < thisMonthJst();
 
-  const myDayoffs = await getDataStore().listDayoffRequests({
-    staffId: session.staffId,
-    from,
-    to,
-  });
+  const db = getDataStore();
+  const [myDayoffs, me] = await Promise.all([
+    db.listDayoffRequests({ staffId: session.staffId, from, to }),
+    db.getStaff(session.staffId),
+  ]);
 
   return (
     <div>
@@ -70,14 +70,16 @@ export default async function DayoffRequestPage({
 
       <DayoffCalendar
         month={month}
-        initialSelected={myDayoffs.map((r) => r.date)}
+        initialSelected={myDayoffs.map((r) => ({ date: r.date, reason: r.reason, paidLeave: r.paidLeave }))}
         editable={editable && !isPastMonth}
+        isStylist={me?.jobType === "stylist"}
       />
 
       <div className="card mt-4 text-xs text-ink-500 space-y-1">
         <p className="font-bold text-ink-600">希望休のルール</p>
         <p>・毎月5日までに、3ヶ月後の月の希望休を申請します（次回予約を2ヶ月先まで受けるため）。</p>
         <p>・定休日・お休みの曜日は申請不要です（基本パターンで自動的にお休みになります）。</p>
+        <p>・休み希望には理由をひとこと添えてください（希望が重なったときの判断材料になります）。有休で休む日は「有休」にチェックします。</p>
         <p>・締切後の変更は、お店に直接ご相談ください（管理者が個別調整できます）。</p>
       </div>
     </div>

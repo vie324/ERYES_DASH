@@ -4,7 +4,7 @@ import { formatDateTimeJa, formatMonthJa } from "@/lib/date";
 import { currentTargetMonth, deadlineLabel, isRequestEditable } from "@/lib/shift/period";
 import { PageHeader } from "@/components/ui";
 import { ShiftRequestForm } from "./request-form";
-import type { ShiftPreference } from "@/lib/data/types";
+import type { ShiftDayRequest } from "@/lib/data/types";
 
 // シフト希望の提出（提出内容は本人と管理者のみ閲覧可。締切までは何度でも修正できる）
 export default async function ShiftRequestPage({
@@ -22,15 +22,18 @@ export default async function ShiftRequestPage({
     : currentTargetMonth(rules);
   const editable = isRequestEditable(month, rules);
 
-  const [stores, requestMonth, requests, availableStores] = await Promise.all([
+  const [stores, requestMonth, requests, availableStores, me] = await Promise.all([
     db.listStores(),
     db.getShiftRequestMonth(session.staffId, month),
     db.listShiftRequests(month, session.staffId),
     db.listAvailableStores(month, session.staffId),
+    db.getStaff(session.staffId),
   ]);
 
-  const initialDays: Record<string, ShiftPreference> = {};
-  for (const r of requests) initialDays[r.date] = r.preference;
+  const initialDays: Record<string, ShiftDayRequest> = {};
+  for (const r of requests) {
+    initialDays[r.date] = { preference: r.preference, reason: r.reason, paidLeave: r.paidLeave };
+  }
 
   return (
     <div className="page-narrow">
@@ -64,6 +67,7 @@ export default async function ShiftRequestPage({
         initialStoreIds={availableStores.map((a) => a.storeId)}
         initialNote={requestMonth?.note ?? ""}
         editable={editable}
+        isStylist={me?.jobType === "stylist"}
       />
     </div>
   );

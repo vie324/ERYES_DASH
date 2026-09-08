@@ -322,6 +322,17 @@ export default async function MeetingsPage({
                             {m.minutesPhoto && (
                               <img src={m.minutesPhoto} alt="議事録の写真" className="w-full max-h-80 object-contain rounded-lg border border-ink-200 bg-white mt-2" />
                             )}
+                            {m.minutesFile && (
+                              <a
+                                href={m.minutesFile}
+                                download={m.minutesFileName || "資料.pdf"}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm font-bold text-brand-700"
+                              >
+                                📎 <span className="truncate">{m.minutesFileName || "資料.pdf"}</span>
+                              </a>
+                            )}
                           </div>
                         )}
 
@@ -336,6 +347,8 @@ export default async function MeetingsPage({
                                 month={month}
                                 initialText={m.minutesText}
                                 initialPhoto={m.minutesPhoto}
+                                initialFile={m.minutesFile}
+                                initialFileName={m.minutesFileName}
                                 initialTasks={(tasksByMeeting.get(m.id) ?? []).map((t) => ({
                                   title: t.title,
                                   assignee: t.assigneeName,

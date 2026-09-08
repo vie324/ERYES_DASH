@@ -12,6 +12,8 @@ import {
   updateStoreAction,
 } from "../actions";
 import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
+import { env, isAnthropicConfigured } from "@/lib/env";
+import { isPromptAvailable, knowledgeStatus } from "@/lib/ai-shimon/prompt";
 
 import { MAX_TIERS } from "@/lib/eni/forms";
 
@@ -48,6 +50,13 @@ export default async function AdminSettingsPage({
     db.listAppSettings(),
   ]);
   const settings = settingsMap(appSettings);
+  // AIしもんの準備状況（知識ファイルは「番号の有無」だけを出す。本文・ファイル名は画面に出さない）
+  const aiShimon = {
+    apiKey: isAnthropicConfigured(),
+    prompt: isPromptAvailable(),
+    knowledge: knowledgeStatus(),
+    model: env.aiShimonModel,
+  };
 
   return (
     <div>
@@ -420,10 +429,47 @@ export default async function AdminSettingsPage({
           ))}
           <button type="submit" className="btn-secondary w-full">リンクを保存</button>
           <p className="text-[11px] text-ink-400">
-            ※ ダッシュボードの「サロンボードを開く」ボタンからこのURLを新しいタブで開きます。
-            空欄で保存すると既定のログインページに戻ります。
+            ※ サロンボードはダッシュボードの「サロンボードを開く」ボタンと下部タブから、
+            カミキュラムは下部タブ・メニューから新しいタブで開きます。
+            サロンボードを空欄で保存すると既定のログインページに戻ります。
           </p>
         </form>
+      </section>
+
+      {/* AIしもん：準備状況の確認（設定そのものは環境変数とファイル配置で行う） */}
+      <section className="card mt-5">
+        <h2 className="section-title">AIしもん（壁打ち相談AI）</h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {aiShimon.apiKey ? (
+            <StatusBadge label="APIキー：設定済み" tone="ok" />
+          ) : (
+            <StatusBadge label="APIキー：未設定（ANTHROPIC_API_KEY）" tone="pending" />
+          )}
+          {aiShimon.prompt ? (
+            <StatusBadge label="システムプロンプト：あり" tone="ok" />
+          ) : (
+            <StatusBadge label="システムプロンプト：なし" tone="pending" />
+          )}
+          <StatusBadge label={`モデル：${aiShimon.model}`} tone="muted" />
+        </div>
+        <p className="text-xs text-ink-600">
+          知識ファイル（02_知識ファイル/01〜14）は{" "}
+          <code className="font-bold">ai-shimon/knowledge/</code> に置きます。
+          置かれている番号：
+          <span className="font-bold text-emerald-700 ml-1">
+            {aiShimon.knowledge.present.length > 0 ? aiShimon.knowledge.present.join("・") : "なし"}
+          </span>
+          {aiShimon.knowledge.missing.length > 0 && (
+            <>
+              ／ まだ無い番号：
+              <span className="font-bold text-amber-700 ml-1">{aiShimon.knowledge.missing.join("・")}</span>
+            </>
+          )}
+        </p>
+        <p className="hint">
+          ファイルは編集せず差し替えで反映します（反映には再デプロイが必要）。08（スタッフ欲求プロファイル）は要配慮情報のため、
+          AIへの入力にしか使わず、画面・ログには一切出しません。モデルは環境変数 AI_SHIMON_MODEL で変更できます。
+        </p>
       </section>
 
       <section className="card mt-5">

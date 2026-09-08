@@ -1,18 +1,22 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-// 写真の添付欄。カメラ撮影/選択した画像を端末側で縮小して data URL 化し、
+// 写真の添付欄。選んだ画像を端末側で縮小して data URL 化し、
 // hidden input（name）に入れてサーバーアクションへ送る。保存先はDBのtext列。
+//
+// 入口は2つ：「写真・ファイルから選ぶ」（撮影済みの写真・保存した画像）と「カメラで撮る」。
+// 以前は capture 指定で常にカメラが起動し、撮影済みの写真を選べなかったので分けた。
 
 import { useState } from "react";
 
 export function PhotoInput({
   name,
   initial = "",
-  label = "写真を選ぶ・撮影する",
+  label = "写真・ファイルから選ぶ",
 }: {
   name: string;
   initial?: string;
+  /** 「選ぶ」側のボタンの文言（カメラ側は固定） */
   label?: string;
 }) {
   const [dataUrl, setDataUrl] = useState(initial);
@@ -29,6 +33,9 @@ export function PhotoInput({
     }
     setBusy(false);
   };
+
+  const pickerClass =
+    "flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-brand-300 bg-white px-3 py-5 text-sm font-bold text-brand-600 cursor-pointer text-center";
 
   return (
     <div>
@@ -49,17 +56,25 @@ export function PhotoInput({
           </button>
         </div>
       ) : (
-        <label className="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-white px-4 py-6 text-sm font-bold text-brand-600 cursor-pointer">
-          {busy ? "読み込み中…" : `＋ ${label}`}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onPick}
-            disabled={busy}
-            className="hidden"
-          />
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {/* 写真アプリ・ファイルから選ぶ（capture を付けないのでカメラは起動しない） */}
+          <label className={pickerClass}>
+            {busy ? "読み込み中…" : `＋ ${label}`}
+            <input type="file" accept="image/*" onChange={onPick} disabled={busy} className="hidden" />
+          </label>
+          {/* その場で撮影する */}
+          <label className={pickerClass}>
+            {busy ? "読み込み中…" : "📷 カメラで撮る"}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={onPick}
+              disabled={busy}
+              className="hidden"
+            />
+          </label>
+        </div>
       )}
     </div>
   );

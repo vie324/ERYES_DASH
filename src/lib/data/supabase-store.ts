@@ -11,6 +11,7 @@ import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
 import type {
   AbsenceReport,
   AppSetting,
+  PushSubscriptionRow,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -33,6 +34,7 @@ import type {
   DailyReport,
   DailyReportInput,
   DataStore,
+  DayoffInput,
   DayoffRequest,
   EniReport,
   ExecNoticeCheck,
@@ -55,6 +57,7 @@ import type {
   SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
+  ShiftDayRequest,
   ShiftRequest,
   ShiftRequestMonth,
   ShiftRules,
@@ -197,6 +200,8 @@ const mapDayoffRequest = (r: Row): DayoffRequest => ({
   id: r.id,
   staffId: r.staff_id,
   date: r.date,
+  reason: r.reason ?? "",
+  paidLeave: r.paid_leave ?? false,
   createdAt: new Date(r.created_at),
 });
 
@@ -251,6 +256,8 @@ const mapMeeting = (r: Row): Meeting => ({
   participants: Array.isArray(r.participants) ? r.participants : [],
   minutesText: r.minutes_text ?? "",
   minutesPhoto: r.minutes_photo ?? "",
+  minutesFile: r.minutes_file ?? "",
+  minutesFileName: r.minutes_file_name ?? "",
   minutesAi: r.minutes_ai ?? false,
   minutesDone: r.minutes_done ?? false,
   createdBy: r.created_by,
@@ -502,6 +509,8 @@ const mapShiftRequest = (r: Row): ShiftRequest => ({
   targetMonth: r.target_month,
   date: r.date,
   preference: r.preference,
+  reason: r.reason ?? "",
+  paidLeave: r.paid_leave ?? false,
 });
 
 const mapShiftAssignment = (r: Row): ShiftAssignment => ({
@@ -1110,7 +1119,7 @@ class SupabaseStore implements DataStore {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftPreference>;
+    days: Record<string, ShiftDayRequest>;
     storeIds: string[];
   }): Promise<void> {
     // 月単位の提出情報をupsert（submitted_atは初回のみ、updated_atは毎回更新）
@@ -1143,11 +1152,13 @@ class SupabaseStore implements DataStore {
       .eq("staff_id", input.staffId)
       .eq("target_month", input.targetMonth);
     if (del1.error) throw new Error(`[supabase] 希望削除: ${del1.error.message}`);
-    const dayRows = Object.entries(input.days).map(([date, preference]) => ({
+    const dayRows = Object.entries(input.days).map(([date, day]) => ({
       staff_id: input.staffId,
       target_month: input.targetMonth,
       date,
-      preference,
+      preference: day.preference,
+      reason: day.reason,
+      paid_leave: day.paidLeave,
     }));
     if (dayRows.length > 0) {
       const ins1 = await this.sb.from("shift_requests").insert(dayRows);
@@ -1323,7 +1334,7 @@ class SupabaseStore implements DataStore {
     return must(data, error, "希望休一覧").map(mapDayoffRequest);
   }
 
-  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: string[]): Promise<void> {
+  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
     const from = `${targetMonth}-01`;
     const to = `${targetMonth}-31`;
     const del = await this.sb
@@ -1336,7 +1347,9 @@ class SupabaseStore implements DataStore {
     if (dates.length > 0) {
       const ins = await this.sb
         .from("dayoff_requests")
-        .insert(dates.map((date) => ({ staff_id: staffId, date })));
+        .insert(
+          dates.map((d) => ({ staff_id: staffId, date: d.date, reason: d.reason, paid_leave: d.paidLeave }))
+        );
       if (ins.error) throw new Error(`[supabase] 希望休保存: ${ins.error.message}`);
     }
   }
@@ -1535,7 +1548,10 @@ class SupabaseStore implements DataStore {
   }
 
   async createMeeting(
-    input: Omit<Meeting, "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesAi" | "minutesDone">
+    input: Omit<
+      Meeting,
+      "id" | "createdAt" | "minutesText" | "minutesPhoto" | "minutesFile" | "minutesFileName" | "minutesAi" | "minutesDone"
+    >
   ): Promise<Meeting> {
     const { data, error } = await this.sb
       .from("meetings")
@@ -1585,13 +1601,22 @@ class SupabaseStore implements DataStore {
 
   async updateMeetingMinutes(
     id: string,
-    patch: { minutesText: string; minutesPhoto: string; minutesAi: boolean; minutesDone: boolean }
+    patch: {
+      minutesText: string;
+      minutesPhoto: string;
+      minutesFile: string;
+      minutesFileName: string;
+      minutesAi: boolean;
+      minutesDone: boolean;
+    }
   ): Promise<Meeting> {
     const { data, error } = await this.sb
       .from("meetings")
       .update({
         minutes_text: patch.minutesText,
         minutes_photo: patch.minutesPhoto,
+        minutes_file: patch.minutesFile,
+        minutes_file_name: patch.minutesFileName,
         minutes_ai: patch.minutesAi,
         minutes_done: patch.minutesDone,
       })
@@ -2559,6 +2584,49 @@ class SupabaseStore implements DataStore {
   async listAppSettings(): Promise<AppSetting[]> {
     const { data, error } = await this.sb.from("app_settings").select("*");
     return must(data, error, "アプリ設定").map((r: Row) => ({ key: r.key, value: r.value ?? "" }));
+  }
+
+  async listPushSubscriptions(staffIds: string[]): Promise<PushSubscriptionRow[]> {
+    if (staffIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("push_subscriptions")
+      .select("*")
+      .in("staff_id", staffIds);
+    return must(data, error, "Push購読一覧").map((r: Row) => ({
+      id: r.id,
+      staffId: r.staff_id,
+      endpoint: r.endpoint,
+      p256dh: r.p256dh ?? "",
+      auth: r.auth ?? "",
+      userAgent: r.user_agent ?? "",
+      createdAt: new Date(r.created_at),
+    }));
+  }
+
+  async upsertPushSubscription(input: {
+    staffId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent: string;
+  }): Promise<void> {
+    const { error } = await this.sb.from("push_subscriptions").upsert(
+      {
+        staff_id: input.staffId,
+        endpoint: input.endpoint,
+        p256dh: input.p256dh,
+        auth: input.auth,
+        user_agent: input.userAgent,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "endpoint" }
+    );
+    if (error) throw new Error(`[supabase] Push購読保存: ${error.message}`);
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    const { error } = await this.sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
+    if (error) throw new Error(`[supabase] Push購読削除: ${error.message}`);
   }
 
   async setAppSetting(key: string, value: string): Promise<void> {

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
+import { notifyQuietly, pushPreview, shortName } from "@/lib/push/notify";
 
 const CARD_COLORS = ["gold", "rose", "sky", "mint"];
 
@@ -26,6 +27,12 @@ export async function createThanksAction(formData: FormData): Promise<void> {
     toStaffId,
     body,
     cardColor,
+  });
+  await notifyQuietly(db, [toStaffId], {
+    title: "💛 サンクスカードが届きました",
+    body: `${shortName(session.name)}さんから：${pushPreview(body, 60)}`,
+    url: "/staff/thanks",
+    tag: "thanks",
   });
   revalidatePath("/staff/thanks");
   redirect("/staff/thanks?saved=1");

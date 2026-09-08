@@ -16,6 +16,8 @@ export type NavItem = {
   badge?: number | string | null;
   /** ホームのように、前方一致ではなく完全一致で「現在地」を判定する項目 */
   exact?: boolean;
+  /** 外部サイト（サロンボード・カミキュラムなど）。新しいタブで開き、現在地の判定はしない */
+  external?: boolean;
 };
 
 export type NavGroup = {
@@ -34,6 +36,8 @@ export type NavContext = {
   attendanceEnabled?: boolean;
   /** 件数バッジ（未確認カウンセリング・議事録未提出など） */
   badges?: Record<string, number | null | undefined>;
+  /** 外部サービスのURL（マスタ設定）。カミキュラムは未設定なら空文字 */
+  links?: { salonBoardUrl: string; curriculumUrl: string };
 };
 
 /** 0 と undefined はバッジを出さない */
@@ -44,6 +48,21 @@ function badge(n: number | null | undefined): number | null {
 /** 空のグループを落とす */
 function compact(groups: NavGroup[]): NavGroup[] {
   return groups.filter((g) => g.items.length > 0);
+}
+
+/** AIしもん・カミキュラム（ENi共通の「学び・相談」グループ） */
+function learningGroup(ctx: NavContext): NavGroup {
+  const curriculumUrl = ctx.links?.curriculumUrl ?? "";
+  return {
+    label: "学び・相談",
+    items: [
+      { href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" },
+      // URLが未設定の間は案内ページ（/staff/curriculum）へ。設定されたら外部サイトを新しいタブで開く
+      curriculumUrl
+        ? { href: curriculumUrl, label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play", external: true }
+        : { href: "/staff/curriculum", label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play" },
+    ],
+  };
 }
 
 export function buildNav(ctx: NavContext): NavGroup[] {
@@ -195,6 +214,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote" },
       ],
     },
+    learningGroup(ctx),
     support,
   ]);
 }
@@ -316,34 +336,45 @@ function adminNav(ctx: NavContext): NavGroup[] {
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote", badge: badge(b.orders) },
       ],
     },
+    learningGroup(ctx),
     support,
   ]);
 }
 
 /**
- * スマホの下部タブ（親指で届く位置）に置く3つ。
+ * スマホの下部タブ（親指で届く位置）に置く項目。
  * 「ホーム」と「メニュー」は画面側で足すので、ここには“よく使う操作”だけを返す。
- * 並び順は、現場で1日に触る回数が多い順。
+ *  ・ENi …… サロンボード・カミキュラム・AIしもん・タスク（役割に関係なく固定）
+ *  ・EREYS …… 現場で1日に触る回数が多い順に3つ
  */
 export function buildMobileTabs(ctx: NavContext): NavItem[] {
   const groups = buildNav(ctx);
   const all = groups.flatMap((g) => g.items);
   const pick = (href: string) => all.find((i) => i.href === href);
 
+  if (ctx.brand === "eni") {
+    const learning = learningGroup(ctx).items;
+    const salonBoardUrl = ctx.links?.salonBoardUrl || "https://salonboard.com/login/";
+    const tasks = pick("/staff/tasks");
+    return [
+      { href: salonBoardUrl, label: "サロンボード", short: "サロンボード", icon: "link", external: true },
+      learning[1], // カミキュラム
+      learning[0], // AIしもん
+      ...(tasks ? [tasks] : []),
+    ];
+  }
+
   const wanted =
     ctx.role === "admin"
-      ? ctx.brand === "eyes"
-        ? ["/admin/reports", "/admin/counseling", "/admin/schedule"]
-        : ["/staff/eni-reports", "/staff/meetings", "/admin/schedule"]
-      : ctx.brand === "eyes"
-        ? ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"]
-        : ["/staff/eni-report", "/staff/weekly-report", "/staff/plan", "/staff/schedule"];
+      ? ["/admin/reports", "/admin/counseling", "/admin/schedule"]
+      : ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"];
 
   return wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3);
 }
 
-/** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致） */
-function matches(pathname: string, item: NavItem): boolean {
+/** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致。外部リンクは常に false） */
+export function matchesNav(pathname: string, item: NavItem): boolean {
+  if (item.external) return false;
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
@@ -360,7 +391,7 @@ export function findCurrent(
   let best: { group: string; item: NavItem } | null = null;
   for (const g of groups) {
     for (const item of g.items) {
-      if (!matches(pathname, item)) continue;
+      if (!matchesNav(pathname, item)) continue;
       if (!best || item.href.length > best.item.href.length) {
         best = { group: g.label, item };
       }

@@ -7,8 +7,11 @@ import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
 import { findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingType } from "@/lib/data/types";
+import { notifyQuietly, pushPreview } from "@/lib/push/notify";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+// 添付PDFの data URL の長さ上限（4MB のファイルを base64 にすると約 5.4MB）
+const MINUTES_FILE_MAX_LENGTH = 5_600_000;
 
 /** ミーティングの登録（会議体テンプレート／1on1／その他） */
 export async function createMeetingAction(formData: FormData): Promise<void> {
@@ -48,7 +51,7 @@ export async function createMeetingAction(formData: FormData): Promise<void> {
   redirect(`/staff/meetings?month=${month}&saved=created`);
 }
 
-/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／タスク／写真 */
+/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／タスク／写真／添付ファイル */
 export async function saveMeetingMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
@@ -56,6 +59,13 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   const minutesText = String(formData.get("minutes_text") ?? "").trim().slice(0, 12000);
   const photoRaw = String(formData.get("minutes_photo") ?? "");
   const minutesPhoto = photoRaw.startsWith("data:image/") ? photoRaw.slice(0, 2_500_000) : "";
+  // 添付ファイルはPDFのみ（トークルームの添付と同じ上限）
+  const fileRaw = String(formData.get("minutes_file") ?? "");
+  const minutesFile =
+    /^data:application\/pdf;base64,/.test(fileRaw) && fileRaw.length <= MINUTES_FILE_MAX_LENGTH ? fileRaw : "";
+  const minutesFileName = minutesFile
+    ? String(formData.get("minutes_file_name") ?? "").trim().slice(0, 120) || "資料.pdf"
+    : "";
   const aiFlag = String(formData.get("ai_flag") ?? "") === "1";
 
   const db = getDataStore();
@@ -80,13 +90,34 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
     };
   });
 
+  // 今回の保存で新しく担当になった人にだけ通知する（保存し直すたびに鳴らさない）
+  const before = await db.listMeetingTasks([id]);
+  const newlyAssigned = new Map<string, string[]>();
+  for (const t of tasks) {
+    if (!t.assigneeStaffId || t.assigneeStaffId === session.staffId) continue;
+    if (before.some((b) => b.assigneeStaffId === t.assigneeStaffId && b.title === t.title)) continue;
+    newlyAssigned.set(t.assigneeStaffId, [...(newlyAssigned.get(t.assigneeStaffId) ?? []), t.title]);
+  }
+
   await db.updateMeetingMinutes(id, {
     minutesText,
     minutesPhoto,
+    minutesFile,
+    minutesFileName,
     minutesAi: aiFlag || meeting!.minutesAi,
-    minutesDone: Boolean(minutesText || minutesPhoto),
+    minutesDone: Boolean(minutesText || minutesPhoto || minutesFile),
   });
   await db.replaceMeetingTasks(id, tasks);
+  await Promise.all(
+    [...newlyAssigned].map(([staffId, titles]) =>
+      notifyQuietly(db, [staffId], {
+        title: "議事録のタスクが割り当てられました",
+        body: pushPreview(titles.join("／")),
+        url: "/staff/tasks",
+        tag: "meeting-task",
+      })
+    )
+  );
   revalidatePath("/staff/meetings");
   redirect(`/staff/meetings?month=${month}&saved=minutes`);
 }

@@ -7,6 +7,7 @@
 // マークの仕様：棒は最大24px・データ端だけ4px角丸・目盛りは1pxのソリッド・隣接は2pxの余白で分ける。
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 /** ブランドゴールドの連続ランプ（薄→濃）。明度が単調に下がることを確認済み */
 export const RAMP = ["#e7ddc4", "#d5c6a0", "#c0ab7e", "#a99668", "#79684a"] as const;
@@ -28,7 +29,10 @@ function compact(n: number): string {
 
 // ---------------------------------------------------------------- スタットタイル
 
-/** 単一の数字（＋前期比）。グラフにするほどでもない見出しの数字はこれで出す */
+/**
+ * 単一の数字（＋前期比）。グラフにするほどでもない見出しの数字はこれで出す。
+ * href を渡すとタイル全体がリンクになり、タップでその画面へ飛べる（右下に「›」を出す）。
+ */
 export function StatTile({
   label,
   value,
@@ -37,6 +41,7 @@ export function StatTile({
   sub,
   tone = "default",
   spark,
+  href,
 }: {
   label: string;
   value: string | number;
@@ -47,6 +52,8 @@ export function StatTile({
   tone?: "default" | "accent" | "good" | "warning" | "critical";
   /** 小さな推移（スパークライン）用の数値列 */
   spark?: number[];
+  /** タップで飛ぶ先（省略時はただの表示） */
+  href?: string;
 }) {
   const valueColor =
     tone === "accent"
@@ -70,10 +77,16 @@ export function StatTile({
             ? "from-red-300 to-red-500"
             : "from-ink-200 to-ink-300";
 
-  return (
-    <div className="card relative overflow-hidden !p-3.5 flex flex-col justify-between animate-fade-up">
+  const baseClass = "card relative overflow-hidden !p-3.5 flex flex-col justify-between animate-fade-up";
+  const body = (
+    <>
       <span className={`absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r ${accentBar}`} />
-      <p className="text-[11px] font-bold text-ink-500 leading-tight">{label}</p>
+      <p className="text-[11px] font-bold text-ink-500 leading-tight pr-4">{label}</p>
+      {href && (
+        <span className="absolute right-2.5 top-2.5 text-ink-300 text-base leading-none" aria-hidden="true">
+          ›
+        </span>
+      )}
       <div className="mt-1.5 flex items-end gap-1.5">
         <span className={`font-display text-2xl leading-none font-bold ${valueColor}`}>{value}</span>
         {unit && <span className="text-[11px] font-bold text-ink-500 mb-0.5">{unit}</span>}
@@ -94,8 +107,21 @@ export function StatTile({
       </div>
       {spark && spark.length > 1 && <Sparkline values={spark} />}
       {sub && <p className="text-[10px] text-ink-400 mt-1 leading-tight">{sub}</p>}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${baseClass} transition-colors active:bg-brand-50 hover:border-brand-300`}
+        aria-label={`${label}を開く`}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className={baseClass}>{body}</div>;
 }
 
 /** スタットタイルに添える小さな推移線 */

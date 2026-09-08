@@ -36,12 +36,14 @@ export interface DashboardViewer {
   isExec: boolean;
   /** 配色キー（lib/theme.ts） */
   themeColor: string;
+  /** 全体管理者（管理者画面の一覧へ飛ばす） */
+  isAdmin?: boolean;
 }
 
 export async function Dashboard({ brand, viewer }: { brand: Brand; viewer: DashboardViewer }) {
   return (
     <div className="dash-themed" style={themeVars(viewer.themeColor)}>
-      {brand === "eyes" ? <EyesDashboard /> : <EniDashboard viewer={viewer} />}
+      {brand === "eyes" ? <EyesDashboard viewer={viewer} /> : <EniDashboard viewer={viewer} />}
     </div>
   );
 }
@@ -54,8 +56,11 @@ function deltaPct(current: number, previous: number): number | null {
 
 // ================================================================ EREYS
 
-async function EyesDashboard() {
+async function EyesDashboard({ viewer }: { viewer: DashboardViewer }) {
   const db = getDataStore();
+  // タイルのタップ先：管理者は全体の一覧、スタッフは自分の画面へ
+  const statsHref = viewer.isAdmin ? "/admin/reports" : "/staff/stats";
+  const counselingHref = viewer.isAdmin ? "/admin/counseling" : "/staff/counseling";
   const today = todayJst();
   const month = thisMonthJst();
   const prevMonth = addMonths(month, -1);
@@ -119,6 +124,7 @@ async function EyesDashboard() {
           tone="accent"
           spark={trend.map((t) => t.value)}
           sub={`前月 ${formatYen(prevKpi.totalSales)}`}
+          href={statsHref}
         />
         <StatTile
           label="今月の施術人数"
@@ -126,6 +132,7 @@ async function EyesDashboard() {
           unit="人"
           delta={deltaPct(kpi.totalClients, prevKpi.totalClients)}
           sub={`新規 ${kpi.newClients}／既存 ${kpi.repeatClients}`}
+          href={statsHref}
         />
         <StatTile
           label="次回予約率"
@@ -133,6 +140,7 @@ async function EyesDashboard() {
           unit={kpi.rebookRate === null ? undefined : "%"}
           sub={`次回予約 ${kpi.nextBookings}件`}
           tone={kpi.rebookRate !== null && kpi.rebookRate >= 0.5 ? "good" : "default"}
+          href={statsHref}
         />
         <StatTile
           label="未確認のカウンセリング"
@@ -140,6 +148,7 @@ async function EyesDashboard() {
           unit="件"
           tone={counselingPending.length > 0 ? "warning" : "good"}
           sub={counselingPending.length > 0 ? "接客前に確認してください" : "すべて確認済みです"}
+          href={counselingHref}
         />
       </div>
 
@@ -241,6 +250,8 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
   // スタイリスト以上は練習時間を入力しないので、自分の練習時間は出さない。
   const seesEveryonePractice = viewer.isExec || viewer.jobType === "stylist";
   const seesOwnPractice = viewer.jobType === "assistant";
+  // タイルのタップ先：アシスタントは自分の週報、それ以外はみんなの週報一覧
+  const weeklyHref = seesOwnPractice ? "/staff/weekly-report" : "/staff/eni-reports?tab=weekly";
 
   // 今週の週報の提出状況
   const thisWeekReports = weeklyReports.filter((r) => r.periodKey === thisWeek);
@@ -315,6 +326,7 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
             assistants.length > 0 && thisWeekReports.length >= assistants.length ? "good" : "warning"
           }
           sub="今週分の提出状況"
+          href={weeklyHref}
         />
         {seesOwnPractice ? (
           <StatTile
@@ -324,6 +336,7 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
             spark={myPracticeTrend.map((t) => t.value)}
             tone="accent"
             sub="練習・SNS・その他の合計"
+            href="/staff/weekly-report"
           />
         ) : (
           <StatTile
@@ -333,6 +346,7 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
             spark={practiceTrend.map((t) => t.value)}
             tone="accent"
             sub="練習・SNS・その他の合計"
+            href="/staff/eni-reports?tab=weekly"
           />
         )}
         <StatTile
@@ -341,6 +355,7 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
           unit="件"
           tone={heldMeetings.length - minutesDone > 0 ? "critical" : "good"}
           sub={`実施 ${heldMeetings.length}件中`}
+          href="/staff/meetings"
         />
         <StatTile
           label="未完了のタスク"
@@ -348,6 +363,7 @@ async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
           unit="件"
           tone={overdue > 0 ? "critical" : openTasks.length > 0 ? "warning" : "good"}
           sub={overdue > 0 ? `うち期限切れ ${overdue}件` : "期限内です"}
+          href="/staff/tasks"
         />
       </div>
 

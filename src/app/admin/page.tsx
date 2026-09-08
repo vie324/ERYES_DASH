@@ -65,6 +65,7 @@ export default async function AdminHomePage() {
               staffId: session.staffId,
               jobType: me?.jobType ?? "",
               isExec: true,
+              isAdmin: true,
               themeColor: me?.themeColor ?? "",
             }}
           />
