@@ -139,6 +139,11 @@ function parseNicknameLines(text: string, into: Map<string, string>): void {
   }
 }
 
+/** 呼び名のセルから呼び名だけを取り出す（「**もか**／萌花」のような併記は先頭を使う） */
+function cleanCallName(cell: string): string {
+  return cell.split(/[／/・]/)[0].replace(/\*/g, "").trim();
+}
+
 /**
  * 「| 氏名 | しもんの呼び方 |」形式（07_スタッフ呼称 が表の場合）を拾う。
  * 見出し行に「氏名/名前」と「呼び方/呼称/呼び名」の両方が無い表は、取り違えを避けるため丸ごと無視する。
@@ -162,8 +167,9 @@ function parseTablePairs(text: string, into: Map<string, string>): void {
     }
     if (callCol < 0 || nameCol < 0) continue;
     const name = cells[nameCol];
-    const call = cells[callCol]?.replace(/\*/g, "").trim();
-    if (name && call && !/^[-—―]$/.test(call)) into.set(nameKey(name), call);
+    const call = cleanCallName(cells[callCol] ?? "");
+    // 呼び名として成立する形だけを採る（空欄「—」や注記が入った行を弾く）
+    if (name && /^[一-龥々ぁ-んァ-ヶー]{1,10}$/.test(call)) into.set(nameKey(name), call);
   }
 }
 
@@ -171,11 +177,14 @@ function loadNicknames(system: string, knowledge: Map<string, string>): Map<stri
   const map = new Map<string, string>();
   // 01の呼称表 →（あれば）07の正本 の順に読み、後から読んだ方で上書きする
   parseNicknameLines(system, map);
-  // 07は呼称だけのファイルなので全体を読む（表・矢印のどちらの書式でも拾えるようにする）
+  // 07は呼称だけのファイルなので全体を読む。まず表として読み、表が無い書式のときだけ矢印で拾う
+  //（07には「「根来です」→根来悠斗→「ゆうと」」のような説明文もあるため、表が取れたら矢印は使わない）
   const staffNames = knowledge.get("07") ?? "";
   if (staffNames) {
-    parseTablePairs(staffNames, map);
-    parseArrowPairs(staffNames, map);
+    const fromTable = new Map<string, string>();
+    parseTablePairs(staffNames, fromTable);
+    if (fromTable.size > 0) for (const [k, v] of fromTable) map.set(k, v);
+    else parseArrowPairs(staffNames, map);
   }
   return map;
 }
