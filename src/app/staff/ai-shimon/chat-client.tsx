@@ -18,10 +18,10 @@ interface Turn {
 const MAX_TURNS = 30;
 
 const EXAMPLES = [
-  "後輩が同じミスを繰り返してて、どう言えばいいか分からない",
-  "店販の提案が押し売りっぽくなっちゃう",
-  "自分がこの先どうなりたいのか分からなくなってきた",
-  "今日はもう疲れました",
+  "テストなかなか受からない、悔しい。どうすれば次受かれるかな。",
+  "商品やメニューの提案がなかなかうまくできない",
+  "発信者に回るためにはもっとどうすれば良いかな？",
+  "〇〇さんに言われた事がよく分からなくて、どう捉えたらいいだろう",
 ];
 
 export function AiShimonChat({
@@ -189,8 +189,8 @@ export function AiShimonChat({
             <div className="min-w-0">
               <p className="font-display font-bold text-ink-900">しもんの考え方をベースにした、みんなの壁打ち相手です</p>
               <p className="text-sm text-ink-600 mt-1 leading-relaxed">
-                一人で抱えて止まってしまう時間を減らして、次の一歩を自分で決められるように。
-                後輩のこと、自分のこと、お客様のこと、なんでも大丈夫。愚痴だけでも大丈夫です。
+                一人で抱えて止まってしまう時間を減らして、的確な次の一歩が見えるように。
+                後輩のこと、自分のこと、お客様のこと、なんでも大丈夫。話してくれたら喜ぶよ♡
               </p>
             </div>
           </div>
@@ -253,7 +253,7 @@ export function AiShimonChat({
             onKeyDown={onKeyDown}
             rows={2}
             disabled={!ready}
-            placeholder={ready ? "話し言葉のままで大丈夫。ゆっくりでいいよ" : "準備中です"}
+            placeholder={ready ? "言葉がまとまってなくても大丈夫。話してみて。" : "準備中です"}
             aria-label="相談内容"
             className="w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed outline-none placeholder:text-ink-300 disabled:opacity-60"
           />
