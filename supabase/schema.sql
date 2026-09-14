@@ -489,6 +489,20 @@ create table if not exists thanks_comments (
   created_at timestamptz not null default now()
 );
 
+-- 会社のイベント・全体で共有しておきたい予定（勉強会・全体ミーティング・ENi会など）。
+-- 出勤シフトとは別。全員が見られて、登録は幹部・管理者のみ。
+create table if not exists company_events (
+  id uuid primary key default gen_random_uuid(),
+  start_date date not null,
+  end_date date not null,
+  start_time text not null default '',          -- "10:00"。空なら終日
+  title text not null,
+  body text not null default '',
+  required boolean not null default true,       -- 全員参加か
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now()
+);
+
 -- 日報・週報へのコメント（複数人が重ねて書ける）。
 -- 以前は eni_reports.comment の1枠しか無く、別の人が書くと前のコメントが消えていた。
 create table if not exists eni_report_comments (
@@ -704,6 +718,7 @@ create index if not exists idx_manager_routines_sort on manager_routines (cycle,
 create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
+create index if not exists idx_company_events_period on company_events (start_date, end_date);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、

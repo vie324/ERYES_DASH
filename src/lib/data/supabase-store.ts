@@ -38,6 +38,7 @@ import type {
   DayoffRequest,
   EniReport,
   EniReportComment,
+  CompanyEvent,
   ExecNoticeCheck,
   IdealSchedule,
   ManagerRoutine,
@@ -489,6 +490,18 @@ const mapBroadcast = (r: Row): Broadcast => ({
   recipientCount: r.recipient_count,
 });
 
+const mapCompanyEvent = (r: Row): CompanyEvent => ({
+  id: r.id,
+  startDate: r.start_date,
+  endDate: r.end_date,
+  startTime: r.start_time,
+  title: r.title,
+  body: r.body,
+  required: r.required,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+});
+
 const mapEniReportComment = (r: Row): EniReportComment => ({
   id: r.id,
   reportId: r.report_id,
@@ -753,6 +766,7 @@ class SupabaseStore implements DataStore {
       ["meetings", "created_by"],
       ["staff_tasks", "created_by"],
       ["chat_rooms", "created_by"],
+      ["company_events", "created_by"],
       ["absence_reports", "reported_by"],
     ] as const) {
       await reassign(table, column);
@@ -1545,6 +1559,47 @@ class SupabaseStore implements DataStore {
       .update({ comment, commented_by: commentedBy })
       .eq("id", id);
     if (error) throw new Error(`[supabase] 上司コメント保存: ${error.message}`);
+  }
+
+  async listCompanyEvents(filter: { from: string; to: string }): Promise<CompanyEvent[]> {
+    const { data, error } = await this.sb
+      .from("company_events")
+      .select("*")
+      .lte("start_date", filter.to)
+      .gte("end_date", filter.from)
+      .order("start_date", { ascending: true })
+      .order("start_time", { ascending: true });
+    return must(data, error, "会社の予定一覧").map(mapCompanyEvent);
+  }
+
+  async getCompanyEvent(id: string): Promise<CompanyEvent | null> {
+    const { data, error } = await this.sb.from("company_events").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(`[supabase] 会社の予定取得: ${error.message}`);
+    return data ? mapCompanyEvent(data) : null;
+  }
+
+  async upsertCompanyEvent(
+    input: Omit<CompanyEvent, "id" | "createdAt"> & { id?: string }
+  ): Promise<CompanyEvent> {
+    const row = {
+      start_date: input.startDate,
+      end_date: input.endDate,
+      start_time: input.startTime,
+      title: input.title,
+      body: input.body,
+      required: input.required,
+      created_by: input.createdBy,
+    };
+    const query = input.id
+      ? this.sb.from("company_events").update(row).eq("id", input.id)
+      : this.sb.from("company_events").insert(row);
+    const { data, error } = await query.select().single();
+    return mapCompanyEvent(must(data, error, "会社の予定保存"));
+  }
+
+  async deleteCompanyEvent(id: string): Promise<void> {
+    const { error } = await this.sb.from("company_events").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 会社の予定削除: ${error.message}`);
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {

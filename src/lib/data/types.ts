@@ -617,6 +617,27 @@ export interface ThanksComment {
   createdAt: Date;
 }
 
+/**
+ * 会社のイベント・全体で共有しておきたい予定（全員が見る。登録は幹部・管理者）。
+ * 出勤シフトとは別で、勉強会・全体ミーティング・ENi会・研修などを置く場所。
+ */
+export interface CompanyEvent {
+  id: string;
+  /** 開始日 "YYYY-MM-DD" */
+  startDate: string;
+  /** 終了日 "YYYY-MM-DD"（1日だけなら開始日と同じ） */
+  endDate: string;
+  /** 時間（"10:00" など。終日なら空文字） */
+  startTime: string;
+  title: string;
+  /** 場所・持ち物・補足 */
+  body: string;
+  /** 全員参加か（false なら任意参加・共有だけ） */
+  required: boolean;
+  createdBy: string;
+  createdAt: Date;
+}
+
 /** 予約表（タイムテーブル）の1件。d=曜日index（1日だけの場合は0）、s/e="HH:mm" */
 export interface ScheduleBlock {
   d: number;
@@ -885,6 +906,14 @@ export interface DataStore {
     filter: { staffId?: string; from: string; to: string }
   ): Promise<EniReport[]>;
   /** 上司コメントの保存 */
+  /** 会社のイベント・全体予定（期間が重なるものを開始日順で返す） */
+  listCompanyEvents(filter: { from: string; to: string }): Promise<CompanyEvent[]>;
+  getCompanyEvent(id: string): Promise<CompanyEvent | null>;
+  upsertCompanyEvent(
+    input: Omit<CompanyEvent, "id" | "createdAt"> & { id?: string }
+  ): Promise<CompanyEvent>;
+  deleteCompanyEvent(id: string): Promise<void>;
+
   commentEniReport(id: string, comment: string, commentedBy: string): Promise<void>;
   /** 日報・週報のコメント（複数人が書ける。古い順） */
   listEniReportComments(reportIds: string[]): Promise<EniReportComment[]>;

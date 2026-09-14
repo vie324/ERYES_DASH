@@ -127,6 +127,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
         ],
       },
       execGroup,
@@ -191,6 +192,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
           badge: badge(b.minutes),
         },
         { href: "/staff/meetings/committees", label: "会議体の一覧", icon: "book" },
+        { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
         // 組織図は管理者・幹部のみ（それ以外には見せない）
         ...(ctx.isExecutive
           ? [
@@ -279,6 +281,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
         ],
       },
       execGroup,
@@ -318,6 +321,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
           badge: badge(b.minutes),
         },
         { href: "/staff/meetings/committees", label: "会議体の一覧", icon: "book" },
+        { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
         { href: "/staff/org", label: "組織図", icon: "share" },
       ],
     },

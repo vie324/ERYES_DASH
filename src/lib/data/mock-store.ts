@@ -39,6 +39,7 @@ import type {
   DayoffRequest,
   EniReport,
   EniReportComment,
+  CompanyEvent,
   ExecNoticeCheck,
   IdealSchedule,
   ManagerRoutine,
@@ -124,6 +125,7 @@ interface MockDb {
   thanksLikes: ThanksLike[];
   thanksComments: ThanksComment[];
   eniReportComments: EniReportComment[];
+  companyEvents: CompanyEvent[];
 }
 
 /**
@@ -1078,6 +1080,7 @@ function seed(): MockDb {
     thanksLikes,
     thanksComments,
     eniReportComments: [],
+    companyEvents: [],
   };
 }
 
@@ -1241,6 +1244,7 @@ class MockStore implements DataStore {
         }
         for (const t of d.staffTasks) if (t.createdBy === id) t.createdBy = to;
         for (const r of d.chatRooms) if (r.createdBy === id) r.createdBy = to;
+        for (const e of d.companyEvents) if (e.createdBy === id) e.createdBy = to;
         for (const r of d.absenceReports) if (r.reportedBy === id) r.reportedBy = to;
       }
       // 本人にひもづくだけのもの（DBでは cascade 相当）
@@ -1857,6 +1861,55 @@ class MockStore implements DataStore {
       found.comment = comment;
       found.commentedBy = commentedBy;
     }
+  }
+
+  async listCompanyEvents(filter: { from: string; to: string }): Promise<CompanyEvent[]> {
+    // 期間が少しでも重なるものを拾う（複数日にまたがるイベントも月をまたいで出す）
+    return this.db.companyEvents
+      .filter((e) => e.startDate <= filter.to && e.endDate >= filter.from)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.startTime.localeCompare(b.startTime))
+      .map((e) => ({ ...e }));
+  }
+
+  async getCompanyEvent(id: string): Promise<CompanyEvent | null> {
+    const found = this.db.companyEvents.find((e) => e.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async upsertCompanyEvent(
+    input: Omit<CompanyEvent, "id" | "createdAt"> & { id?: string }
+  ): Promise<CompanyEvent> {
+    if (input.id) {
+      const found = this.db.companyEvents.find((e) => e.id === input.id);
+      if (found) {
+        Object.assign(found, {
+          startDate: input.startDate,
+          endDate: input.endDate,
+          startTime: input.startTime,
+          title: input.title,
+          body: input.body,
+          required: input.required,
+        });
+        return { ...found };
+      }
+    }
+    const created: CompanyEvent = {
+      id: randomUUID(),
+      startDate: input.startDate,
+      endDate: input.endDate,
+      startTime: input.startTime,
+      title: input.title,
+      body: input.body,
+      required: input.required,
+      createdBy: input.createdBy,
+      createdAt: new Date(),
+    };
+    this.db.companyEvents.push(created);
+    return { ...created };
+  }
+
+  async deleteCompanyEvent(id: string): Promise<void> {
+    this.db.companyEvents = this.db.companyEvents.filter((e) => e.id !== id);
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {
