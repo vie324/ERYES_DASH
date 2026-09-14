@@ -489,6 +489,16 @@ create table if not exists thanks_comments (
   created_at timestamptz not null default now()
 );
 
+-- 日報・週報へのコメント（複数人が重ねて書ける）。
+-- 以前は eni_reports.comment の1枠しか無く、別の人が書くと前のコメントが消えていた。
+create table if not exists eni_report_comments (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references eni_reports(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
 -- 今日のスケジュール（1人1日1件）。構造化フォーム or スケジュール帳の写真。
 -- fields: { goal, horenso, todo, timetable } ／ seen_by: ペアの先輩が確認したら記録
 create table if not exists daily_plans (
@@ -693,6 +703,7 @@ create index if not exists idx_committees_sort on committees (sort_order);
 create index if not exists idx_manager_routines_sort on manager_routines (cycle, sort_order);
 create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
+create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、

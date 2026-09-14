@@ -424,13 +424,6 @@ async function eniMenuItems(
             short: "組織図",
             description: "チームの役割・メンバー・会議体のつながりを見る",
           },
-          {
-            href: "/staff/practice",
-            icon: "sparkles" as IconName,
-            title: "練習ペアの設定（幹部）",
-            short: "練習ペア",
-            description: "今月のペア（誰に付いてもらうか）の割当",
-          },
         ]
       : []),
   ];

@@ -288,6 +288,19 @@ export interface EniReport {
   updatedAt: Date;
 }
 
+/**
+ * 日報・週報へのコメント（1件＝1人の1コメント）。
+ * 以前は EniReport.comment の1枠しか無く、別の人が書くと前のコメントが消えていた。
+ * スタイリスト同士が重ねてコメントできるよう、行を足していく形にしている。
+ */
+export interface EniReportComment {
+  id: string;
+  reportId: string;
+  staffId: string;
+  body: string;
+  createdAt: Date;
+}
+
 /** 練習記録（月間活動記録表のシステム化。1回の練習＝1行） */
 export interface PracticeRecord {
   id: string;
@@ -730,7 +743,14 @@ export interface DataStore {
     }
   ): Promise<Staff>;
   /** スタッフを削除。関連データ（日報・打刻等）がある場合はエラー */
-  deleteStaff(id: string): Promise<void>;
+  /**
+   * スタッフを削除する。
+   * 既定（force なし）は記録が1件でもあれば拒否する。
+   * force を付けると、本人の記録（日報・打刻・シフト希望など）は消し、
+   * チームの共有物（トークルーム・議事録・一斉配信・タスクなど）は消さずに
+   * reassignTo のスタッフへ引き継ぐ。
+   */
+  deleteStaff(id: string, options?: { force?: boolean; reassignTo?: string }): Promise<void>;
 
   // 顧客
   listCustomers(search?: string): Promise<Customer[]>;
@@ -866,6 +886,11 @@ export interface DataStore {
   ): Promise<EniReport[]>;
   /** 上司コメントの保存 */
   commentEniReport(id: string, comment: string, commentedBy: string): Promise<void>;
+  /** 日報・週報のコメント（複数人が書ける。古い順） */
+  listEniReportComments(reportIds: string[]): Promise<EniReportComment[]>;
+  addEniReportComment(reportId: string, staffId: string, body: string): Promise<EniReportComment>;
+  /** 自分のコメントを消す（staffId が一致しないときは何もしない） */
+  deleteEniReportComment(id: string, staffId: string): Promise<void>;
 
   // 練習記録・ペア
   createPracticeRecord(input: Omit<PracticeRecord, "id" | "createdAt">): Promise<PracticeRecord>;

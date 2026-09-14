@@ -195,7 +195,6 @@ function staffNav(ctx: NavContext): NavGroup[] {
         ...(ctx.isExecutive
           ? [
               { href: "/staff/org", label: "組織図", icon: "share" as IconName },
-              { href: "/staff/practice", label: "練習ペアの設定", icon: "sparkles" as IconName },
             ]
           : []),
       ],
@@ -303,7 +302,6 @@ function adminNav(ctx: NavContext): NavGroup[] {
       label: "記録・育成",
       items: [
         { href: "/staff/eni-reports", label: "みんなの日報・週報を見る", short: "日報週報", icon: "fileText" },
-        { href: "/staff/practice", label: "練習ペアの設定", icon: "sparkles" },
       ],
     },
     {

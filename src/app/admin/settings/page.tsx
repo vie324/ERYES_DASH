@@ -321,6 +321,35 @@ export default async function AdminSettingsPage({
                   <p className="text-[11px] text-ink-400">
                     ※ 日報・打刻・シフト等の記録があるスタッフは削除できません。退職時は上の「有効」をオフ（記録は残ります）。
                   </p>
+
+                  {/* 強制削除：記録ごと消す。取り違え防止にログインIDの入力も求める */}
+                  <details className="mt-2 pt-2 border-t border-red-100">
+                    <summary className="cursor-pointer text-[11px] font-bold text-red-600">
+                      記録があっても強制的に削除する
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      <p className="text-[11px] text-ink-500 leading-relaxed">
+                        本人の記録（日報・打刻・シフト希望・発注・トークの発言など）は
+                        <span className="font-bold text-red-600">すべて消えます。</span>
+                        トークルーム・議事録・一斉配信・タスクなどチームの共有物は消さず、
+                        あなたに引き継ぎます。<span className="font-bold">元に戻せません。</span>
+                      </p>
+                      <label className="block text-[11px] font-bold text-red-600">
+                        確認のため、このスタッフのログインID「{s.loginId}」を入力
+                        <input
+                          type="text"
+                          name="confirm_login_id"
+                          autoComplete="off"
+                          placeholder={s.loginId}
+                          className="input mt-1"
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-[11px] font-bold text-red-600">
+                        <input type="checkbox" name="force" className="h-4 w-4 accent-red-500" />
+                        強制削除する（記録ごと消す）
+                      </label>
+                    </div>
+                  </details>
                 </form>
               )}
             </details>

@@ -56,19 +56,3 @@ export async function deletePracticeRecordAction(formData: FormData): Promise<vo
   redirect(`/staff/practice?month=${month}&saved=deleted`);
 }
 
-/** 練習ペアの設定（幹部・管理者のみ。partner未選択で解除） */
-export async function setPracticePairAction(formData: FormData): Promise<void> {
-  const session = await requireSession();
-  if (!(await isExecutive(session))) redirect("/staff/practice?error=forbidden");
-
-  const targetMonth = String(formData.get("target_month") ?? "");
-  const memberStaffId = String(formData.get("member_staff_id") ?? "");
-  const partnerStaffId = String(formData.get("partner_staff_id") ?? "");
-  if (!/^\d{4}-\d{2}$/.test(targetMonth) || !memberStaffId) {
-    redirect("/staff/practice?error=input");
-  }
-
-  await getDataStore().setPracticePair(targetMonth, memberStaffId, partnerStaffId);
-  revalidatePath("/staff/practice");
-  redirect(`/staff/practice?month=${targetMonth}&saved=pair`);
-}

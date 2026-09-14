@@ -283,15 +283,37 @@ export async function deleteStaffAction(formData: FormData): Promise<void> {
   if (formData.get("confirm") !== "on") {
     redirect(`/admin/settings?msg=${encodeURIComponent("削除するには確認チェックを入れてください")}&t=error`);
   }
+  // 強制削除：記録があっても消す。取り消せないので、ログインIDの入力も求める
+  const force = formData.get("force") === "on";
+  const db = getDataStore();
+  if (force) {
+    const typed = String(formData.get("confirm_login_id") ?? "").trim();
+    const target = await db.getStaff(id);
+    if (!target) {
+      redirect(`/admin/settings?msg=${encodeURIComponent("スタッフが見つかりません")}&t=error`);
+    }
+    if (typed !== target.loginId) {
+      redirect(
+        `/admin/settings?msg=${encodeURIComponent("強制削除するには、そのスタッフのログインIDを正しく入力してください")}&t=error`
+      );
+    }
+  }
+
   let errorMsg = "";
   try {
-    await getDataStore().deleteStaff(id);
+    await db.deleteStaff(id, force ? { force: true, reassignTo: session.staffId } : undefined);
   } catch (e) {
     errorMsg = e instanceof Error ? e.message : "削除に失敗しました";
   }
   revalidatePath("/admin/settings");
   if (errorMsg) redirect(`/admin/settings?msg=${encodeURIComponent(errorMsg)}&t=error`);
-  redirect(`/admin/settings?msg=${encodeURIComponent("スタッフを削除しました")}&t=ok`);
+  redirect(
+    `/admin/settings?msg=${encodeURIComponent(
+      force
+        ? "スタッフを強制削除しました（トークルーム・議事録などの共有物はあなたに引き継ぎました）"
+        : "スタッフを削除しました"
+    )}&t=ok`
+  );
 }
 
 
