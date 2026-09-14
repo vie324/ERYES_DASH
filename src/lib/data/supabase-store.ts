@@ -492,6 +492,7 @@ const mapShiftRules = (r: Row): ShiftRules => ({
   maxConsecutiveDays: r.max_consecutive_days,
   minStaffPerStoreDay: r.min_staff_per_store_per_day,
   requestDeadlineDay: r.request_deadline_day,
+  requestLeadMonths: r.request_lead_months ?? 3,
 });
 
 const mapShiftRequestMonth = (r: Row): ShiftRequestMonth => ({
@@ -1106,6 +1107,7 @@ class SupabaseStore implements DataStore {
     if (patch.minStaffPerStoreDay !== undefined)
       row.min_staff_per_store_per_day = patch.minStaffPerStoreDay;
     if (patch.requestDeadlineDay !== undefined) row.request_deadline_day = patch.requestDeadlineDay;
+    if (patch.requestLeadMonths !== undefined) row.request_lead_months = patch.requestLeadMonths;
     const { data, error } = await this.sb
       .from("shift_rules")
       .update(row)

@@ -103,11 +103,13 @@ export async function updateShiftRulesAction(formData: FormData): Promise<void> 
   const maxConsecutiveDays = Number(formData.get("max_consecutive_days"));
   const minStaffPerStoreDay = Number(formData.get("min_staff_per_store_per_day"));
   const requestDeadlineDay = Number(formData.get("request_deadline_day"));
+  const requestLeadMonths = Number(formData.get("request_lead_months"));
 
   if (
     !Number.isInteger(maxConsecutiveDays) || maxConsecutiveDays < 1 || maxConsecutiveDays > 30 ||
     !Number.isInteger(minStaffPerStoreDay) || minStaffPerStoreDay < 0 || minStaffPerStoreDay > 20 ||
-    !Number.isInteger(requestDeadlineDay) || requestDeadlineDay < 1 || requestDeadlineDay > 28
+    !Number.isInteger(requestDeadlineDay) || requestDeadlineDay < 1 || requestDeadlineDay > 28 ||
+    !Number.isInteger(requestLeadMonths) || requestLeadMonths < 1 || requestLeadMonths > 12
   ) {
     redirect("/admin/shift/settings?error=input");
   }
@@ -116,6 +118,7 @@ export async function updateShiftRulesAction(formData: FormData): Promise<void> 
     maxConsecutiveDays,
     minStaffPerStoreDay,
     requestDeadlineDay,
+    requestLeadMonths,
   });
   revalidatePath("/admin/shift/settings");
   revalidateShift();

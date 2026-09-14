@@ -9,6 +9,7 @@ import {
   STYLIST_REPORT_TEXTS,
   capacityMinutes,
   formatEniAnswer,
+  formatMinutesJa,
   normalizeTiers,
   rebookRateOf,
   utilizationOf,
@@ -229,7 +230,7 @@ function StylistView({ answers, tiers }: { answers: Record<string, unknown>; tie
           <span><span className="text-xs text-ink-500">次回予約</span> <span className="font-bold">{nextBookings}件</span></span>
         )}
         {service !== null && service > 0 && (
-          <span><span className="text-xs text-ink-500">入客時間</span> <span className="font-bold">{service}分</span></span>
+          <span><span className="text-xs text-ink-500">入客時間</span> <span className="font-bold">{formatMinutesJa(service)}</span></span>
         )}
         {STYLIST_REPORT_NUMBERS.map((item) => (
           <span key={item.key}>

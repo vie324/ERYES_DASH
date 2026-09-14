@@ -190,7 +190,8 @@ create table if not exists shift_rules (
   id integer primary key default 1 check (id = 1),
   max_consecutive_days integer not null default 5,          -- 連勤上限
   min_staff_per_store_per_day integer not null default 2,   -- 各店舗・各日の最低人数（日単位）
-  request_deadline_day integer not null default 25          -- 希望締切＝対象月の前月◯日
+  request_deadline_day integer not null default 5,          -- 希望締切＝対象月の◯ヶ月前の◯日
+  request_lead_months integer not null default 3            -- 何ヶ月先の分を募集するか（3＝9月5日までに12月分）
 );
 
 -- シフト希望（月単位：備考・提出日時）
@@ -615,6 +616,11 @@ alter table meetings add column if not exists participants jsonb not null defaul
 alter table meetings add column if not exists minutes_ai boolean not null default false;
 alter table meetings add column if not exists minutes_file text not null default '';
 alter table meetings add column if not exists minutes_file_name text not null default '';
+
+-- シフトルール：募集の先行月数（3ヶ月先の分を出す運用に変更）
+alter table shift_rules add column if not exists request_lead_months integer not null default 3;
+-- 締切日を25日から5日へ（既定値のままの場合だけ。管理者が変更済みならそのまま残す）
+update shift_rules set request_deadline_day = 5 where request_deadline_day = 25;
 
 -- 希望休・シフト希望：理由と有休フラグ
 alter table dayoff_requests add column if not exists reason text not null default '';

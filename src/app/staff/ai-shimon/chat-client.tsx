@@ -5,7 +5,6 @@
 //  ・履歴は端末の localStorage にだけ保存（人ごとにキーを分ける）。「新しく相談する」で消せる
 //  ・知識ファイルの本文や出典は一切クライアントに来ない（返答の文字だけ）
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 
@@ -333,7 +332,6 @@ export function AiShimonChat({
           </p>
           <p className="text-[11px] text-ink-400">
             会話の履歴はこの端末にだけ残ります（サーバーには保存しません）。
-            <Link href="/staff/help" className="underline ml-1">使い方ガイド</Link>
           </p>
         </div>
       </details>

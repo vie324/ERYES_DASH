@@ -175,7 +175,12 @@ export interface Broadcast {
 export interface ShiftRules {
   maxConsecutiveDays: number; // 連勤上限（既定5）
   minStaffPerStoreDay: number; // 各店舗・各日の最低人数（日単位・既定2）
-  requestDeadlineDay: number; // 希望提出の締切日＝対象月の前月◯日（既定25）
+  requestDeadlineDay: number; // 希望提出の締切日＝対象月の◯日（既定5）
+  /**
+   * 何ヶ月先の分を募集するか（既定3）。
+   * 3なら「9月5日までに12月分」。お客様の2ヶ月先のご予約を確保できるようにするため。
+   */
+  requestLeadMonths: number;
 }
 
 /** シフト希望（月単位の提出情報：備考・勤務可能店舗・提出日時） */

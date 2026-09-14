@@ -60,13 +60,17 @@ export default async function ThanksPage({
   const monthPosts = posts.filter((p) => p.createdAt >= monthStart && p.createdAt < monthEnd);
   const receivedCount = monthPosts.filter((p) => p.toStaffId === session.staffId).length;
   const sentCount = monthPosts.filter((p) => p.fromStaffId === session.staffId).length;
+  // もらった人・送った人の両方をランキングにする（送る側の頑張りも見えるように）
   const receivedBy = new Map<string, number>();
+  const sentBy = new Map<string, number>();
   for (const p of monthPosts) {
     receivedBy.set(p.toStaffId, (receivedBy.get(p.toStaffId) ?? 0) + 1);
+    sentBy.set(p.fromStaffId, (sentBy.get(p.fromStaffId) ?? 0) + 1);
   }
-  const ranking = [...receivedBy.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+  const top3 = (counts: Map<string, number>) =>
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const receivedRanking = top3(receivedBy);
+  const sentRanking = top3(sentBy);
 
   return (
     <div className="page-narrow">
@@ -106,29 +110,21 @@ export default async function ThanksPage({
         </div>
       </div>
 
-      {/* 今月のランキング */}
-      {ranking.length > 0 && (
-        <div className="card mb-4">
-          <h2 className="section-title flex items-center gap-1.5">
-            <Icon name="crown" className="w-4 h-4 text-brand-600" />
-            今月たくさん「ありがとう」を受け取った人
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {ranking.map(([staffId, count], i) => (
-              <span
-                key={staffId}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold ${
-                  i === 0
-                    ? "border-brand-400 bg-brand-50 text-brand-800"
-                    : "border-ink-200 bg-white text-ink-700"
-                }`}
-              >
-                {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
-                {staffNames.get(staffId) ?? "？"}
-                <span className="text-xs text-ink-400">{count}枚</span>
-              </span>
-            ))}
-          </div>
+      {/* 今月のランキング（もらった人・送った人） */}
+      {receivedRanking.length > 0 && (
+        <div className="card mb-4 space-y-4">
+          <ThanksRanking
+            title="今月たくさん「ありがとう」を受け取った人"
+            entries={receivedRanking}
+            staffNames={staffNames}
+          />
+          {sentRanking.length > 0 && (
+            <ThanksRanking
+              title="今月たくさん「ありがとう」を送った人"
+              entries={sentRanking}
+              staffNames={staffNames}
+            />
+          )}
         </div>
       )}
 
@@ -282,6 +278,43 @@ export default async function ThanksPage({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 今月のランキング（もらった人・送った人で共用）。上位3人をメダル付きで並べる */
+function ThanksRanking({
+  title,
+  entries,
+  staffNames,
+}: {
+  title: string;
+  entries: [string, number][];
+  staffNames: Map<string, string>;
+}) {
+  const medal = ["🥇", "🥈", "🥉"];
+  return (
+    <div>
+      <h2 className="section-title flex items-center gap-1.5">
+        <Icon name="crown" className="w-4 h-4 text-brand-600" />
+        {title}
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {entries.map(([staffId, count], i) => (
+          <span
+            key={staffId}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold ${
+              i === 0
+                ? "border-brand-400 bg-brand-50 text-brand-800"
+                : "border-ink-200 bg-white text-ink-700"
+            }`}
+          >
+            {medal[i]}
+            {staffNames.get(staffId) ?? "？"}
+            <span className="text-xs text-ink-400">{count}枚</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -908,7 +908,9 @@ function seed(): MockDb {
   const shiftRules: ShiftRules = {
     maxConsecutiveDays: 5,
     minStaffPerStoreDay: 2,
-    requestDeadlineDay: 25,
+    // 3ヶ月先の分を、その3ヶ月前の5日までに出す（例：9月5日までに12月分）
+    requestDeadlineDay: 5,
+    requestLeadMonths: 3,
   };
   const shiftStaffIds = staff.map((s) => s.id); // 管理者も施術に入る想定で全員を対象にする
   const storeIds = stores.map((s) => s.id);

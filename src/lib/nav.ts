@@ -77,10 +77,8 @@ function staffNav(ctx: NavContext): NavGroup[] {
     label: "ホーム",
     items: [{ href: "/staff", label: "ダッシュボード", icon: "layoutGrid", exact: true }],
   };
-  const support: NavGroup = {
-    label: "サポート",
-    items: [{ href: "/staff/help", label: "使い方ガイド", icon: "help" }],
-  };
+  // 使い方ガイドは ENi とイーリスで内容が同じままなので一旦外している（作り直すまで非表示）
+  const support: NavGroup = { label: "サポート", items: [] };
 
   // 幹部だけに出す「幹部」グループ（幹部タスク・日報の気づきをまとめる）
   const execGroup: NavGroup = {
@@ -229,10 +227,8 @@ function adminNav(ctx: NavContext): NavGroup[] {
   };
   const support: NavGroup = {
     label: "サポート",
-    items: [
-      { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
-      { href: "/admin/help", label: "使い方ガイド", icon: "help" },
-    ],
+    // 使い方ガイドは一旦外している（ENi とイーリスで内容が同じままのため）
+    items: [{ href: "/admin/settings", label: "マスタ設定", icon: "sliders" }],
   };
   // 管理者は常に幹部メニューが見られる
   const execGroup: NavGroup = {

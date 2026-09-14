@@ -401,6 +401,20 @@ export function normalizeTiers(value: unknown): number {
   return Math.min(MAX_TIERS, n);
 }
 
+/** 分を「6時間30分」の形にする（入客時間は時間で見せる方が分かりやすいという現場の声） */
+export function formatMinutesJa(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (h === 0) return `${rest}分`;
+  return rest === 0 ? `${h}時間` : `${h}時間${rest}分`;
+}
+
+/** 分を時間に直す（入力欄の初期値用。小数第2位まで） */
+export function minutesToHours(minutes: number): number {
+  return Math.round((Math.max(0, minutes) / 60) * 100) / 100;
+}
+
 /** その段数で1日に回せる時間（分）＝ 段数 × 8時間 */
 export function capacityMinutes(tiers: number): number {
   return normalizeTiers(tiers) * STYLIST_STANDARD_MINUTES;
