@@ -75,6 +75,8 @@ export interface ChatTurn {
 
 interface Loaded {
   system: string;
+  /** 土台に 01（base）と 03（full）のどちらを使ったか */
+  source: "base" | "full";
   knowledge: Map<string, string>;
   present: string[];
   /** ログイン氏名 →「しもんの呼び方」。空白を除いた氏名をキーにする */
@@ -198,11 +200,22 @@ function load(): Loaded {
   const knowledge = loadKnowledge();
   cache = {
     system,
+    source: useFull && system ? "full" : "base",
     knowledge,
     present: [...knowledge.keys()],
     nicknames: loadNicknames(system, knowledge),
   };
   return cache;
+}
+
+/**
+ * 土台にどちらのプロンプトを使っているか（管理者画面の確認用）。
+ * 03_フル版SKILL は 2026-09-10 の語り口見直し（驚く・じゃん・突き放し・語尾の入れ替え）が
+ * 反映されておらず、関西弁を「かな・やけど・めっちゃ」の3つだけに絞った旧ルールのままなので、
+ * full にすると今回直した「マイルドすぎる」が戻る。既定（base＝01）のまま使うこと。
+ */
+export function promptSource(): "base" | "full" {
+  return load().source;
 }
 
 /** システムプロンプト本体が置かれているか（無ければ機能を止める） */

@@ -13,7 +13,7 @@ import {
 } from "../actions";
 import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
-import { isPromptAvailable, knowledgeStatus, nicknameStatus } from "@/lib/ai-shimon/prompt";
+import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
 
 import { MAX_TIERS } from "@/lib/eni/forms";
 
@@ -57,6 +57,8 @@ export default async function AdminSettingsPage({
     knowledge: knowledgeStatus(),
     // 呼称表を何人ぶん読めているか（件数だけ。氏名・呼び名は画面に出さない）
     nicknames: nicknameStatus().count,
+    // 03_フル版SKILL は語り口が旧ルールのままなので、full を使っていたら警告を出す
+    usingFullPrompt: promptSource() === "full",
     model: env.aiShimonModel,
   };
 
@@ -448,7 +450,7 @@ export default async function AdminSettingsPage({
             <StatusBadge label="APIキー：未設定（ANTHROPIC_API_KEY）" tone="pending" />
           )}
           {aiShimon.prompt ? (
-            <StatusBadge label="システムプロンプト：あり" tone="ok" />
+            <StatusBadge label={`システムプロンプト：あり（${aiShimon.usingFullPrompt ? "03 フル版" : "01"}）`} tone="ok" />
           ) : (
             <StatusBadge label="システムプロンプト：なし" tone="pending" />
           )}
@@ -459,6 +461,12 @@ export default async function AdminSettingsPage({
           )}
           <StatusBadge label={`モデル：${aiShimon.model}`} tone="muted" />
         </div>
+        {aiShimon.usingFullPrompt && (
+          <p className="text-xs text-amber-700 font-bold mb-2">
+            ※ AI_SHIMON_PROMPT=full になっています。03_フル版SKILL は 2026-09-10 の語り口見直し（驚く・「じゃん」・突き放し・語尾の入れ替え）が入っておらず、
+            関西弁を3語に絞った旧ルールのままです。「マイルドすぎる」を直した内容が戻るので、環境変数を空にして 01 を使ってください。
+          </p>
+        )}
         <p className="text-xs text-ink-600">
           知識ファイル（02_知識ファイル/01〜17）は{" "}
           <code className="font-bold">ai-shimon/knowledge/</code> に置きます。
