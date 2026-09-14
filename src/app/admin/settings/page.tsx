@@ -13,7 +13,7 @@ import {
 } from "../actions";
 import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
-import { isPromptAvailable, knowledgeStatus } from "@/lib/ai-shimon/prompt";
+import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
 
 import { MAX_TIERS } from "@/lib/eni/forms";
 
@@ -55,6 +55,10 @@ export default async function AdminSettingsPage({
     apiKey: isAnthropicConfigured(),
     prompt: isPromptAvailable(),
     knowledge: knowledgeStatus(),
+    // 呼称表を何人ぶん読めているか（件数だけ。氏名・呼び名は画面に出さない）
+    nicknames: nicknameStatus().count,
+    // 03_フル版SKILL は語り口が旧ルールのままなので、full を使っていたら警告を出す
+    usingFullPrompt: promptSource() === "full",
     model: env.aiShimonModel,
   };
 
@@ -446,14 +450,25 @@ export default async function AdminSettingsPage({
             <StatusBadge label="APIキー：未設定（ANTHROPIC_API_KEY）" tone="pending" />
           )}
           {aiShimon.prompt ? (
-            <StatusBadge label="システムプロンプト：あり" tone="ok" />
+            <StatusBadge label={`システムプロンプト：あり（${aiShimon.usingFullPrompt ? "03 フル版" : "01"}）`} tone="ok" />
           ) : (
             <StatusBadge label="システムプロンプト：なし" tone="pending" />
           )}
+          {aiShimon.nicknames > 0 ? (
+            <StatusBadge label={`呼称表：${aiShimon.nicknames}人ぶん`} tone="ok" />
+          ) : (
+            <StatusBadge label="呼称表：読み込めていません" tone="pending" />
+          )}
           <StatusBadge label={`モデル：${aiShimon.model}`} tone="muted" />
         </div>
+        {aiShimon.usingFullPrompt && (
+          <p className="text-xs text-amber-700 font-bold mb-2">
+            ※ AI_SHIMON_PROMPT=full になっています。03_フル版SKILL は 2026-09-10 の語り口見直し（驚く・「じゃん」・突き放し・語尾の入れ替え）が入っておらず、
+            関西弁を3語に絞った旧ルールのままです。「マイルドすぎる」を直した内容が戻るので、環境変数を空にして 01 を使ってください。
+          </p>
+        )}
         <p className="text-xs text-ink-600">
-          知識ファイル（02_知識ファイル/01〜14）は{" "}
+          知識ファイル（02_知識ファイル/01〜17）は{" "}
           <code className="font-bold">ai-shimon/knowledge/</code> に置きます。
           置かれている番号：
           <span className="font-bold text-emerald-700 ml-1">
@@ -469,6 +484,8 @@ export default async function AdminSettingsPage({
         <p className="hint">
           ファイルは編集せず差し替えで反映します（反映には再デプロイが必要）。08（スタッフ欲求プロファイル）は要配慮情報のため、
           AIへの入力にしか使わず、画面・ログには一切出しません。モデルは環境変数 AI_SHIMON_MODEL で変更できます。
+          しもんはスタッフをフルネームで呼ばないため、ログイン中の氏名は呼称表（07）で呼び名に変換してから渡しています。
+          差し替え後に「呼称表」の人数が急に減ったときは、表の書式が変わっていないか確認してください。
         </p>
       </section>
 
