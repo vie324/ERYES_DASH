@@ -76,7 +76,7 @@ export default async function PlanPage({
     : planScopeOfDate(date);
 
   const db = getDataStore();
-  const [staffList, plans, patterns, dayoffs, overrides, myIdeals, pairs, presets, nearbyPlans] =
+  const [staffList, plans, patterns, dayoffs, overrides, myIdeals, presets, nearbyPlans] =
     await Promise.all([
       db.listStaff(),
       db.listDailyPlans(date),
@@ -84,7 +84,6 @@ export default async function PlanPage({
       db.listDayoffRequests({ from: date, to: date }),
       db.listScheduleOverrides({ from: date, to: date }),
       db.listIdealSchedules(session.staffId),
-      db.listPracticePairs(thisMonthJst()),
       db.listSchedulePresets(),
       // 日付バーの「入力済み」の点を出すため、前後の日も薄く見る
       Promise.all(
@@ -103,9 +102,9 @@ export default async function PlanPage({
   const goalMonth = myIdeals.find((s) => s.scope === "month_goal")?.content ?? "";
   const isExec =
     session.role === "admin" || (staffList.find((s) => s.id === session.staffId)?.isExecutive ?? false);
-  const myMentees = new Set(
-    pairs.filter((p) => p.partnerStaffId === session.staffId).map((p) => p.memberStaffId)
-  );
+  // 練習ペアは廃止したので、確認できるのは先輩（スタイリスト）と幹部
+  const meStaff = staffList.find((s) => s.id === session.staffId);
+  const isSenior = isExec || meStaff?.jobType === "stylist";
 
   // その日にあたる計画（第◯週の、その曜日）
   const weekOfDate = planScopeOfDate(date);
@@ -290,7 +289,7 @@ export default async function PlanPage({
           {members.map((m) => {
             const plan = plans.find((p) => p.staffId === m.id);
             const work = resolveScheduleDay(m.id, date, weekdayOf(date), patterns, dayoffs, overrides);
-            const canMarkSeen = m.id !== session.staffId && plan && (myMentees.has(m.id) || isExec);
+            const canMarkSeen = m.id !== session.staffId && plan && isSenior;
             return (
               <div key={m.id} className="card">
                 <div className="flex items-center justify-between gap-2">

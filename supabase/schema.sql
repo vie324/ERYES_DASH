@@ -190,7 +190,8 @@ create table if not exists shift_rules (
   id integer primary key default 1 check (id = 1),
   max_consecutive_days integer not null default 5,          -- 連勤上限
   min_staff_per_store_per_day integer not null default 2,   -- 各店舗・各日の最低人数（日単位）
-  request_deadline_day integer not null default 25          -- 希望締切＝対象月の前月◯日
+  request_deadline_day integer not null default 5,          -- 希望締切＝対象月の◯ヶ月前の◯日
+  request_lead_months integer not null default 3            -- 何ヶ月先の分を募集するか（3＝9月5日までに12月分）
 );
 
 -- シフト希望（月単位：備考・提出日時）
@@ -488,6 +489,30 @@ create table if not exists thanks_comments (
   created_at timestamptz not null default now()
 );
 
+-- 会社のイベント・全体で共有しておきたい予定（勉強会・全体ミーティング・ENi会など）。
+-- 出勤シフトとは別。全員が見られて、登録は幹部・管理者のみ。
+create table if not exists company_events (
+  id uuid primary key default gen_random_uuid(),
+  start_date date not null,
+  end_date date not null,
+  start_time text not null default '',          -- "10:00"。空なら終日
+  title text not null,
+  body text not null default '',
+  required boolean not null default true,       -- 全員参加か
+  created_by uuid not null references staff(id),
+  created_at timestamptz not null default now()
+);
+
+-- 日報・週報へのコメント（複数人が重ねて書ける）。
+-- 以前は eni_reports.comment の1枠しか無く、別の人が書くと前のコメントが消えていた。
+create table if not exists eni_report_comments (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references eni_reports(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
 -- 今日のスケジュール（1人1日1件）。構造化フォーム or スケジュール帳の写真。
 -- fields: { goal, horenso, todo, timetable } ／ seen_by: ペアの先輩が確認したら記録
 create table if not exists daily_plans (
@@ -616,6 +641,11 @@ alter table meetings add column if not exists minutes_ai boolean not null defaul
 alter table meetings add column if not exists minutes_file text not null default '';
 alter table meetings add column if not exists minutes_file_name text not null default '';
 
+-- シフトルール：募集の先行月数（3ヶ月先の分を出す運用に変更）
+alter table shift_rules add column if not exists request_lead_months integer not null default 3;
+-- 締切日を25日から5日へ（既定値のままの場合だけ。管理者が変更済みならそのまま残す）
+update shift_rules set request_deadline_day = 5 where request_deadline_day = 25;
+
 -- 希望休・シフト希望：理由と有休フラグ
 alter table dayoff_requests add column if not exists reason text not null default '';
 alter table dayoff_requests add column if not exists paid_leave boolean not null default false;
@@ -687,6 +717,8 @@ create index if not exists idx_committees_sort on committees (sort_order);
 create index if not exists idx_manager_routines_sort on manager_routines (cycle, sort_order);
 create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
+create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
+create index if not exists idx_company_events_period on company_events (start_date, end_date);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、

@@ -40,7 +40,8 @@ export function AppShell({
   logoSrc: string;
   logoAlt: string;
   homeHref: string;
-  helpHref: string;
+  /** 未指定ならヘッダーの「使い方」ボタンを出さない */
+  helpHref?: string;
   /** デモモードの注意バナーなど、内容の上に出す帯 */
   banner?: React.ReactNode;
   children: React.ReactNode;
@@ -128,13 +129,15 @@ export function AppShell({
                 <Icon name="swap" className="w-3.5 h-3.5 text-brand-500" />
                 {user.brandLabel}
               </Link>
-              <Link
-                href={helpHref}
-                className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
-              >
-                <Icon name="help" className="w-3.5 h-3.5 text-brand-500" />
-                <span className="hidden sm:inline">使い方</span>
-              </Link>
+              {helpHref && (
+                <Link
+                  href={helpHref}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
+                >
+                  <Icon name="help" className="w-3.5 h-3.5 text-brand-500" />
+                  <span className="hidden sm:inline">使い方</span>
+                </Link>
+              )}
               <div className="flex items-center gap-2 pl-1.5 sm:pl-2.5 sm:ml-1 sm:border-l border-brand-200">
                 <div className="hidden sm:block text-right leading-tight">
                   <p className="text-[13px] font-bold text-ink-800 truncate max-w-32">{user.name}</p>

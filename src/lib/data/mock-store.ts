@@ -38,6 +38,8 @@ import type {
   DayoffInput,
   DayoffRequest,
   EniReport,
+  EniReportComment,
+  CompanyEvent,
   ExecNoticeCheck,
   IdealSchedule,
   ManagerRoutine,
@@ -122,6 +124,8 @@ interface MockDb {
   thanksPosts: ThanksPost[];
   thanksLikes: ThanksLike[];
   thanksComments: ThanksComment[];
+  eniReportComments: EniReportComment[];
+  companyEvents: CompanyEvent[];
 }
 
 /**
@@ -908,7 +912,9 @@ function seed(): MockDb {
   const shiftRules: ShiftRules = {
     maxConsecutiveDays: 5,
     minStaffPerStoreDay: 2,
-    requestDeadlineDay: 25,
+    // 3ヶ月先の分を、その3ヶ月前の5日までに出す（例：9月5日までに12月分）
+    requestDeadlineDay: 5,
+    requestLeadMonths: 3,
   };
   const shiftStaffIds = staff.map((s) => s.id); // 管理者も施術に入る想定で全員を対象にする
   const storeIds = stores.map((s) => s.id);
@@ -1073,6 +1079,8 @@ function seed(): MockDb {
     thanksPosts,
     thanksLikes,
     thanksComments,
+    eniReportComments: [],
+    companyEvents: [],
   };
 }
 
@@ -1198,8 +1206,70 @@ class MockStore implements DataStore {
     return s;
   }
 
-  async deleteStaff(id: string): Promise<void> {
+  async deleteStaff(id: string, options?: { force?: boolean; reassignTo?: string }): Promise<void> {
     if (!this.db.staff.some((s) => s.id === id)) throw new Error("スタッフが見つかりません");
+
+    if (options?.force) {
+      const to = options.reassignTo ?? null;
+      const d = this.db;
+      // 本人の記録は消す
+      d.reports = d.reports.filter((r) => r.staffId !== id);
+      d.attendances = d.attendances.filter((a) => a.staffId !== id);
+      d.counselingInvites = d.counselingInvites.filter((i) => i.createdBy !== id);
+      d.shiftRequestMonths = d.shiftRequestMonths.filter((m) => m.staffId !== id);
+      d.shiftRequests = d.shiftRequests.filter((r) => r.staffId !== id);
+      d.shiftAvailableStores = d.shiftAvailableStores.filter((a) => a.staffId !== id);
+      d.shiftAssignments = d.shiftAssignments.filter((a) => a.staffId !== id);
+      d.absenceReports = d.absenceReports.filter((r) => r.staffId !== id);
+      d.orderRequests = d.orderRequests.filter((r) => r.staffId !== id);
+      d.taskCompletions = d.taskCompletions.filter((c) => c.doneBy !== id);
+      d.execNoticeChecks = d.execNoticeChecks.filter((c) => c.checkedBy !== id);
+      d.chatMessages = d.chatMessages.filter((m) => m.senderId !== id);
+      d.eniReportComments = d.eniReportComments.filter((c) => c.staffId !== id);
+      // 本人が関わっただけの欄は空にする（記録そのものは残す）
+      for (const c of d.counseling) if (c.confirmedBy === id) c.confirmedBy = null;
+      for (const a of d.appointments) if (a.staffId === id) a.staffId = null;
+      for (const r of d.eniReports) if (r.commentedBy === id) r.commentedBy = null;
+      for (const r of d.practiceRecords) if (r.partnerStaffId === id) r.partnerStaffId = null;
+      for (const m of d.meetings) if (m.guestStaffId === id) m.guestStaffId = null;
+      for (const m of d.chatMessages) if (m.announcedBy === id) m.announcedBy = null;
+      for (const pl of d.dailyPlans) if (pl.seenBy === id) pl.seenBy = null;
+      // チームの共有物は消さず、削除した管理者へ引き継ぐ
+      if (to) {
+        for (const b of d.broadcasts) if (b.sentBy === id) b.sentBy = to;
+        for (const c of d.cashReports) if (c.createdBy === id) c.createdBy = to;
+        for (const m of d.meetings) {
+          if (m.hostStaffId === id) m.hostStaffId = to;
+          if (m.createdBy === id) m.createdBy = to;
+        }
+        for (const t of d.staffTasks) if (t.createdBy === id) t.createdBy = to;
+        for (const r of d.chatRooms) if (r.createdBy === id) r.createdBy = to;
+        for (const e of d.companyEvents) if (e.createdBy === id) e.createdBy = to;
+        for (const r of d.absenceReports) if (r.reportedBy === id) r.reportedBy = to;
+      }
+      // 本人にひもづくだけのもの（DBでは cascade 相当）
+      d.workPatterns = d.workPatterns.filter((w) => w.staffId !== id);
+      d.dayoffRequests = d.dayoffRequests.filter((r) => r.staffId !== id);
+      d.scheduleOverrides = d.scheduleOverrides.filter((r) => r.staffId !== id);
+      d.eniReports = d.eniReports.filter((r) => r.staffId !== id);
+      d.practiceRecords = d.practiceRecords.filter((r) => r.staffId !== id);
+      d.practicePairs = d.practicePairs.filter((p) => p.memberStaffId !== id && p.partnerStaffId !== id);
+      d.orgMembers = d.orgMembers.filter((m) => m.staffId !== id);
+      d.assistantSettings = d.assistantSettings.filter((a) => a.staffId !== id);
+      d.staffTasks = d.staffTasks.filter((t) => t.assigneeStaffId !== id);
+      d.chatMembers = d.chatMembers.filter((m) => m.staffId !== id);
+      d.chatReactions = d.chatReactions.filter((r) => r.staffId !== id);
+      d.thanksPosts = d.thanksPosts.filter((t) => t.fromStaffId !== id && t.toStaffId !== id);
+      d.thanksLikes = d.thanksLikes.filter((l) => l.staffId !== id);
+      d.thanksComments = d.thanksComments.filter((c) => c.staffId !== id);
+      d.dailyPlans = d.dailyPlans.filter((pl) => pl.staffId !== id);
+      d.idealSchedules = d.idealSchedules.filter((i) => i.staffId !== id);
+      d.managerRoutineChecks = d.managerRoutineChecks.filter((c) => c.staffId !== id);
+      d.pushSubscriptions = d.pushSubscriptions.filter((ps) => ps.staffId !== id);
+      d.staff = d.staff.filter((st) => st.id !== id);
+      return;
+    }
+
     const referenced =
       this.db.reports.some((r) => r.staffId === id) ||
       this.db.attendances.some((a) => a.staffId === id) ||
@@ -1791,6 +1861,81 @@ class MockStore implements DataStore {
       found.comment = comment;
       found.commentedBy = commentedBy;
     }
+  }
+
+  async listCompanyEvents(filter: { from: string; to: string }): Promise<CompanyEvent[]> {
+    // 期間が少しでも重なるものを拾う（複数日にまたがるイベントも月をまたいで出す）
+    return this.db.companyEvents
+      .filter((e) => e.startDate <= filter.to && e.endDate >= filter.from)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.startTime.localeCompare(b.startTime))
+      .map((e) => ({ ...e }));
+  }
+
+  async getCompanyEvent(id: string): Promise<CompanyEvent | null> {
+    const found = this.db.companyEvents.find((e) => e.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async upsertCompanyEvent(
+    input: Omit<CompanyEvent, "id" | "createdAt"> & { id?: string }
+  ): Promise<CompanyEvent> {
+    if (input.id) {
+      const found = this.db.companyEvents.find((e) => e.id === input.id);
+      if (found) {
+        Object.assign(found, {
+          startDate: input.startDate,
+          endDate: input.endDate,
+          startTime: input.startTime,
+          title: input.title,
+          body: input.body,
+          required: input.required,
+        });
+        return { ...found };
+      }
+    }
+    const created: CompanyEvent = {
+      id: randomUUID(),
+      startDate: input.startDate,
+      endDate: input.endDate,
+      startTime: input.startTime,
+      title: input.title,
+      body: input.body,
+      required: input.required,
+      createdBy: input.createdBy,
+      createdAt: new Date(),
+    };
+    this.db.companyEvents.push(created);
+    return { ...created };
+  }
+
+  async deleteCompanyEvent(id: string): Promise<void> {
+    this.db.companyEvents = this.db.companyEvents.filter((e) => e.id !== id);
+  }
+
+  async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {
+    const ids = new Set(reportIds);
+    return this.db.eniReportComments
+      .filter((c) => ids.has(c.reportId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((c) => ({ ...c }));
+  }
+
+  async addEniReportComment(reportId: string, staffId: string, body: string): Promise<EniReportComment> {
+    const created: EniReportComment = {
+      id: randomUUID(),
+      reportId,
+      staffId,
+      body,
+      createdAt: new Date(),
+    };
+    this.db.eniReportComments.push(created);
+    return { ...created };
+  }
+
+  async deleteEniReportComment(id: string, staffId: string): Promise<void> {
+    this.db.eniReportComments = this.db.eniReportComments.filter(
+      (c) => !(c.id === id && c.staffId === staffId)
+    );
   }
 
   async listEniReports(

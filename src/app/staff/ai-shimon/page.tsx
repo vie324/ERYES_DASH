@@ -14,7 +14,7 @@ export default async function AiShimonPage() {
 
   return (
     <div className="page-narrow">
-      <PageHeader title="AIしもん" backHref="/staff" />
+      <PageHeader title="AIしもん" description="24時間ナカシモン" backHref="/staff" />
       <AiShimonChat staffId={session.staffId} ready={ready} isAdmin={session.role === "admin"} />
     </div>
   );

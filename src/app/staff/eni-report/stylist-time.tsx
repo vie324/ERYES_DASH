@@ -4,9 +4,10 @@
 // 稼働率（入客時間 ÷ 段数×8時間）と次回予約率（次回予約 ÷ 客数）はその場で自動計算して大きく見せる。
 // 段数（同時に回す席数）はスタッフマスタの値。ここでは変えられず、分母の説明として表示する。
 // 稼働率は任意ではなく必須（入客時間を入れないと保存できない）。
+// 入客時間は画面では「時間」で入力してもらい、保存時に分へ直す（保存形式は従来どおり分）。
 
 import { useState } from "react";
-import { capacityMinutes, computeStylistCalc, normalizeTiers } from "@/lib/eni/forms";
+import { capacityMinutes, computeStylistCalc, minutesToHours, normalizeTiers } from "@/lib/eni/forms";
 
 /** 数値入力（未入力は空欄のまま扱う） */
 function NumberField({
@@ -19,16 +20,20 @@ function NumberField({
   placeholder,
   hint,
   required,
+  decimal,
 }: {
   name: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   unit: string;
-  step?: number;
+  /** "any" なら小数を自由に入れられる（時間入力で 6.3 などを弾かないため） */
+  step?: number | "any";
   placeholder?: string;
   hint?: string;
   required?: boolean;
+  /** スマホで小数点を打てるキーボードにする */
+  decimal?: boolean;
 }) {
   return (
     <div>
@@ -41,7 +46,7 @@ function NumberField({
           id={name}
           name={name}
           type="number"
-          inputMode="numeric"
+          inputMode={decimal ? "decimal" : "numeric"}
           min={0}
           step={step}
           value={value}
@@ -121,16 +126,18 @@ export function StylistTimeSummary({
 }) {
   const num = (v: number) => (v > 0 ? String(v) : "");
   const [clientCount, setClientCount] = useState(num(initialClientCount));
-  const [serviceMinutes, setServiceMinutes] = useState(num(initialServiceMinutes));
+  // 入客時間は「時間」で入力してもらう（分だと分かりにくいという現場の声）。保存は従来どおり分。
+  const [serviceHours, setServiceHours] = useState(num(minutesToHours(initialServiceMinutes)));
   const [nextBookings, setNextBookings] = useState(num(initialNextBookings));
 
   const n = (v: string) => Math.max(0, Number(v) || 0);
+  const serviceMinutes = Math.round(n(serviceHours) * 60);
   const myTiers = normalizeTiers(tiers);
   const capacity = capacityMinutes(myTiers);
-  const capacityLabel = `${myTiers}段 × 8時間 ＝ ${capacity / 60}時間（${capacity}分）`;
+  const capacityLabel = `${myTiers}段 × 8時間 ＝ ${capacity / 60}時間`;
   const calc = computeStylistCalc({
     clientCount: n(clientCount),
-    serviceMinutes: n(serviceMinutes),
+    serviceMinutes,
     nextBookings: n(nextBookings),
     tiers: myTiers,
   });
@@ -167,21 +174,24 @@ export function StylistTimeSummary({
       </div>
 
       <NumberField
-        name="service_minutes"
+        name="service_hours"
         label="入客時間の合計"
-        value={serviceMinutes}
-        onChange={setServiceMinutes}
-        unit="分"
-        step={30}
-        placeholder="360"
-        hint={`回せる枠 ${capacityLabel} のうち、お客様に入っていた時間の合計`}
+        value={serviceHours}
+        onChange={setServiceHours}
+        unit="時間"
+        step="any"
+        decimal
+        placeholder="6"
+        hint={`回せる枠 ${capacityLabel} のうち、お客様に入っていた時間の合計（30分は 0.5 と入れてOK）`}
         required
       />
+      {/* 保存は従来どおり分で行う（過去データ・稼働率の計算と揃えるため） */}
+      <input type="hidden" name="service_minutes" value={serviceHours === "" ? "" : String(serviceMinutes)} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <RateDisplay
           label="稼働率"
-          rate={serviceMinutes === "" ? null : calc.utilization}
+          rate={serviceHours === "" ? null : calc.utilization}
           sub={`入客時間 ÷（${capacityLabel}）で自動計算`}
           goodFrom={70}
         />

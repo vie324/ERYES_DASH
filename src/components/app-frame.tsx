@@ -153,7 +153,6 @@ export async function AppFrame({
       logoSrc={getLogoSrc(brand)}
       logoAlt={getBrandName(brand)}
       homeHref={isAdmin ? "/admin" : "/staff"}
-      helpHref={isAdmin ? "/admin/help" : "/staff/help"}
       banner={<DemoBanner show={isDemoMode()} />}
     >
       {/* 通知の案内（未許可のときだけ出る）と、アプリアイコンのバッジ（未読トーク＋今日のタスク） */}

@@ -1,7 +1,7 @@
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateTimeJa, formatMonthJa } from "@/lib/date";
-import { currentTargetMonth, deadlineLabel, isRequestEditable } from "@/lib/shift/period";
+import { REQUEST_LEAD_REASON, currentTargetMonth, deadlineLabel, isRequestEditable } from "@/lib/shift/period";
 import { PageHeader } from "@/components/ui";
 import { ShiftRequestForm } from "./request-form";
 import type { ShiftDayRequest } from "@/lib/data/types";
@@ -59,6 +59,12 @@ export default async function ShiftRequestPage({
         {requestMonth && <p>前回の提出：{formatDateTimeJa(requestMonth.updatedAt, true)}</p>}
         <p>提出内容はあなたと管理者だけが見られます。</p>
       </div>
+
+      <p className="rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-xs px-4 py-3 mb-4 leading-relaxed">
+        <span className="font-bold">先の月の分を早めに出してもらっています。</span>
+        <br />
+        {REQUEST_LEAD_REASON}
+      </p>
 
       <ShiftRequestForm
         targetMonth={month}

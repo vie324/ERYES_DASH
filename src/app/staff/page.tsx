@@ -143,10 +143,6 @@ export default async function StaffHomePage() {
           <Icon name="link" className="w-4 h-4 text-brand-500" />
           サロンボードを開く
         </a>
-        <Link href="/staff/help" className="chip !py-2.5 !px-4">
-          <Icon name="help" className="w-4 h-4 text-brand-500" />
-          使い方ガイド（困ったときはこちら）
-        </Link>
         {session.role === "admin" && (
           <Link href="/admin" className="chip !py-2.5 !px-4">
             <Icon name="sliders" className="w-4 h-4 text-brand-500" />
@@ -427,13 +423,6 @@ async function eniMenuItems(
             title: "組織図（シナジーマップ）",
             short: "組織図",
             description: "チームの役割・メンバー・会議体のつながりを見る",
-          },
-          {
-            href: "/staff/practice",
-            icon: "sparkles" as IconName,
-            title: "練習ペアの設定（幹部）",
-            short: "練習ペア",
-            description: "今月のペア（誰に付いてもらうか）の割当",
           },
         ]
       : []),

@@ -12,15 +12,13 @@ import {
 } from "@/lib/date";
 import { formatPracticeMinutes, isExecutive } from "@/lib/eni/access";
 import { MonthNav, PageHeader } from "@/components/ui";
-import {
-  addPracticeRecordAction,
-  deletePracticeRecordAction,
-  setPracticePairAction,
-} from "./actions";
+import { addPracticeRecordAction, deletePracticeRecordAction } from "./actions";
 
 // 練習記録（月間活動記録表のシステム化）：
 // 表＝日付×メンバーで練習時間と相手が見える。自分の練習を下のフォームから記録する。
-// 月の合計時間が自動で集計される。ペア（誰に付いてもらうか）は幹部が設定・変更できる。
+// 月の合計時間が自動で集計される。
+// ※ 月ごとの「練習ペア」の割り当ては廃止した（運用で使われなかったため）。
+//    誰にどれだけ見てもらえているかは、週報の「先輩の指導状況」で見る。
 export default async function PracticePage({
   searchParams,
 }: {
@@ -34,10 +32,9 @@ export default async function PracticePage({
   const isExec = await isExecutive(session);
 
   const db = getDataStore();
-  const [staffList, records, pairs] = await Promise.all([
+  const [staffList, records] = await Promise.all([
     db.listStaff(),
     db.listPracticeRecords({ from, to }),
-    db.listPracticePairs(month),
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
   // 表の列＝ENiのメンバー（職種が設定されているスタッフ）。アシスタントを先に並べる
@@ -51,7 +48,6 @@ export default async function PracticePage({
   for (const r of records) {
     totals.set(r.staffId, (totals.get(r.staffId) ?? 0) + r.minutes);
   }
-  const myPair = pairs.find((p) => p.memberStaffId === session.staffId);
 
   const savedMsg =
     params.saved === "record"
@@ -77,12 +73,6 @@ export default async function PracticePage({
       {params.error && (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           {params.error === "forbidden" ? "この操作の権限がありません" : "入力内容を確認してください"}
-        </p>
-      )}
-
-      {myPair && (
-        <p className="rounded-xl bg-brand-50 text-brand-800 text-sm font-bold px-4 py-3 mb-4">
-          今月のペア：{staffMap.get(myPair.partnerStaffId)?.name ?? "？"}さんに付いてもらう
         </p>
       )}
 
@@ -129,7 +119,6 @@ export default async function PracticePage({
             id="partner_staff_id"
             name="partner_staff_id"
             className="input"
-            defaultValue={myPair?.partnerStaffId ?? ""}
           >
             <option value="">スタッフ以外（下に記入）／ひとりで練習</option>
             {partnerCandidates
@@ -258,46 +247,6 @@ export default async function PracticePage({
         </p>
       </section>
 
-      {/* ペア設定（幹部・管理者のみ） */}
-      {isExec && (
-        <section className="card mt-4 space-y-3">
-          <h2 className="section-title !mb-0">
-            今月のペア設定（{formatMonthJa(month)}・幹部メニュー）
-          </h2>
-          {members
-            .filter((m) => m.jobType === "assistant")
-            .map((m) => {
-              const pair = pairs.find((p) => p.memberStaffId === m.id);
-              return (
-                <form key={m.id} action={setPracticePairAction} className="flex items-center gap-2">
-                  <input type="hidden" name="target_month" value={month} />
-                  <input type="hidden" name="member_staff_id" value={m.id} />
-                  <span className="w-24 shrink-0 text-sm font-bold">{m.name.split(" ")[0]}</span>
-                  <select
-                    name="partner_staff_id"
-                    defaultValue={pair?.partnerStaffId ?? ""}
-                    className="input !min-h-10 !py-1.5 text-sm flex-1"
-                  >
-                    <option value="">（未設定）</option>
-                    {partnerCandidates
-                      .filter((s) => s.id !== m.id)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                  </select>
-                  <button type="submit" className="btn-secondary !min-h-10 !py-1.5 !px-3 text-sm">
-                    保存
-                  </button>
-                </form>
-              );
-            })}
-          <p className="text-xs text-ink-400">
-            ペアを設定すると、メンバーの記録フォームで「見てくれた人」が自動で選ばれます
-          </p>
-        </section>
-      )}
     </div>
   );
 }

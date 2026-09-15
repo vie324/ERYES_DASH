@@ -63,7 +63,24 @@ export default async function AdminShiftSettingsPage({
           </p>
         </div>
         <div>
-          <label className="label" htmlFor="request_deadline_day">希望提出の締切日（毎月◯日）</label>
+          <label className="label" htmlFor="request_lead_months">何ヶ月先の分を募集するか</label>
+          <input
+            id="request_lead_months"
+            name="request_lead_months"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={12}
+            defaultValue={rules.requestLeadMonths}
+            className="input"
+            required
+          />
+          <p className="text-xs text-ink-400 mt-1">
+            3なら「9月5日までに12月分」。お客様の2ヶ月先のご予約を確保していきたいため、先の月の枠を早めに決めます。
+          </p>
+        </div>
+        <div>
+          <label className="label" htmlFor="request_deadline_day">希望提出の締切日（◯日）</label>
           <input
             id="request_deadline_day"
             name="request_deadline_day"
@@ -76,7 +93,7 @@ export default async function AdminShiftSettingsPage({
             required
           />
           <p className="text-xs text-ink-400 mt-1">
-            翌月分の希望は「当月◯日」まで提出・修正できます。募集の自動通知は毎月15日です。
+            上の「何ヶ月先」とセットで締切が決まります（3ヶ月先・5日なら12月分は9月5日まで）。募集の自動通知は毎月15日です。
           </p>
         </div>
         <button type="submit" className="btn-primary w-full">保存する</button>

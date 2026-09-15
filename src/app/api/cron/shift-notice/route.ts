@@ -1,10 +1,9 @@
 // シフト希望募集の定時通知（毎月15日 10:00 JST に Vercel Cron から実行。vercel.json参照）
-// 翌月分の希望提出を全スタッフへ通知する（現状はモック＝ログ出力。README参照）。
+// 募集中の月（既定では3ヶ月先）の希望提出を全スタッフへ通知する（現状はモック＝ログ出力。README参照）。
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
-import { addMonths, thisMonthJst } from "@/lib/date";
-import { noticeMessage } from "@/lib/shift/period";
+import { currentTargetMonth, noticeMessage } from "@/lib/shift/period";
 import { sendShiftRequestNotice } from "@/lib/shift/notify";
 import { env } from "@/lib/env";
 
@@ -19,8 +18,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = getDataStore();
-  const targetMonth = addMonths(thisMonthJst(), 1);
   const rules = await db.getShiftRules();
+  // 何ヶ月先を募集するかは設定（既定3ヶ月先）に合わせる
+  const targetMonth = currentTargetMonth(rules);
   const message = noticeMessage(targetMonth, rules);
   const staffList = (await db.listStaff()).filter((s) => s.isActive);
 

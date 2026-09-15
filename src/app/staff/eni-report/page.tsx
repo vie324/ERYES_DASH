@@ -6,6 +6,7 @@ import { STYLIST_REPORT_NUMBERS, STYLIST_REPORT_TEXTS } from "@/lib/eni/forms";
 import { EniFormFields } from "@/components/eni-form-fields";
 import { PyramidPanel } from "@/components/assistant-settings";
 import { PageHeader } from "@/components/ui";
+import { ReportComments } from "@/components/report-comments";
 import { StylistTimeSummary } from "./stylist-time";
 import { saveStylistReportAction } from "./actions";
 
@@ -28,6 +29,13 @@ export default async function StylistReportPage({
     db.getStaff(session.staffId),
     db.listAssistantSettings(session.staffId),
   ]);
+  // ついたコメント（先輩・幹部が何人でも書ける）
+  const [reportComments, staffList] = await Promise.all([
+    existing ? db.listEniReportComments([existing.id]) : Promise.resolve([]),
+    db.listStaff(),
+  ]);
+  const staffNames = new Map(staffList.map((s) => [s.id, s.name]));
+
   // ピラミッド（価値観・理想の未来像・目標）は日報の先頭に常時表示する
   const settingValues: Record<string, string> = {};
   for (const s of settings) settingValues[s.settingKey] = s.content;
@@ -81,12 +89,12 @@ export default async function StylistReportPage({
         />
       </div>
 
-      {existing?.comment && (
-        <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">
-          <p className="text-xs font-bold text-brand-700 mb-1">上司からのコメント</p>
-          <p className="text-sm whitespace-pre-wrap text-ink-800">{existing.comment}</p>
-        </div>
-      )}
+      <ReportComments
+        comments={reportComments}
+        staffNames={staffNames}
+        legacyComment={existing?.comment}
+        legacyCommentedBy={existing?.commentedBy}
+      />
 
       <form action={saveStylistReportAction} className="space-y-4">
         <div className="card">

@@ -37,6 +37,8 @@ import type {
   DayoffInput,
   DayoffRequest,
   EniReport,
+  EniReportComment,
+  CompanyEvent,
   ExecNoticeCheck,
   IdealSchedule,
   ManagerRoutine,
@@ -488,10 +490,31 @@ const mapBroadcast = (r: Row): Broadcast => ({
   recipientCount: r.recipient_count,
 });
 
+const mapCompanyEvent = (r: Row): CompanyEvent => ({
+  id: r.id,
+  startDate: r.start_date,
+  endDate: r.end_date,
+  startTime: r.start_time,
+  title: r.title,
+  body: r.body,
+  required: r.required,
+  createdBy: r.created_by,
+  createdAt: new Date(r.created_at),
+});
+
+const mapEniReportComment = (r: Row): EniReportComment => ({
+  id: r.id,
+  reportId: r.report_id,
+  staffId: r.staff_id,
+  body: r.body,
+  createdAt: new Date(r.created_at),
+});
+
 const mapShiftRules = (r: Row): ShiftRules => ({
   maxConsecutiveDays: r.max_consecutive_days,
   minStaffPerStoreDay: r.min_staff_per_store_per_day,
   requestDeadlineDay: r.request_deadline_day,
+  requestLeadMonths: r.request_lead_months ?? 3,
 });
 
 const mapShiftRequestMonth = (r: Row): ShiftRequestMonth => ({
@@ -682,7 +705,79 @@ class SupabaseStore implements DataStore {
     return mapStaff(must(data, error, "スタッフ更新"));
   }
 
-  async deleteStaff(id: string): Promise<void> {
+  /**
+   * 強制削除の前処理。スタッフを参照している行のうち、DB側で自動削除されないものを片付ける。
+   * ・本人の記録（日報・打刻・シフト希望など）は行ごと消す
+   * ・関わっただけの欄（確認者・同席者など）は空にする
+   * ・チームの共有物（トークルーム・議事録・一斉配信・タスク）は消さず reassignTo へ引き継ぐ
+   * ※ on delete cascade が付いている表はここでは触らない（staff を消せば一緒に消える）
+   */
+  private async detachStaffReferences(id: string, reassignTo: string): Promise<void> {
+    const del = async (table: string, column: string) => {
+      const { error } = await this.sb.from(table).delete().eq(column, id);
+      if (error) throw new Error(`[supabase] 強制削除(${table}.${column}): ${error.message}`);
+    };
+    const setNull = async (table: string, column: string) => {
+      const { error } = await this.sb.from(table).update({ [column]: null }).eq(column, id);
+      if (error) throw new Error(`[supabase] 強制削除(${table}.${column}): ${error.message}`);
+    };
+    const reassign = async (table: string, column: string) => {
+      const { error } = await this.sb.from(table).update({ [column]: reassignTo }).eq(column, id);
+      if (error) throw new Error(`[supabase] 強制削除(${table}.${column}): ${error.message}`);
+    };
+
+    // 本人の記録
+    for (const [table, column] of [
+      ["daily_reports", "staff_id"],
+      ["attendances", "staff_id"],
+      ["counseling_invites", "created_by"],
+      ["shift_request_months", "staff_id"],
+      ["shift_requests", "staff_id"],
+      ["staff_available_stores", "staff_id"],
+      ["shift_assignments", "staff_id"],
+      ["absence_reports", "staff_id"],
+      ["order_requests", "staff_id"],
+      ["task_completions", "done_by"],
+      ["exec_notice_checks", "checked_by"],
+      ["chat_messages", "sender_id"],
+      ["eni_report_comments", "staff_id"],
+    ] as const) {
+      await del(table, column);
+    }
+
+    // 関わっただけの欄は空にする（記録そのものは残す）
+    for (const [table, column] of [
+      ["counseling_responses", "confirmed_by"],
+      ["next_appointments", "staff_id"],
+      ["eni_reports", "commented_by"],
+      ["practice_records", "partner_staff_id"],
+      ["meetings", "guest_staff_id"],
+      ["chat_messages", "announced_by"],
+      ["daily_plans", "seen_by"],
+    ] as const) {
+      await setNull(table, column);
+    }
+
+    // チームの共有物は消さずに引き継ぐ
+    for (const [table, column] of [
+      ["broadcasts", "sent_by"],
+      ["cash_reports", "created_by"],
+      ["meetings", "host_staff_id"],
+      ["meetings", "created_by"],
+      ["staff_tasks", "created_by"],
+      ["chat_rooms", "created_by"],
+      ["company_events", "created_by"],
+      ["absence_reports", "reported_by"],
+    ] as const) {
+      await reassign(table, column);
+    }
+  }
+
+  async deleteStaff(id: string, options?: { force?: boolean; reassignTo?: string }): Promise<void> {
+    if (options?.force) {
+      if (!options.reassignTo) throw new Error("強制削除には引き継ぎ先のスタッフが必要です");
+      await this.detachStaffReferences(id, options.reassignTo);
+    }
     const { error } = await this.sb.from("staff").delete().eq("id", id);
     if (error?.code === "23503") {
       throw new Error(
@@ -1106,6 +1201,7 @@ class SupabaseStore implements DataStore {
     if (patch.minStaffPerStoreDay !== undefined)
       row.min_staff_per_store_per_day = patch.minStaffPerStoreDay;
     if (patch.requestDeadlineDay !== undefined) row.request_deadline_day = patch.requestDeadlineDay;
+    if (patch.requestLeadMonths !== undefined) row.request_lead_months = patch.requestLeadMonths;
     const { data, error } = await this.sb
       .from("shift_rules")
       .update(row)
@@ -1463,6 +1559,75 @@ class SupabaseStore implements DataStore {
       .update({ comment, commented_by: commentedBy })
       .eq("id", id);
     if (error) throw new Error(`[supabase] 上司コメント保存: ${error.message}`);
+  }
+
+  async listCompanyEvents(filter: { from: string; to: string }): Promise<CompanyEvent[]> {
+    const { data, error } = await this.sb
+      .from("company_events")
+      .select("*")
+      .lte("start_date", filter.to)
+      .gte("end_date", filter.from)
+      .order("start_date", { ascending: true })
+      .order("start_time", { ascending: true });
+    return must(data, error, "会社の予定一覧").map(mapCompanyEvent);
+  }
+
+  async getCompanyEvent(id: string): Promise<CompanyEvent | null> {
+    const { data, error } = await this.sb.from("company_events").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(`[supabase] 会社の予定取得: ${error.message}`);
+    return data ? mapCompanyEvent(data) : null;
+  }
+
+  async upsertCompanyEvent(
+    input: Omit<CompanyEvent, "id" | "createdAt"> & { id?: string }
+  ): Promise<CompanyEvent> {
+    const row = {
+      start_date: input.startDate,
+      end_date: input.endDate,
+      start_time: input.startTime,
+      title: input.title,
+      body: input.body,
+      required: input.required,
+      created_by: input.createdBy,
+    };
+    const query = input.id
+      ? this.sb.from("company_events").update(row).eq("id", input.id)
+      : this.sb.from("company_events").insert(row);
+    const { data, error } = await query.select().single();
+    return mapCompanyEvent(must(data, error, "会社の予定保存"));
+  }
+
+  async deleteCompanyEvent(id: string): Promise<void> {
+    const { error } = await this.sb.from("company_events").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 会社の予定削除: ${error.message}`);
+  }
+
+  async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {
+    if (reportIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("eni_report_comments")
+      .select("*")
+      .in("report_id", reportIds)
+      .order("created_at", { ascending: true });
+    return must(data, error, "日報コメント一覧").map(mapEniReportComment);
+  }
+
+  async addEniReportComment(reportId: string, staffId: string, body: string): Promise<EniReportComment> {
+    const { data, error } = await this.sb
+      .from("eni_report_comments")
+      .insert({ report_id: reportId, staff_id: staffId, body })
+      .select()
+      .single();
+    return mapEniReportComment(must(data, error, "日報コメント追加"));
+  }
+
+  async deleteEniReportComment(id: string, staffId: string): Promise<void> {
+    const { error } = await this.sb
+      .from("eni_report_comments")
+      .delete()
+      .eq("id", id)
+      .eq("staff_id", staffId);
+    if (error) throw new Error(`[supabase] 日報コメント削除: ${error.message}`);
   }
 
   async createPracticeRecord(
