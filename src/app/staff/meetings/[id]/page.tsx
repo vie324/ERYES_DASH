@@ -1,10 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa } from "@/lib/date";
 import { Markdown } from "@/lib/markdown";
 import { findCommitteeTemplate } from "@/lib/eni/committees";
+import { canViewMinutes, isExecutive } from "@/lib/eni/access";
 import { PageHeader } from "@/components/ui";
 import { PrintButton } from "@/components/print-button";
 import { Icon } from "@/components/icons";
@@ -13,6 +14,7 @@ import { forwardMinutesAction } from "@/app/staff/chat/actions";
 
 // 議事録の清書ページ（PDF出力用）。ブラウザの「印刷 → PDFで保存」でそのままPDFになる。
 // ?print=1 で開くと、自動で印刷ダイアログを出す。
+// URLを直接開いても中身が漏れないよう、一覧と同じ閲覧権限をここでも確認する。
 export default async function MinutesPrintPage({
   params,
   searchParams,
@@ -27,13 +29,18 @@ export default async function MinutesPrintPage({
   const meeting = await db.getMeeting(id);
   if (!meeting) notFound();
 
-  const [staffList, tasks, chatOverview, committees] = await Promise.all([
+  const [staffList, tasks, chatOverview, committees, isExec] = await Promise.all([
     db.listStaff(),
     db.listMeetingTasks([id]),
     // 議事録の転送先（自分が入っているトークルーム）
     getChatOverview(db, session.staffId),
     db.listCommittees(),
+    isExecutive(session),
   ]);
+  // 議事録の中身を見られるのは、その会議の関係者・全体ミーティング・幹部だけ
+  if (!canViewMinutes(meeting!, session.staffId, { isExec, committees })) {
+    redirect(`/staff/meetings?month=${meeting!.meetingDate.slice(0, 7)}&error=forbidden`);
+  }
   const nameOf = (sid: string | null) => (sid ? (staffList.find((s) => s.id === sid)?.name ?? "") : "");
   const template = findCommitteeTemplate(committees, meeting!.committee);
   const meetingName = template?.name || meeting!.title || (meeting!.meetingType === "1on1" ? "1on1ミーティング" : "ミーティング");

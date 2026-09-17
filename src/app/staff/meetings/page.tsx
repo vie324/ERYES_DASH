@@ -12,7 +12,7 @@ import {
   todayJst,
   weekdayOf,
 } from "@/lib/date";
-import { isExecutive } from "@/lib/eni/access";
+import { canEditMinutes, canViewMinutes, isExecutive } from "@/lib/eni/access";
 import { committeeToTemplate, findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
@@ -24,6 +24,8 @@ import { deleteMeetingAction, toggleMeetingTaskAction } from "./actions";
 
 // ミーティング・1on1・会議体：月カレンダーで一目確認。会議体はテンプレから作成（参加者複数・アジェンダ・事前チェック）。
 // 議事録は生メモをAIで整形→PDF出力。
+// カレンダー・一覧（いつ・誰が・何の会議か）は全員に見せ、議事録の中身は
+// 関係者・全体ミーティング・幹部だけに見せる（lib/eni/access.ts）。
 export default async function MeetingsPage({
   searchParams,
 }: {
@@ -227,7 +229,13 @@ export default async function MeetingsPage({
               </h2>
               <div className="space-y-2">
                 {byDate.get(date)!.map((m) => {
-                  const canEdit = m.hostStaffId === session.staffId || m.createdBy === session.staffId || isExec;
+                  // 議事録の中身は関係者・幹部だけ。編集は幹部でも「出た会議」だけに限る
+                  const canView = canViewMinutes(m, session.staffId, { isExec, committees });
+                  const canEdit = canEditMinutes(m, session.staffId);
+                  // 自分が担当のタスクは、議事録が見えない会議でも本人には出す
+                  const meetingTasks = (tasksByMeeting.get(m.id) ?? []).filter(
+                    (t) => canView || t.assigneeStaffId === session.staffId
+                  );
                   const isPast = m.meetingDate <= today;
                   const template = findTemplate(m.committee);
                   const partNames = [...(m.guestStaffId ? [m.guestStaffId] : []), ...m.participants]
@@ -272,11 +280,11 @@ export default async function MeetingsPage({
                         )}
 
                         {/* タスク（誰が・何を・いつまでに）。関係者はチェックで完了にできる */}
-                        {(tasksByMeeting.get(m.id) ?? []).length > 0 && (
+                        {meetingTasks.length > 0 && (
                           <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
                             <p className="text-xs font-bold text-amber-800 mb-1.5">タスク（誰が・何を・いつまでに）</p>
                             <ul className="space-y-1.5">
-                              {(tasksByMeeting.get(m.id) ?? []).map((t) => (
+                              {meetingTasks.map((t) => (
                                 <li key={t.id} className="flex items-start gap-2">
                                   <form action={toggleMeetingTaskAction} className="shrink-0 pt-0.5">
                                     <input type="hidden" name="task_id" value={t.id} />
@@ -310,7 +318,12 @@ export default async function MeetingsPage({
                         )}
 
                         {/* 議事録：表示＋PDF、または編集（AI整形） */}
-                        {m.minutesDone && (
+                        {m.minutesDone && !canView && (
+                          <p className="rounded-xl bg-ink-50 border border-ink-100 px-3 py-2 text-xs text-ink-500">
+                            議事録は提出済みです（中身を見られるのは参加者と幹部だけです）
+                          </p>
+                        )}
+                        {m.minutesDone && canView && (
                           <div className="rounded-xl border border-ink-200 p-3">
                             <div className="flex items-center justify-between mb-1">
                               <p className="text-xs font-bold text-ink-500">議事録{m.minutesAi && "（AI整形）"}</p>
@@ -349,7 +362,7 @@ export default async function MeetingsPage({
                                 initialPhoto={m.minutesPhoto}
                                 initialFile={m.minutesFile}
                                 initialFileName={m.minutesFileName}
-                                initialTasks={(tasksByMeeting.get(m.id) ?? []).map((t) => ({
+                                initialTasks={meetingTasks.map((t) => ({
                                   title: t.title,
                                   assignee: t.assigneeName,
                                   due: t.dueDate,
@@ -360,7 +373,7 @@ export default async function MeetingsPage({
                           </details>
                         )}
 
-                        {(m.createdBy === session.staffId || isExec) && (
+                        {(m.createdBy === session.staffId || (canEdit && isExec)) && (
                           <form action={deleteMeetingAction}>
                             <input type="hidden" name="id" value={m.id} />
                             <input type="hidden" name="month" value={month} />

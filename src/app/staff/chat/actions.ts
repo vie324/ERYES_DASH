@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { isExecutive } from "@/lib/eni/access";
+import { canViewMinutes, isExecutive } from "@/lib/eni/access";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME, extractMentions } from "@/lib/chat";
 import { notifyQuietly, pushPreview, shortName } from "@/lib/push/notify";
 
@@ -206,7 +206,7 @@ export async function toggleAnnounceAction(formData: FormData): Promise<void> {
   redirect(`/staff/chat/${roomId}?saved=${announced ? "announced" : "unannounced"}`);
 }
 
-/** 議事録をトークルームへ転送する（ミーティング画面から呼ぶ） */
+/** 議事録をトークルームへ転送する（ミーティング画面から呼ぶ。中身を見られる人だけ） */
 export async function forwardMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const roomId = String(formData.get("room_id") ?? "");
@@ -218,6 +218,11 @@ export async function forwardMinutesAction(formData: FormData): Promise<void> {
   const meeting = await db.getMeeting(meetingId);
   if (!meeting) redirect(`${back}?error=input`);
   await requireMembership(roomId, session.staffId);
+  // 見られない議事録を転送で持ち出せないようにする（ミーティング画面と同じ判定）
+  const [isExec, committees] = await Promise.all([isExecutive(session), db.listCommittees()]);
+  if (!canViewMinutes(meeting, session.staffId, { isExec, committees })) {
+    redirect(`${back}?error=forbidden`);
+  }
 
   const title = meeting.title || meeting.committee || "ミーティング";
   const body = [
