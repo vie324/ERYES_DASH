@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { isExecutive } from "@/lib/eni/access";
+import { canEditMinutes, isExecutive, isMeetingMember } from "@/lib/eni/access";
 import { findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingType } from "@/lib/data/types";
 import { notifyQuietly, pushPreview } from "@/lib/push/notify";
@@ -51,7 +51,7 @@ export async function createMeetingAction(formData: FormData): Promise<void> {
   redirect(`/staff/meetings?month=${month}&saved=created`);
 }
 
-/** 議事録の保存（実施者・登録者・幹部・管理者のみ）。本文（Markdown）／タスク／写真／添付ファイル */
+/** 議事録の保存（その会議に出た人だけ）。本文（Markdown）／タスク／写真／添付ファイル */
 export async function saveMeetingMinutesAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
@@ -71,11 +71,10 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
   if (!meeting) redirect(`/staff/meetings?month=${month}`);
-  const canEdit =
-    meeting!.hostStaffId === session.staffId ||
-    meeting!.createdBy === session.staffId ||
-    (await isExecutive(session));
-  if (!canEdit) redirect(`/staff/meetings?month=${month}&error=forbidden`);
+  // 議事録を直せるのは、その会議の関係者だけ（幹部・管理者でも出ていない会議は編集しない）
+  if (!canEditMinutes(meeting!, session.staffId)) {
+    redirect(`/staff/meetings?month=${month}&error=forbidden`);
+  }
 
   // タスク（誰が・何を・いつまでに）。担当は名前で入ってくるのでスタッフに紐付ける
   const staffList = await db.listStaff();
@@ -122,7 +121,7 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   redirect(`/staff/meetings?month=${month}&saved=minutes`);
 }
 
-/** 議事録タスクの完了チェック（会議の関係者・幹部・管理者、または担当者本人） */
+/** 議事録タスクの完了チェック（会議の関係者、または担当者本人） */
 export async function toggleMeetingTaskAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const taskId = String(formData.get("task_id") ?? "");
@@ -137,11 +136,7 @@ export async function toggleMeetingTaskAction(formData: FormData): Promise<void>
   if (!task) redirect(`/staff/meetings?month=${month}`);
 
   const canToggle =
-    task!.assigneeStaffId === session.staffId ||
-    meeting!.hostStaffId === session.staffId ||
-    meeting!.createdBy === session.staffId ||
-    meeting!.participants.includes(session.staffId) ||
-    (await isExecutive(session));
+    task!.assigneeStaffId === session.staffId || isMeetingMember(meeting!, session.staffId);
   if (!canToggle) redirect(`/staff/meetings?month=${month}&error=forbidden`);
 
   await db.setMeetingTaskDone(taskId, done);
@@ -169,7 +164,7 @@ function parseTasks(raw: string): { title: string; assignee: string; due: string
   }
 }
 
-/** ミーティングの削除（登録者・幹部・管理者のみ） */
+/** ミーティングの削除（登録者、またはその会議に出た幹部・管理者のみ） */
 export async function deleteMeetingAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const id = String(formData.get("id") ?? "");
@@ -178,7 +173,10 @@ export async function deleteMeetingAction(formData: FormData): Promise<void> {
   const db = getDataStore();
   const meeting = await db.getMeeting(id);
   if (!meeting) redirect(`/staff/meetings?month=${month}`);
-  const canDelete = meeting!.createdBy === session.staffId || (await isExecutive(session));
+  // 削除は議事録ごと消える操作なので、編集と同じく「その会議に出た人」に限る
+  const canDelete =
+    meeting!.createdBy === session.staffId ||
+    (isMeetingMember(meeting!, session.staffId) && (await isExecutive(session)));
   if (!canDelete) redirect(`/staff/meetings?month=${month}&error=forbidden`);
 
   await db.deleteMeeting(id);

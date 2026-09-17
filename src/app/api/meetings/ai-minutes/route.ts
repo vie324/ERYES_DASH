@@ -7,6 +7,7 @@ import { getDataStore } from "@/lib/data";
 import { formatDateJa } from "@/lib/date";
 import { generateMinutes } from "@/lib/anthropic";
 import { findCommitteeTemplate } from "@/lib/eni/committees";
+import { canEditMinutes } from "@/lib/eni/access";
 
 export const dynamic = "force-dynamic";
 // AI整形は数十秒かかることがあるため、実行時間の上限を延ばす（Vercelの既定は短い）
@@ -32,13 +33,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const meeting = await db.getMeeting(meetingId);
   if (!meeting) return NextResponse.json({ ok: false, error: "会議が見つかりません" }, { status: 404 });
 
-  const me = await db.getStaff(session.staffId);
-  const canEdit =
-    meeting.hostStaffId === session.staffId ||
-    meeting.createdBy === session.staffId ||
-    session.role === "admin" ||
-    (me?.isExecutive ?? false);
-  if (!canEdit) return NextResponse.json({ ok: false, error: "権限がありません" }, { status: 403 });
+  // AI整形は議事録の下書きを作る操作なので、編集できる人（その会議の関係者）だけに許す
+  if (!canEditMinutes(meeting, session.staffId)) {
+    return NextResponse.json({ ok: false, error: "権限がありません" }, { status: 403 });
+  }
 
   const staffList = await db.listStaff();
   const nameOf = (id: string | null) => (id ? (staffList.find((s) => s.id === id)?.name ?? "") : "");
