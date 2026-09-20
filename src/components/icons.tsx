@@ -40,6 +40,7 @@ export type IconName =
   | "listTodo"
   | "bot"
   | "play"
+  | "notion"
   | "brandMark";
 
 const PATHS: Record<IconName, JSX.Element> = {
@@ -235,6 +236,13 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="m10 8.5 5.5 3.5-5.5 3.5z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // ノーション（考え方・ルール・マニュアルの置き場）。ページに「N」のかたち
+  notion: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2.5" />
+      <path d="M9.5 16.5v-9l5 9v-9" />
     </>
   ),
   brandMark: (

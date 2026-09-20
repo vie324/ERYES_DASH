@@ -143,6 +143,10 @@ export default async function StaffHomePage() {
           <Icon name="link" className="w-4 h-4 text-brand-500" />
           サロンボードを開く
         </a>
+        <Link href="/staff/help" className="chip !py-2.5 !px-4">
+          <Icon name="help" className="w-4 h-4 text-brand-500" />
+          使い方ガイド（困ったときはこちら）
+        </Link>
         {session.role === "admin" && (
           <Link href="/admin" className="chip !py-2.5 !px-4">
             <Icon name="sliders" className="w-4 h-4 text-brand-500" />

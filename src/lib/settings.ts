@@ -1,7 +1,9 @@
 // アプリ設定（管理者が画面から変えられる値）の読み書き。
-// 「サロンボードのURL」「カミキュラムのURL」など。増えてもここに定義を足すだけで済むようにしている。
+// 「サロンボードのURL」「カミキュラムのURL」「ノーションのURL」など。
+// 増えてもここに定義を足すだけで済むようにしている。
 
 import type { AppSetting, DataStore } from "@/lib/data/types";
+import { NOTION_DESTINATIONS } from "@/lib/notion";
 
 export interface AppSettingDef {
   key: string;
@@ -29,6 +31,14 @@ export const APP_SETTING_DEFS: AppSettingDef[] = [
     placeholder: "https://",
     fallback: "",
   },
+  // ノーションの接続先（ENiについて／マニュアルまとめ）。定義は lib/notion.ts
+  ...NOTION_DESTINATIONS.map(({ key, label, note, placeholder, fallback }) => ({
+    key,
+    label,
+    note,
+    placeholder,
+    fallback,
+  })),
 ];
 
 /** 設定の一覧を「キー→値」に。未設定は既定値で埋める */
@@ -51,6 +61,18 @@ export async function getSalonBoardUrl(db: DataStore): Promise<string> {
 export async function getAppLinks(db: DataStore): Promise<{ salonBoardUrl: string; curriculumUrl: string }> {
   const map = settingsMap(await db.listAppSettings());
   return { salonBoardUrl: map[SALON_BOARD_URL_KEY], curriculumUrl: map[CURRICULUM_URL_KEY] ?? "" };
+}
+
+/** ノーションの接続先（見出し・説明つき）。未設定のものは既定のページを出す */
+export async function getNotionLinks(
+  db: DataStore
+): Promise<{ label: string; summary: string; url: string }[]> {
+  const map = settingsMap(await db.listAppSettings());
+  return NOTION_DESTINATIONS.map((d) => ({
+    label: d.label,
+    summary: d.summary,
+    url: map[d.key] || d.fallback,
+  })).filter((d) => d.url !== "");
 }
 
 /** 保存前の検証：http(s) のURLだけ受け付ける（空文字は「既定に戻す」） */

@@ -50,6 +50,17 @@ function compact(groups: NavGroup[]): NavGroup[] {
   return groups.filter((g) => g.items.length > 0);
 }
 
+/**
+ * ノーション（考え方・ルール・マニュアルの置き場）。
+ * 接続先が複数あるので、下部タブからは入口のページに飛ばして、そこで選んでもらう。
+ */
+const NOTION_ITEM: NavItem = {
+  href: "/staff/notion",
+  label: "ノーション（考え方・マニュアル）",
+  short: "ノーション",
+  icon: "notion",
+};
+
 /** AIしもん・カミキュラム（ENi共通の「学び・相談」グループ） */
 function learningGroup(ctx: NavContext): NavGroup {
   const curriculumUrl = ctx.links?.curriculumUrl ?? "";
@@ -77,8 +88,10 @@ function staffNav(ctx: NavContext): NavGroup[] {
     label: "ホーム",
     items: [{ href: "/staff", label: "ダッシュボード", icon: "layoutGrid", exact: true }],
   };
-  // 使い方ガイドは ENi とイーリスで内容が同じままなので一旦外している（作り直すまで非表示）
-  const support: NavGroup = { label: "サポート", items: [] };
+  const support: NavGroup = {
+    label: "サポート",
+    items: [NOTION_ITEM, { href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" }],
+  };
 
   // 幹部だけに出す「幹部」グループ（幹部タスク・日報の気づきをまとめる）
   const execGroup: NavGroup = {
@@ -228,8 +241,11 @@ function adminNav(ctx: NavContext): NavGroup[] {
   };
   const support: NavGroup = {
     label: "サポート",
-    // 使い方ガイドは一旦外している（ENi とイーリスで内容が同じままのため）
-    items: [{ href: "/admin/settings", label: "マスタ設定", icon: "sliders" }],
+    items: [
+      NOTION_ITEM,
+      { href: "/admin/help", label: "使い方ガイド", short: "使い方", icon: "help" },
+      { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
+    ],
   };
   // 管理者は常に幹部メニューが見られる
   const execGroup: NavGroup = {
@@ -342,8 +358,9 @@ function adminNav(ctx: NavContext): NavGroup[] {
 /**
  * スマホの下部タブ（親指で届く位置）に置く項目。
  * 「ホーム」と「メニュー」は画面側で足すので、ここには“よく使う操作”だけを返す。
- *  ・ENi …… サロンボード・カミキュラム・AIしもん・タスク（役割に関係なく固定）
- *  ・EREYS …… 現場で1日に触る回数が多い順に3つ
+ *  ・ENi …… サロンボード・ノーション・カミキュラム・AIしもん・タスク（役割に関係なく固定）
+ *  ・EREYS …… 現場で1日に触る回数が多い順に3つ＋ノーション
+ * ノーションは考え方・ルール・マニュアルの置き場なので、どちらの業態でも下部タブに置く。
  */
 export function buildMobileTabs(ctx: NavContext): NavItem[] {
   const groups = buildNav(ctx);
@@ -356,6 +373,7 @@ export function buildMobileTabs(ctx: NavContext): NavItem[] {
     const tasks = pick("/staff/tasks");
     return [
       { href: salonBoardUrl, label: "サロンボード", short: "サロンボード", icon: "link", external: true },
+      NOTION_ITEM,
       learning[1], // カミキュラム
       learning[0], // AIしもん
       ...(tasks ? [tasks] : []),
@@ -367,7 +385,7 @@ export function buildMobileTabs(ctx: NavContext): NavItem[] {
       ? ["/admin/reports", "/admin/counseling", "/admin/schedule"]
       : ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"];
 
-  return wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3);
+  return [...wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3), NOTION_ITEM];
 }
 
 /** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致。外部リンクは常に false） */
