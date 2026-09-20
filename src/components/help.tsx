@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
+import type { HelpGuide } from "@/lib/help/types";
 
 /** 毎日の流れなどを縦タイムラインで見せる */
 export function HelpTimeline({
@@ -130,5 +131,65 @@ export function HelpHeading({ children }: { children: React.ReactNode }) {
       <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
       {children}
     </h2>
+  );
+}
+
+/**
+ * 使い方ガイド1つぶんの本文（lib/help の定義をそのまま並べる）。
+ * 業態（ENi / EREYS）で中身が違うだけで、並べ方は同じなのでここに集約している。
+ */
+export function HelpGuideBody({ guide }: { guide: HelpGuide }) {
+  return (
+    <>
+      <p className="text-sm text-ink-500 mb-2">{guide.intro}</p>
+
+      {guide.blocks.map((block) => (
+        <div key={block.heading}>
+          <HelpHeading>{block.heading}</HelpHeading>
+          {block.timeline && (
+            <div className="card">
+              <HelpTimeline steps={block.timeline} />
+            </div>
+          )}
+          {block.topics && (
+            <div className="space-y-3">
+              {block.topics.map((topic) => (
+                <HelpAccordion
+                  key={topic.title}
+                  icon={topic.icon}
+                  title={topic.title}
+                  summary={topic.summary}
+                  href={topic.href}
+                  steps={topic.steps}
+                  notes={topic.notes}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {guide.setup && (
+        <>
+          <HelpHeading>{guide.setup.heading}</HelpHeading>
+          <div className="card text-sm text-ink-600 space-y-2">
+            <p className="font-bold text-ink-800">{guide.setup.lead}</p>
+            <ol className="space-y-1.5 list-decimal list-inside">
+              {guide.setup.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {guide.setup.warning && (
+              <p className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold p-3 mt-2">
+                {guide.setup.warning}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      <HelpHeading>こんなときは</HelpHeading>
+      <HelpFaq items={guide.faq} />
+    </>
   );
 }

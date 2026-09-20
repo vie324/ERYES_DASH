@@ -49,6 +49,10 @@ export function AppShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  // 下部タブの詰め具合。ホーム＋タブ＋メニューの数で決める（多いほど小さくする）
+  const density = tabDensity(tabs.length + 2);
+  const tab = TAB_SIZES[density];
+
   // いま開いているメニュー項目（サイドバーの強調と、上部バーの現在地表示に使う）
   const current = findCurrent(pathname, groups);
 
@@ -162,6 +166,7 @@ export function AppShell({
             href={homeHref}
             icon="layoutGrid"
             label="ホーム"
+            density={density}
             active={pathname === homeHref}
           />
           {tabs.map((t) => (
@@ -172,19 +177,19 @@ export function AppShell({
               label={t.short ?? t.label}
               badge={t.badge}
               external={t.external}
-              dense={tabs.length >= 4}
+              density={density}
               active={matchesNav(pathname, t)}
             />
           ))}
-          <li className="flex-1">
+          <li className="flex-1 min-w-0">
             <button
               type="button"
               onClick={() => setOpen(true)}
               aria-label="メニューを開く"
-              className="w-full h-full flex flex-col items-center justify-center gap-1 py-2 min-h-[3.75rem] text-ink-500 transition-colors active:bg-brand-100"
+              className={`w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${tab.pad} min-h-[3.75rem] text-ink-500 transition-colors active:bg-brand-100`}
             >
-              <Icon name="menu" className="w-[22px] h-[22px]" />
-              <span className="text-[10px] font-bold leading-none">メニュー</span>
+              <Icon name="menu" className={tab.icon} />
+              <span className={`${tab.text} font-bold leading-none`}>メニュー</span>
             </button>
           </li>
         </ul>
@@ -193,10 +198,24 @@ export function AppShell({
   );
 }
 
+/** 下部タブの詰め具合。並ぶ数（ホーム・メニューを含む）で決める */
+type TabDensity = "normal" | "dense" | "tight";
+
+const TAB_SIZES: Record<TabDensity, { pad: string; icon: string; text: string }> = {
+  normal: { pad: "px-1", icon: "w-[22px] h-[22px]", text: "text-[10px]" },
+  dense: { pad: "px-0.5", icon: "w-[22px] h-[22px]", text: "text-[9px]" },
+  // 7つ並び（ENi：ホーム・サロンボード・ノーション・カミキュラム・AIしもん・タスク・メニュー）用
+  tight: { pad: "px-px", icon: "w-5 h-5", text: "text-[9px]" },
+};
+
+function tabDensity(count: number): TabDensity {
+  if (count >= 7) return "tight";
+  return count >= 6 ? "dense" : "normal";
+}
+
 /**
  * 下部タブの1つ。ラベルは2行にせず、はみ出す場合は省略する。
  * 外部リンク（サロンボード・カミキュラム）は新しいタブで開く（ホーム画面に追加したアプリでも戻れるように）。
- * dense はタブが多いとき（ENiの6つ並び）に文字を少し小さくする。
  */
 function TabLink({
   href,
@@ -205,7 +224,7 @@ function TabLink({
   badge,
   active,
   external,
-  dense,
+  density,
 }: {
   href: string;
   icon: NavItem["icon"];
@@ -213,27 +232,24 @@ function TabLink({
   badge?: NavItem["badge"];
   active: boolean;
   external?: boolean;
-  dense?: boolean;
+  density: TabDensity;
 }) {
-  const className = `relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${
-    dense ? "px-0.5" : "px-1"
-  } min-h-[3.75rem] transition-colors ${active ? "text-brand-800" : "text-ink-500"} active:bg-brand-100`;
+  const size = TAB_SIZES[density];
+  const className = `relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${size.pad} min-h-[3.75rem] transition-colors ${active ? "text-brand-800" : "text-ink-500"} active:bg-brand-100`;
   const inner = (
     <>
       {active && (
         <span className="absolute top-0 inset-x-3 h-[3px] rounded-b-full bg-gradient-to-r from-brand-400 to-brand-600" />
       )}
       <span className="relative">
-        <Icon name={icon} className="w-[22px] h-[22px]" />
+        <Icon name={icon} className={size.icon} />
         {badge != null && badge !== 0 && (
           <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
             {badge}
           </span>
         )}
       </span>
-      <span className={`${dense ? "text-[9px]" : "text-[10px]"} font-bold leading-none truncate max-w-full`}>
-        {label}
-      </span>
+      <span className={`${size.text} font-bold leading-none truncate max-w-full`}>{label}</span>
     </>
   );
   return (
