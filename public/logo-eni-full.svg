@@ -1,13 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="440" height="320" viewBox="0 0 440 320">
-  <!-- ENi ロゴ（スプラッシュ・ログイン用）。ワードマーク＋鏡面リフレクション＋サークルマーク（マークはEREYSと共通） -->
-  <g font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
-     font-size="104" font-weight="600" letter-spacing="10">
-    <text x="16" y="160" fill="#A99668">ENi</text>
-    <text x="16" y="-172" transform="scale(1,-1)" fill="#A99668" opacity="0.28">ENi</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="310.75" height="477.31" viewBox="0 0 310.75 477.31" role="img" aria-label="ENi">
+  <!-- ENi ロゴ（正式版・縦組み）。支給データを実測してパス化したもの。
+       端末にフォントが無くても形が変わらないよう、文字もアウトライン化している。 -->
+  <g fill="none" stroke="#A99668" stroke-width="5.8">
+    <circle cx="154.27" cy="129.36" r="126.46"/>
+    <path d="M31.3 271.11L180 167.11"/>
   </g>
-  <g fill="none" stroke="#A99668" stroke-width="2.4" stroke-linecap="round">
-    <circle cx="348" cy="160" r="62"/>
-    <line x1="282" y1="230" x2="388" y2="149"/>
-  </g>
-  <circle cx="388" cy="149" r="7" fill="#A99668"/>
+  <circle cx="198.4" cy="155.61" r="6.2" fill="#A99668"/>
+  <path fill="#A99668" d="M0 362.31L79 362.31L79 369.31L0 369.31ZM0 369.31L20 369.31L20 467.31L0 467.31ZM0 409.31L60 409.31L60 417.31L0 417.31ZM0 467.31L79 467.31L79 475.31L0 475.31ZM134 362.31L143 362.31L143 475.31L134 475.31ZM220 362.31L229 362.31L229 475.31L220 475.31ZM134 362.31L147.3 362.31L229 456.33L229 475.31L221.7 475.31L134 374.39ZM310 397.31L310 477.31L294 477.31L294 403.31ZM292.25 369.31a9.25 9.25 0 1 0 18.5 0a9.25 9.25 0 1 0 -18.5 0Z"/>
 </svg>

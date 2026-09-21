@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
+import { accentStyle, type MenuAccent } from "@/lib/menu-accent";
 
 /** デモモード時の注意バナー */
 export function DemoBanner({ show }: { show: boolean }) {
@@ -89,28 +90,33 @@ export function SectionCard({
   );
 }
 
-/** ホーム画面用の大きなメニューボタン（グリッドに並べても崩れない） */
+/** バッジを出すか（0・null・undefined は出さない） */
+function hasBadge(badge?: string | number | null): boolean {
+  return badge !== undefined && badge !== null && badge !== 0 && badge !== "";
+}
+
+/**
+ * ホーム画面用の大きなメニューボタン（タブレット・PC）。
+ * accent を渡すと、その項目だけの色でアイコン・左の帯・影がつく。
+ */
 export function BigMenuLink({
   href,
   title,
   description,
   icon,
   badge,
+  accent,
 }: {
   href: string;
   title: string;
   description?: string;
   icon: IconName;
   badge?: string | number | null;
+  accent?: MenuAccent;
 }) {
   return (
-    <Link
-      href={href}
-      className="card group flex items-center gap-3.5 min-h-[5.25rem] h-full relative overflow-hidden"
-    >
-      {/* ホバー時に左端をゴールドで光らせる */}
-      <span className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-brand-400 to-brand-600 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-      <span className="w-12 h-12 flex items-center justify-center rounded-2xl shrink-0 bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 text-brand-700 transition-colors duration-300 group-hover:from-brand-100 group-hover:to-brand-200 group-hover:border-brand-300">
+    <Link href={href} style={accentStyle(accent)} className="menu-row group">
+      <span className="menu-icon">
         <Icon name={icon} className="w-6 h-6" />
       </span>
       <span className="flex-1 min-w-0">
@@ -123,47 +129,47 @@ export function BigMenuLink({
           </span>
         )}
       </span>
-      {badge !== undefined && badge !== null && badge !== 0 && (
-        <span className="bg-gradient-to-b from-brand-500 to-brand-600 text-white text-sm font-bold rounded-full min-w-7 h-7 px-2 flex items-center justify-center shrink-0 shadow-[0_2px_8px_rgba(148,129,90,0.35)]">
-          {badge}
-        </span>
+      {hasBadge(badge) && (
+        <span className="menu-badge min-w-7 h-7 px-2 text-sm shrink-0">{badge}</span>
       )}
       <Icon
         name="chevronRight"
-        className="w-4 h-4 shrink-0 text-brand-300 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-brand-500"
+        className="w-4 h-4 shrink-0 text-ink-300 transition-transform duration-300 group-hover:translate-x-0.5"
       />
     </Link>
   );
 }
 
-/** スマホのホーム用：アイコン＋小さな文字のコンパクトなメニュー（3列グリッドで並べる） */
+/**
+ * スマホのホーム用：アイコン＋小さな文字のコンパクトなメニュー（3列グリッドで並べる）。
+ * 項目ごとの色（accent）でアイコンを塗り分けて、探している機能を色でも見つけられるようにする。
+ */
 export function IconMenuLink({
   href,
   label,
   icon,
   badge,
+  accent,
 }: {
   href: string;
   label: string;
   icon: IconName;
   badge?: string | number | null;
+  accent?: MenuAccent;
 }) {
   return (
-    <Link
-      href={href}
-      className="flex flex-col items-center justify-start gap-1.5 rounded-2xl bg-white border border-brand-100 shadow-[0_1px_4px_rgba(93,80,58,0.06)] px-1 pt-3 pb-2.5 transition-colors active:bg-brand-50"
-    >
-      <span className="relative w-11 h-11 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 text-brand-700">
-        <Icon name={icon} className="w-[22px] h-[22px]" />
-        {badge !== undefined && badge !== null && badge !== 0 && (
-          <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-gradient-to-b from-brand-500 to-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
+    <Link href={href} style={accentStyle(accent)} className="menu-tile">
+      <span className="relative z-10">
+        <span className="menu-icon">
+          <Icon name={icon} className="w-[23px] h-[23px]" />
+        </span>
+        {hasBadge(badge) && (
+          <span className="menu-badge absolute z-10 -top-1.5 -right-1.5 min-w-[1.35rem] h-[1.35rem] px-1 text-[10px]">
             {badge}
           </span>
         )}
       </span>
-      <span className="text-[11px] font-bold text-ink-700 leading-tight text-center text-balance">
-        {label}
-      </span>
+      <span className="menu-tile-label">{label}</span>
     </Link>
   );
 }

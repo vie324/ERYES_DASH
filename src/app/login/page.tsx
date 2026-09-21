@@ -36,7 +36,7 @@ export default async function LoginPage({
           <span className="pointer-events-none absolute -top-32 -left-24 w-[26rem] h-[26rem] rounded-full bg-brand-500/10 blur-3xl" />
           <span className="pointer-events-none absolute -bottom-40 -right-16 w-[24rem] h-[24rem] rounded-full bg-brand-400/[0.07] blur-3xl" />
 
-          <img src={getLogoFullSrc()} alt="ENi" className="w-44 h-auto relative" />
+          <img src={getLogoFullSrc()} alt="ENi" className="h-40 w-auto relative object-contain object-left" />
 
           <div className="relative">
             <p className="font-display text-3xl leading-snug text-white">
@@ -70,8 +70,8 @@ export default async function LoginPage({
         <main className="flex-1 flex items-center justify-center p-4 py-10">
           <div className="w-full max-w-sm animate-fade-up">
             <div className="text-center mb-8">
-              <img src={getLogoFullSrc()} alt="ENi" className="w-52 h-auto mx-auto lg:hidden" />
-              <p className="text-[11px] font-bold tracking-[0.35em] text-brand-500 -mt-3 lg:hidden">
+              <img src={getLogoFullSrc()} alt="ENi" className="h-36 w-auto mx-auto object-contain lg:hidden" />
+              <p className="text-[11px] font-bold tracking-[0.35em] text-brand-500 mt-3 lg:hidden">
                 SALON MANAGEMENT
               </p>
               <h1 className="hidden lg:block font-display text-3xl font-bold text-ink-900">

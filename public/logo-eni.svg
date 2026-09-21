@@ -1,10 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="150" height="48" viewBox="0 0 150 48">
-  <!-- ENi ロゴ（ヘッダー用・横長版）。マークはEREYSと共通、ワードマークのみENi -->
-  <text x="0" y="34" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, 'Times New Roman', serif"
-        font-size="30" font-weight="600" letter-spacing="5" fill="#A99668">ENi</text>
-  <g fill="none" stroke="#A99668" stroke-width="1.6" stroke-linecap="round">
-    <circle cx="122" cy="24" r="19"/>
-    <line x1="102" y1="45" x2="134" y2="21"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="531.78" height="197.7" viewBox="0 0 531.78 197.7" role="img" aria-label="ENi">
+  <!-- ENi ロゴ（横組み）。正式ロゴは「マークが上・店名が下」だが、
+       ヘッダーやサイドバーのように横長の場所ではこの並びで使う。 -->
+  <g transform="translate(0 -319.84)">
+    <path fill="#A99668" d="M0 362.31L79 362.31L79 369.31L0 369.31ZM0 369.31L20 369.31L20 467.31L0 467.31ZM0 409.31L60 409.31L60 417.31L0 417.31ZM0 467.31L79 467.31L79 475.31L0 475.31ZM134 362.31L143 362.31L143 475.31L134 475.31ZM220 362.31L229 362.31L229 475.31L220 475.31ZM134 362.31L147.3 362.31L229 456.33L229 475.31L221.7 475.31L134 374.39ZM310 397.31L310 477.31L294 477.31L294 403.31ZM292.25 369.31a9.25 9.25 0 1 0 18.5 0a9.25 9.25 0 1 0 -18.5 0Z"/>
   </g>
-  <circle cx="134" cy="21" r="2.6" fill="#A99668"/>
+  <g transform="translate(326.74 0) scale(0.7229)">
+    <g fill="none" stroke="#A99668" stroke-width="5.8">
+      <circle cx="154.27" cy="129.36" r="126.46"/>
+      <path d="M31.3 271.11L180 167.11"/>
+    </g>
+    <circle cx="198.4" cy="155.61" r="6.2" fill="#A99668"/>
+  </g>
 </svg>

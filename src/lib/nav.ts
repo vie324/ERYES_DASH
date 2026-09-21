@@ -36,7 +36,7 @@ export type NavContext = {
   attendanceEnabled?: boolean;
   /** 件数バッジ（未確認カウンセリング・議事録未提出など） */
   badges?: Record<string, number | null | undefined>;
-  /** 外部サービスのURL（マスタ設定）。カミキュラムは未設定なら空文字 */
+  /** 外部サービスのURL（マスタ設定）。未指定のときだけ案内ページに逃がす */
   links?: { salonBoardUrl: string; curriculumUrl: string };
 };
 
@@ -68,7 +68,7 @@ function learningGroup(ctx: NavContext): NavGroup {
     label: "学び・相談",
     items: [
       { href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" },
-      // URLが未設定の間は案内ページ（/staff/curriculum）へ。設定されたら外部サイトを新しいタブで開く
+      // 既定は app.kamiculum.com。URLを取れなかったときだけ案内ページ（/staff/curriculum）へ逃がす
       curriculumUrl
         ? { href: curriculumUrl, label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play", external: true }
         : { href: "/staff/curriculum", label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play" },

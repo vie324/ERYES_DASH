@@ -9,6 +9,7 @@ import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
 import { BigMenuLink, IconMenuLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
+import type { MenuAccent } from "@/lib/menu-accent";
 import { ShiftNoticeBanner } from "@/components/shift-banner";
 import { Dashboard } from "@/components/dashboard";
 import { AnnouncementBoard } from "@/components/announcement-board";
@@ -24,6 +25,8 @@ interface HomeMenuItem {
   short: string;
   description: string;
   badge?: string | number | null;
+  /** その項目の色。近い意味の項目は同じ色にして、探すときの目印にする */
+  accent: MenuAccent;
 }
 
 // スタッフのホーム：スマホは「今の状況」を上に、メニューはアイコン＋小さな文字の3列グリッドで見せる。
@@ -113,6 +116,7 @@ export default async function StaffHomePage() {
               icon={item.icon}
               label={item.short}
               badge={item.badge}
+              accent={item.accent}
             />
           ))}
         </div>
@@ -127,6 +131,7 @@ export default async function StaffHomePage() {
               title={item.title}
               description={item.description}
               badge={item.badge}
+              accent={item.accent}
             />
           ))}
         </div>
@@ -138,17 +143,17 @@ export default async function StaffHomePage() {
           href={salonBoardUrl}
           target="_blank"
           rel="noreferrer"
-          className="chip !py-2.5 !px-4 border-brand-400 text-brand-800"
+          className="home-action home-action-primary"
         >
           <Icon name="link" className="w-4 h-4 text-brand-500" />
           サロンボードを開く
         </a>
-        <Link href="/staff/help" className="chip !py-2.5 !px-4">
+        <Link href="/staff/help" className="home-action">
           <Icon name="help" className="w-4 h-4 text-brand-500" />
           使い方ガイド（困ったときはこちら）
         </Link>
         {session.role === "admin" && (
-          <Link href="/admin" className="chip !py-2.5 !px-4">
+          <Link href="/admin" className="home-action">
             <Icon name="sliders" className="w-4 h-4 text-brand-500" />
             管理者画面へ
           </Link>
@@ -181,6 +186,7 @@ async function eyesMenuItems(
   return [
     {
       href: "/staff/counseling",
+      accent: "sky",
       icon: "clipboard",
       title: "本日のカウンセリング",
       short: "カウンセ",
@@ -192,6 +198,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/customers",
+      accent: "teal",
       icon: "user",
       title: "お客様のカルテ",
       short: "カルテ",
@@ -199,6 +206,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/report",
+      accent: "coral",
       icon: "pencil",
       title: "日報を入力",
       short: "日報",
@@ -207,6 +215,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/tasks",
+      accent: "indigo",
       icon: "listTodo",
       title: "タスク",
       short: "タスク",
@@ -215,6 +224,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/chat",
+      accent: "lavender",
       icon: "chat",
       title: "トークルーム",
       short: "トーク",
@@ -223,6 +233,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/thanks",
+      accent: "plum",
       icon: "heart",
       title: "サンクスカード",
       short: "サンクス",
@@ -230,6 +241,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/cash",
+      accent: "clay",
       icon: "banknote",
       title: "レジ締め・現金管理",
       short: "レジ締め",
@@ -237,6 +249,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/schedule",
+      accent: "sage",
       icon: "calendar",
       title: "出勤スケジュール",
       short: "シフト",
@@ -247,6 +260,7 @@ async function eyesMenuItems(
       ? [
           {
             href: "/staff/attendance",
+            accent: "rose" as MenuAccent,
             icon: "mapPin" as IconName,
             title: "出勤・退勤の打刻",
             short: "打刻",
@@ -256,6 +270,7 @@ async function eyesMenuItems(
       : []),
     {
       href: "/staff/stats",
+      accent: "gold",
       icon: "trendingUp",
       title: "自分の成績",
       short: "成績",
@@ -263,6 +278,7 @@ async function eyesMenuItems(
     },
     {
       href: "/staff/reports",
+      accent: "coral",
       icon: "book",
       title: "過去の日報をふりかえる",
       short: "過去日報",
@@ -272,6 +288,7 @@ async function eyesMenuItems(
       ? [
           {
             href: "/staff/exec",
+            accent: "plum" as MenuAccent,
             icon: "crown" as IconName,
             title: "幹部メニュー",
             short: "幹部",
@@ -314,6 +331,7 @@ async function eniMenuItems(
       ? [
           {
             href: "/staff/eni-report",
+            accent: "coral" as MenuAccent,
             icon: "pencil" as IconName,
             title: "日報を入力（スタイリスト）",
             short: "日報",
@@ -328,6 +346,7 @@ async function eniMenuItems(
       ? [
           {
             href: "/staff/weekly-report",
+            accent: "rose" as MenuAccent,
             icon: "pencil" as IconName,
             title: "週報を入力（アシスタント）",
             short: "週報",
@@ -340,6 +359,7 @@ async function eniMenuItems(
       : []),
     {
       href: "/staff/tasks",
+      accent: "sky",
       icon: "listTodo",
       title: "タスク",
       short: "タスク",
@@ -348,6 +368,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/plan",
+      accent: "teal",
       icon: "calendar",
       title: "スケジュール",
       short: "予定",
@@ -358,6 +379,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/chat",
+      accent: "indigo",
       icon: "chat",
       title: "トークルーム",
       short: "トーク",
@@ -366,6 +388,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/thanks",
+      accent: "plum",
       icon: "heart",
       title: "サンクスカード",
       short: "サンクス",
@@ -373,6 +396,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/meetings",
+      accent: "sage",
       icon: "users",
       title: "ミーティング・1on1",
       short: "議事録",
@@ -384,6 +408,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/schedule",
+      accent: "lavender",
       icon: "calendar",
       title: "出勤スケジュール",
       short: "シフト",
@@ -392,6 +417,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/orders",
+      accent: "clay",
       icon: "banknote",
       title: "発注・購入申請",
       short: "発注",
@@ -399,6 +425,7 @@ async function eniMenuItems(
     },
     {
       href: "/staff/ai-shimon",
+      accent: "gold",
       icon: "bot",
       title: "AIしもん（壁打ち相談）",
       short: "AIしもん",
@@ -409,6 +436,7 @@ async function eniMenuItems(
       ? [
           {
             href: "/staff/absence",
+            accent: "rose" as MenuAccent,
             icon: "alertTriangle" as IconName,
             title: "欠勤・早退の報告",
             short: "欠勤報告",
@@ -416,6 +444,7 @@ async function eniMenuItems(
           },
           {
             href: "/staff/exec",
+            accent: "coral" as MenuAccent,
             icon: "crown" as IconName,
             title: "幹部メニュー",
             short: "幹部",
@@ -423,6 +452,7 @@ async function eniMenuItems(
           },
           {
             href: "/staff/org",
+            accent: "teal" as MenuAccent,
             icon: "sparkles" as IconName,
             title: "組織図（シナジーマップ）",
             short: "組織図",

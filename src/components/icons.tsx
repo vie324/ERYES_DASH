@@ -245,11 +245,12 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M9.5 16.5v-9l5 9v-9" />
     </>
   ),
+  // ENi／EREYS共通のサークルマーク（正式ロゴの比率に合わせている。点は斜線の延長上に離して置く）
   brandMark: (
     <>
       <circle cx="12" cy="11.5" r="8" />
-      <path d="m3.5 21.5 13.4-10.6" />
-      <circle cx="16.9" cy="10.9" r="1.3" fill="currentColor" stroke="none" />
+      <path d="M4.22 20.47 13.63 13.89" />
+      <circle cx="14.79" cy="13.16" r="1.1" fill="currentColor" stroke="none" />
     </>
   ),
 };

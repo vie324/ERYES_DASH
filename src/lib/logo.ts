@@ -2,7 +2,8 @@
 // メインブランドは ENi（ヘアサロン）。マークは両ブランド共通で、ワードマークだけが違う。
 // EREYS（アイサロン）を選んでいるときだけ EREYS のロゴに切り替える。
 // EREYSの正式ロゴ（public/logo.png＝背景透過済み）があればそれを優先する。
-// ENiの正式ロゴ画像を受領したら public/logo-eni.png を置くだけで自動的に優先表示される。
+// ENiは支給された正式ロゴをSVG（アウトライン化済み）に起こしてあるので、
+// public/logo-eni.png を置かないかぎりそのSVGを使う。
 
 import { existsSync } from "fs";
 import path from "path";
