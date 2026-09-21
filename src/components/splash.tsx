@@ -51,7 +51,8 @@ export function Splash({
     >
       <div className="animate-splash-logo flex flex-col items-center px-10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="サロン業務システム" className="w-64 max-w-[70vw] h-auto" />
+        {/* ENiの正式ロゴは「マークが上・店名が下」の縦長なので、高さでも止めて画面からはみ出さないようにする */}
+        <img src={src} alt="サロン業務システム" className="w-64 max-w-[70vw] max-h-[46vh] h-auto object-contain" />
         <p className="mt-2 text-[11px] font-bold tracking-[0.35em] text-brand-500">
           SALON MANAGEMENT
         </p>

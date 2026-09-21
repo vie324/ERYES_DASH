@@ -464,7 +464,7 @@ export default async function AdminSettingsPage({
           <p className="text-[11px] text-ink-400">
             ※ サロンボードはダッシュボードの「サロンボードを開く」ボタンと下部タブから、
             カミキュラムは下部タブ・メニューから新しいタブで開きます。
-            サロンボードを空欄で保存すると既定のログインページに戻ります。
+            サロンボード・カミキュラムは空欄で保存すると既定のログインページに戻ります。
           </p>
         </form>
       </section>
@@ -521,9 +521,10 @@ export default async function AdminSettingsPage({
       <section className="card mt-5">
         <h2 className="section-title">ロゴ画像の差し替え</h2>
         <p className="text-xs text-ink-500">
-          サイドバーのロゴは、ENiは <code className="font-bold">public/logo-eni.png</code>、EREYSは{" "}
+          いまは支給ロゴをそのままSVG（アウトライン化済み）にしたものを表示しています。
+          差し替えたいときは、ENiは <code className="font-bold">public/logo-eni.png</code>、EREYSは{" "}
           <code className="font-bold">public/logo.png</code>{" "}
-          を置くだけで自動的に切り替わります（未設置のときは同名のSVGを表示します）。
+          を置くだけで自動的に切り替わります。
           参照先を変えたい場合は <code className="font-bold">src/lib/logo.ts</code> を編集してください。
         </p>
       </section>

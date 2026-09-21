@@ -27,9 +27,9 @@ export const APP_SETTING_DEFS: AppSettingDef[] = [
   {
     key: CURRICULUM_URL_KEY,
     label: "カミキュラムのURL",
-    note: "スマホの下部タブ「カミキュラム」の飛び先（動画教材サイトのログインページなど）。未設定の間は案内ページが出ます",
-    placeholder: "https://",
-    fallback: "",
+    note: "スマホの下部タブ「カミキュラム」の飛び先。未入力のままでも既定のログインページ（app.kamiculum.com）を開きます",
+    placeholder: "https://app.kamiculum.com/",
+    fallback: "https://app.kamiculum.com/",
   },
   // ノーションの接続先（ENiについて／マニュアルまとめ）。定義は lib/notion.ts
   ...NOTION_DESTINATIONS.map(({ key, label, note, placeholder, fallback }) => ({
@@ -57,7 +57,7 @@ export async function getSalonBoardUrl(db: DataStore): Promise<string> {
   return settingsMap(rows)[SALON_BOARD_URL_KEY];
 }
 
-/** 外部リンクをまとめて取る（下部タブ・メニュー用）。カミキュラムは未設定なら空文字 */
+/** 外部リンクをまとめて取る（下部タブ・メニュー用）。未設定のものは既定のURLで埋まる */
 export async function getAppLinks(db: DataStore): Promise<{ salonBoardUrl: string; curriculumUrl: string }> {
   const map = settingsMap(await db.listAppSettings());
   return { salonBoardUrl: map[SALON_BOARD_URL_KEY], curriculumUrl: map[CURRICULUM_URL_KEY] ?? "" };

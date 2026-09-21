@@ -77,16 +77,16 @@ export default async function AdminHomePage() {
           href={salonBoardUrl}
           target="_blank"
           rel="noreferrer"
-          className="chip !py-2.5 !px-4 border-brand-400 text-brand-800"
+          className="home-action home-action-primary"
         >
           <Icon name="link" className="w-4 h-4 text-brand-500" />
           サロンボードを開く
         </a>
-        <Link href="/admin/help" className="chip !py-2.5 !px-4">
+        <Link href="/admin/help" className="home-action">
           <Icon name="help" className="w-4 h-4 text-brand-500" />
           使い方ガイド（運用の流れ・各機能の説明）
         </Link>
-        <Link href="/staff" className="chip !py-2.5 !px-4">
+        <Link href="/staff" className="home-action">
           <Icon name="pencil" className="w-4 h-4 text-brand-500" />
           スタッフ画面へ（日報入力・打刻はこちら）
         </Link>
@@ -188,30 +188,30 @@ async function EyesAdminDashboard() {
 
       <h2 className="section-title mt-6">メニュー</h2>
       <div className="grid gap-3 sm:grid-cols-2">
-        <BigMenuLink href="/admin/reports" icon="barChart" title="成績・日報"
+        <BigMenuLink href="/admin/reports" icon="barChart" accent="gold" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
-        <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
+        <BigMenuLink href="/admin/schedule" icon="calendar" accent="sage" title="出勤スケジュール"
           description="基本パターン＋希望休でシフトを管理" />
-        <BigMenuLink href="/admin/counseling" icon="clipboard" title="カウンセリング"
+        <BigMenuLink href="/admin/counseling" icon="clipboard" accent="sky" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
-        <BigMenuLink href="/admin/customers" icon="user" title="顧客一覧"
+        <BigMenuLink href="/admin/customers" icon="user" accent="teal" title="顧客一覧"
           description="LINE登録済みのお客様" />
-        <BigMenuLink href="/admin/appointments" icon="bell" title="次回予約・リマインド"
+        <BigMenuLink href="/admin/appointments" icon="bell" accent="coral" title="次回予約・リマインド"
           description={
             appointmentAttention > 0
               ? `お客様からの変更希望・キャンセルが ${appointmentAttention} 件あります`
               : "予約登録・事前案内とリマインドの状況"
           }
           badge={appointmentAttention} />
-        <BigMenuLink href="/admin/broadcast" icon="megaphone" title="一斉配信"
+        <BigMenuLink href="/admin/broadcast" icon="megaphone" accent="plum" title="一斉配信"
           description="全顧客へのお知らせ送信" />
-        <BigMenuLink href="/admin/csv" icon="fileText" title="売上CSV出力"
+        <BigMenuLink href="/admin/csv" icon="fileText" accent="indigo" title="売上CSV出力"
           description="税理士提出用（期間指定）" />
         {attendanceAvailable && (
-          <BigMenuLink href="/admin/attendance" icon="clock" title="勤怠管理"
+          <BigMenuLink href="/admin/attendance" icon="clock" accent="lavender" title="勤怠管理"
             description="労働時間・残業の月次集計" />
         )}
-        <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
+        <BigMenuLink href="/admin/settings" icon="sliders" accent="clay" title="マスタ設定"
           description="店舗・スタッフ（職種・幹部）・勤怠運用の設定" />
       </div>
     </>
@@ -251,19 +251,19 @@ async function EniAdminDashboard() {
 
       <h2 className="section-title mt-6">メニュー</h2>
       <div className="grid gap-3 sm:grid-cols-2">
-        <BigMenuLink href="/staff/eni-reports" icon="fileText" title="日報・週報を見る"
+        <BigMenuLink href="/staff/eni-reports" icon="fileText" accent="coral" title="日報・週報を見る"
           description="スタイリスト日報・アシスタント週報の閲覧＋コメント" />
-        <BigMenuLink href="/staff/meetings" icon="user" title="ミーティング・議事録"
+        <BigMenuLink href="/staff/meetings" icon="user" accent="sage" title="ミーティング・議事録"
           description="カレンダーで予定確認・議事録の提出状況"
           badge={missingMinutes.length} />
-        <BigMenuLink href="/staff/absence" icon="alertTriangle" title="欠勤・早退の報告一覧"
+        <BigMenuLink href="/staff/absence" icon="alertTriangle" accent="rose" title="欠勤・早退の報告一覧"
           description="誰が・何時間・どんな理由か（幹部・管理者のみ）" />
-        <BigMenuLink href="/staff/orders" icon="banknote" title="発注・購入申請の管理"
+        <BigMenuLink href="/staff/orders" icon="banknote" accent="clay" title="発注・購入申請の管理"
           description="ウィッグ・社販・商材の申請と発注状況"
           badge={requestedOrders} />
-        <BigMenuLink href="/admin/schedule" icon="calendar" title="出勤スケジュール"
+        <BigMenuLink href="/admin/schedule" icon="calendar" accent="lavender" title="出勤スケジュール"
           description="基本パターン＋希望休でシフトを管理" />
-        <BigMenuLink href="/admin/settings" icon="sliders" title="マスタ設定"
+        <BigMenuLink href="/admin/settings" icon="sliders" accent="indigo" title="マスタ設定"
           description="スタッフの職種・幹部・店舗の設定" />
       </div>
     </>

@@ -485,6 +485,137 @@ html {
   }
 }
 
+/* ============================================================
+   ホームのメニュー（項目ごとに色を持たせる）
+   各カードは --accent（lib/menu-accent.ts が差し込む）だけを見て、
+   地の色・枠・影・アイコンの下地をここで作る。未指定ならブランドのゴールド。
+   ============================================================ */
+@layer components {
+  /* ---- スマホ：アイコン＋短い名前の3列グリッド ---- */
+  .menu-tile {
+    @apply relative flex flex-col items-center justify-start gap-2 overflow-hidden rounded-2xl
+      border bg-white px-1 pt-3.5 pb-2.5
+      transition-[transform,box-shadow,border-color] duration-200 active:scale-[0.97];
+    border-color: color-mix(in srgb, var(--accent, #a99668) 20%, #fff);
+    box-shadow:
+      0 1px 2px rgba(65, 56, 40, 0.05),
+      0 8px 18px -12px color-mix(in srgb, var(--accent, #a99668) 70%, transparent);
+  }
+  /* カードの上半分にその項目の色をふわっと敷く（白のままだと全部同じに見えるので） */
+  .menu-tile::before {
+    content: "";
+    @apply pointer-events-none absolute inset-x-0 top-0;
+    height: 60%;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--accent, #a99668) 11%, #fff),
+      #fff
+    );
+  }
+  .menu-tile:active {
+    box-shadow:
+      0 1px 2px rgba(65, 56, 40, 0.06),
+      0 4px 10px -8px color-mix(in srgb, var(--accent, #a99668) 70%, transparent);
+  }
+
+  /* ---- タブレット・PC：説明つきの横長ボタン ---- */
+  .menu-row {
+    @apply relative flex h-full min-h-[5.25rem] items-center gap-3.5 overflow-hidden rounded-2xl
+      border bg-white p-4
+      transition-[transform,box-shadow,border-color] duration-300 active:scale-[0.995];
+    border-color: color-mix(in srgb, var(--accent, #a99668) 18%, #fff);
+    box-shadow: 0 1px 2px rgba(65, 56, 40, 0.06), 0 1px 3px rgba(65, 56, 40, 0.04);
+  }
+  /* 左端の色の帯。ふだんは控えめ、カーソルを乗せるとはっきり出る */
+  .menu-row::before {
+    content: "";
+    @apply pointer-events-none absolute inset-y-0 left-0 w-1 opacity-60 transition-opacity duration-300;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--accent, #a99668) 70%, #fff),
+      var(--accent, #a99668)
+    );
+  }
+
+  /* ---- アイコンの下地（白ヌキのアイコンをのせる色タイル）---- */
+  .menu-icon {
+    @apply relative flex items-center justify-center rounded-[1.05rem] text-white;
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--accent, #a99668) 88%, #fff) 0%,
+      var(--accent, #a99668) 45%,
+      color-mix(in srgb, var(--accent, #a99668) 86%, #2f2a24) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 3px 8px -3px color-mix(in srgb, var(--accent, #a99668) 65%, transparent);
+  }
+  .menu-tile .menu-icon,
+  .menu-row .menu-icon {
+    @apply h-12 w-12 shrink-0;
+  }
+  .menu-row .menu-icon {
+    @apply transition-transform duration-300;
+  }
+  .menu-tile-label {
+    @apply relative z-10 text-center text-[11px] font-bold leading-tight text-balance text-ink-700;
+  }
+
+  /* ---- 未対応の件数バッジ ---- */
+  /* 色はどの項目でも赤でそろえる（下部タブのバッジと同じ「まだ手をつけていない」の合図） */
+  .menu-badge {
+    @apply flex items-center justify-center rounded-full bg-gradient-to-b from-[#e4685e] to-[#cd4a42]
+      font-bold leading-none text-white ring-2 ring-white;
+    box-shadow: 0 2px 6px -1px rgba(205, 74, 66, 0.45);
+  }
+
+  /* ---- ホーム下部の外部リンク・ガイドのボタン ---- */
+  .home-action {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-brand-200
+      bg-white px-4 py-2.5 text-xs font-bold text-ink-700 shadow-soft
+      transition-all duration-200 hover:border-brand-400 hover:text-brand-800 hover:shadow-lift
+      active:bg-brand-50;
+  }
+  .home-action-primary {
+    @apply border-brand-300 text-brand-800;
+  }
+}
+
+/* カーソルが使える端末だけ、浮き上がる動きを足す（タップ端末では出さない） */
+@media (hover: hover) {
+  .menu-tile:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent, #a99668) 38%, #fff);
+    box-shadow:
+      0 2px 4px rgba(65, 56, 40, 0.06),
+      0 14px 26px -14px color-mix(in srgb, var(--accent, #a99668) 80%, transparent);
+  }
+  .menu-row:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent, #a99668) 36%, #fff);
+    box-shadow: 0 14px 28px -16px color-mix(in srgb, var(--accent, #a99668) 85%, transparent);
+  }
+  .menu-row:hover::before {
+    opacity: 1;
+  }
+  .menu-row:hover .menu-icon {
+    transform: scale(1.06);
+  }
+  .home-action:hover {
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-tile,
+  .menu-row,
+  .menu-row .menu-icon,
+  .home-action {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* ---- ダッシュボードの配色（スタッフごとに選べる）---- */
 /* 各カードは var(--dash-*) を見るだけにして、色の切り替えを1か所で済ませる。 */
 .dash-themed .dash-surface {
