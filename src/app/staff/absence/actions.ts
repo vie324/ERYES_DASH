@@ -63,3 +63,43 @@ export async function createAbsenceReportAction(formData: FormData): Promise<voi
   revalidatePath("/staff/absence");
   redirect("/staff/absence?saved=1");
 }
+
+/**
+ * 報告の取り消し（管理者アカウントのみ）。
+ * 間違えて送った報告や、結局は出勤できたときに一覧から消す。幹部は報告と閲覧まで。
+ */
+export async function cancelAbsenceReportAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const id = String(formData.get("id") ?? "");
+  const month = String(formData.get("month") ?? "");
+  // 見ていた月の一覧に戻す
+  const list = /^\d{4}-\d{2}$/.test(month) ? `/staff/absence?month=${month}` : "/staff/absence";
+  const back = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
+
+  if (session.role !== "admin") redirect(back("error=forbidden"));
+  if (!id) redirect(list);
+
+  const db = getDataStore();
+  const report = await db.getAbsenceReport(id);
+  // 二重に押した・別の管理者が先に取り消したときは、消えた状態の一覧を見せるだけ
+  if (!report) redirect(back("cancelled=1"));
+
+  await db.deleteAbsenceReport(id);
+  // 報告のときに通知した幹部・管理者へ、取り消しも知らせる（古い知らせのまま動かないように）
+  const staffList = await db.listStaff();
+  const target = staffList.find((s) => s.id === report.staffId);
+  await notifyQuietly(
+    db,
+    staffList
+      .filter((s) => s.isActive && (s.isExecutive || s.role === "admin") && s.id !== session.staffId)
+      .map((s) => s.id),
+    {
+      title: `${KIND_LABEL[report.kind]}の取り消し：${shortName(target?.name ?? "スタッフ")}さん`,
+      body: `${formatDateJa(report.absenceDate)}の報告は取り消されました`,
+      url: "/staff/absence",
+      tag: "absence",
+    }
+  );
+  revalidatePath("/staff/absence");
+  redirect(back("cancelled=1"));
+}

@@ -1981,6 +1981,21 @@ class SupabaseStore implements DataStore {
     return must(data, error, "欠勤報告一覧").map(mapAbsenceReport);
   }
 
+  async getAbsenceReport(id: string): Promise<AbsenceReport | null> {
+    const { data, error } = await this.sb
+      .from("absence_reports")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 欠勤報告取得: ${error.message}`);
+    return data ? mapAbsenceReport(data) : null;
+  }
+
+  async deleteAbsenceReport(id: string): Promise<void> {
+    const { error } = await this.sb.from("absence_reports").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 欠勤報告の取り消し: ${error.message}`);
+  }
+
   async createOrderRequest(
     input: Omit<OrderRequest, "id" | "status" | "createdAt" | "updatedAt">
   ): Promise<OrderRequest> {

@@ -2,14 +2,19 @@
 // 「役割（管理者/スタッフ）× 業態（ENi/EREYS）× 職種（スタイリスト/アシスタント）」で
 // 出す項目をここに集約する。画面側はこの定義を並べるだけにして、
 // メニューの追加・並び替えがこのファイルだけで済むようにしている。
+//
+// メニュー（PCのサイドバー・スマホの「メニュー」）は上から
+//   ホーム（homeNavItem）→ 外部サービスのタイル（buildMenuShortcuts）→ 各グループ（buildNav）
+// の順に並ぶ。スマホの下部タブ（buildMobileTabs）は、この中から毎日さわるものだけを選ぶ。
 
 import type { IconName } from "@/components/icons";
 import type { Brand } from "@/lib/brand";
+import type { MenuAccent } from "@/lib/menu-accent";
 
 export type NavItem = {
   href: string;
   label: string;
-  /** スマホの下部タブ用の短い呼び名（未指定なら label をそのまま使う） */
+  /** スマホの下部タブ・メニューのタイル用の短い呼び名（未指定なら label をそのまま使う） */
   short?: string;
   icon: IconName;
   /** サイドバーに出す件数バッジ（0・nullなら出さない） */
@@ -18,6 +23,8 @@ export type NavItem = {
   exact?: boolean;
   /** 外部サイト（サロンボード・カミキュラムなど）。新しいタブで開き、現在地の判定はしない */
   external?: boolean;
+  /** メニューのタイルに出すときの色（ホームのメニューと同じ色の決まり） */
+  accent?: MenuAccent;
 };
 
 export type NavGroup = {
@@ -52,7 +59,7 @@ function compact(groups: NavGroup[]): NavGroup[] {
 
 /**
  * ノーション（考え方・ルール・マニュアルの置き場）。
- * 接続先が複数あるので、下部タブからは入口のページに飛ばして、そこで選んでもらう。
+ * 接続先が複数あるので、メニューからは入口のページに飛ばして、そこで選んでもらう。
  */
 const NOTION_ITEM: NavItem = {
   href: "/staff/notion",
@@ -61,19 +68,48 @@ const NOTION_ITEM: NavItem = {
   icon: "notion",
 };
 
-/** AIしもん・カミキュラム（ENi共通の「学び・相談」グループ） */
-function learningGroup(ctx: NavContext): NavGroup {
+/** カミキュラム（動画教材）。既定は app.kamiculum.com。URLを取れなかったときだけ案内ページ（/staff/curriculum）へ逃がす */
+function curriculumItem(ctx: NavContext): NavItem {
   const curriculumUrl = ctx.links?.curriculumUrl ?? "";
+  return curriculumUrl
+    ? { href: curriculumUrl, label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play", external: true }
+    : { href: "/staff/curriculum", label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play" };
+}
+
+/** AIしもん（ENi共通の「学び・相談」グループ。カミキュラムは外部サービスのタイルに置く） */
+function learningGroup(): NavGroup {
   return {
     label: "学び・相談",
-    items: [
-      { href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" },
-      // 既定は app.kamiculum.com。URLを取れなかったときだけ案内ページ（/staff/curriculum）へ逃がす
-      curriculumUrl
-        ? { href: curriculumUrl, label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play", external: true }
-        : { href: "/staff/curriculum", label: "カミキュラム（動画教材）", short: "カミキュラム", icon: "play" },
-    ],
+    items: [{ href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" }],
   };
+}
+
+/**
+ * メニューのいちばん上に置く「ホーム」。
+ * スマホの下部タブからは外して（枠を毎日の入力・連絡に回すため）、メニューを開いてすぐの位置に置く。
+ * ヘッダーのロゴからも戻れる。
+ */
+export function homeNavItem(ctx: NavContext): NavItem {
+  return {
+    href: ctx.role === "admin" ? "/admin" : "/staff",
+    label: "ホーム",
+    icon: "home",
+    exact: true,
+  };
+}
+
+/**
+ * メニューのホームの下に並べる「外部サービス」のタイル（PCのサイドバーも同じ）。
+ * サロンボード・ノーション（ENiはカミキュラムも）は開く回数は多いが入力はしないので、
+ * 下部タブではなく、メニューを開いてすぐ押せるここにまとめている。
+ */
+export function buildMenuShortcuts(ctx: NavContext): NavItem[] {
+  const salonBoardUrl = ctx.links?.salonBoardUrl || "https://salonboard.com/login/";
+  return [
+    { href: salonBoardUrl, label: "サロンボード", icon: "link", external: true, accent: "sky" },
+    { ...NOTION_ITEM, accent: "indigo" },
+    ...(ctx.brand === "eni" ? [{ ...curriculumItem(ctx), accent: "coral" as MenuAccent }] : []),
+  ];
 }
 
 export function buildNav(ctx: NavContext): NavGroup[] {
@@ -84,13 +120,9 @@ export function buildNav(ctx: NavContext): NavGroup[] {
 
 function staffNav(ctx: NavContext): NavGroup[] {
   const b = ctx.badges ?? {};
-  const home: NavGroup = {
-    label: "ホーム",
-    items: [{ href: "/staff", label: "ダッシュボード", icon: "layoutGrid", exact: true }],
-  };
   const support: NavGroup = {
     label: "サポート",
-    items: [NOTION_ITEM, { href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" }],
+    items: [{ href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" }],
   };
 
   // 幹部だけに出す「幹部」グループ（幹部タスク・日報の気づきをまとめる）
@@ -111,7 +143,6 @@ function staffNav(ctx: NavContext): NavGroup[] {
 
   if (ctx.brand === "eyes") {
     return compact([
-      home,
       {
         label: "接客・お客様",
         items: [
@@ -161,7 +192,6 @@ function staffNav(ctx: NavContext): NavGroup[] {
   const showStylist = ctx.jobType !== "assistant";
   const showWeekly = ctx.jobType !== "stylist";
   return compact([
-    home,
     {
       label: "日々の記録",
       items: [
@@ -226,7 +256,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote" },
       ],
     },
-    learningGroup(ctx),
+    learningGroup(),
     support,
   ]);
 }
@@ -235,14 +265,9 @@ function staffNav(ctx: NavContext): NavGroup[] {
 
 function adminNav(ctx: NavContext): NavGroup[] {
   const b = ctx.badges ?? {};
-  const home: NavGroup = {
-    label: "ホーム",
-    items: [{ href: "/admin", label: "ダッシュボード", icon: "layoutGrid", exact: true }],
-  };
   const support: NavGroup = {
     label: "サポート",
     items: [
-      NOTION_ITEM,
       { href: "/admin/help", label: "使い方ガイド", short: "使い方", icon: "help" },
       { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
     ],
@@ -263,7 +288,6 @@ function adminNav(ctx: NavContext): NavGroup[] {
 
   if (ctx.brand === "eyes") {
     return compact([
-      home,
       {
         label: "成績・売上",
         items: [
@@ -316,11 +340,12 @@ function adminNav(ctx: NavContext): NavGroup[] {
 
   // ENi（ヘアサロン）
   return compact([
-    home,
     {
       label: "記録・育成",
       items: [
         { href: "/staff/eni-reports", label: "みんなの日報・週報を見る", short: "日報週報", icon: "fileText" },
+        // 管理者は自分の予定より全員の予定を見ることが多いので、スケジュールの「みんなの予定」を開く
+        { href: "/staff/plan?tab=team", label: "みんなの予定を見る", short: "予定", icon: "calendar" },
       ],
     },
     {
@@ -350,34 +375,33 @@ function adminNav(ctx: NavContext): NavGroup[] {
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote", badge: badge(b.orders) },
       ],
     },
-    learningGroup(ctx),
+    learningGroup(),
     support,
   ]);
 }
 
 /**
- * スマホの下部タブ（親指で届く位置）に置く項目。
- * 「ホーム」と「メニュー」は画面側で足すので、ここには“よく使う操作”だけを返す。
- *  ・ENi …… サロンボード・ノーション・カミキュラム・AIしもん・タスク（役割に関係なく固定）
- *  ・EREYS …… 現場で1日に触る回数が多い順に3つ＋ノーション
- * ノーションは考え方・ルール・マニュアルの置き場なので、どちらの業態でも下部タブに置く。
+ * スマホの下部タブ（親指で届く位置）に置く項目。「メニュー」は画面側で右端に足す。
+ * 枠は「毎日さわる・件数バッジで知らせたい」ものだけに絞る（ホームと外部サービスはメニューの先頭へ）。
+ *  ・ENi …… トーク・週報（スタイリストは日報／管理者は日報週報）・予定・タスク・AIしもん
+ *  ・EREYS …… 現場で1日に触る回数が多い順に3つ＋トーク
  */
 export function buildMobileTabs(ctx: NavContext): NavItem[] {
   const groups = buildNav(ctx);
   const all = groups.flatMap((g) => g.items);
   const pick = (href: string) => all.find((i) => i.href === href);
+  const present = (items: (NavItem | undefined)[]) => items.filter((i): i is NavItem => Boolean(i));
 
   if (ctx.brand === "eni") {
-    const learning = learningGroup(ctx).items;
-    const salonBoardUrl = ctx.links?.salonBoardUrl || "https://salonboard.com/login/";
-    const tasks = pick("/staff/tasks");
-    return [
-      { href: salonBoardUrl, label: "サロンボード", short: "サロンボード", icon: "link", external: true },
-      NOTION_ITEM,
-      learning[1], // カミキュラム
-      learning[0], // AIしもん
-      ...(tasks ? [tasks] : []),
-    ];
+    // 週報の枠：アシスタント（と職種未設定）は週報、スタイリストは日報、管理者は全員分の閲覧
+    const report =
+      ctx.role === "admin"
+        ? pick("/staff/eni-reports")
+        : ctx.jobType === "stylist"
+          ? pick("/staff/eni-report")
+          : pick("/staff/weekly-report");
+    const plan = ctx.role === "admin" ? pick("/staff/plan?tab=team") : pick("/staff/plan");
+    return present([pick("/staff/chat"), report, plan, pick("/staff/tasks"), pick("/staff/ai-shimon")]);
   }
 
   const wanted =
@@ -385,14 +409,16 @@ export function buildMobileTabs(ctx: NavContext): NavItem[] {
       ? ["/admin/reports", "/admin/counseling", "/admin/schedule"]
       : ["/staff/counseling", "/staff/report", "/staff/attendance", "/staff/schedule"];
 
-  return [...wanted.map(pick).filter((i): i is NavItem => Boolean(i)).slice(0, 3), NOTION_ITEM];
+  return [...present(wanted.map(pick)).slice(0, 3), ...present([pick("/staff/chat")])];
 }
 
 /** そのメニュー項目のページを開いているか（前方一致。exact指定は完全一致。外部リンクは常に false） */
 export function matchesNav(pathname: string, item: NavItem): boolean {
   if (item.external) return false;
-  if (item.exact) return pathname === item.href;
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  // 「?tab=team」のように画面の中のタブを指定している項目も、パスだけで判定する
+  const path = item.href.split("?")[0];
+  if (item.exact) return pathname === path;
+  return pathname === path || pathname.startsWith(`${path}/`);
 }
 
 /**

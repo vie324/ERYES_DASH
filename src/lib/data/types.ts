@@ -982,6 +982,9 @@ export interface DataStore {
   // 欠勤・早退の報告
   createAbsenceReport(input: Omit<AbsenceReport, "id" | "createdAt">): Promise<AbsenceReport>;
   listAbsenceReports(filter: { staffId?: string; from: string; to: string }): Promise<AbsenceReport[]>;
+  getAbsenceReport(id: string): Promise<AbsenceReport | null>;
+  /** 報告の取り消し（管理者のみ操作する想定） */
+  deleteAbsenceReport(id: string): Promise<void>;
 
   // 発注・購入申請
   createOrderRequest(

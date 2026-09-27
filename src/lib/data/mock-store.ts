@@ -2200,6 +2200,14 @@ class MockStore implements DataStore {
       .sort((a, b) => a.absenceDate.localeCompare(b.absenceDate));
   }
 
+  async getAbsenceReport(id: string): Promise<AbsenceReport | null> {
+    return this.db.absenceReports.find((r) => r.id === id) ?? null;
+  }
+
+  async deleteAbsenceReport(id: string): Promise<void> {
+    this.db.absenceReports = this.db.absenceReports.filter((r) => r.id !== id);
+  }
+
   async createOrderRequest(
     input: Omit<OrderRequest, "id" | "status" | "createdAt" | "updatedAt">
   ): Promise<OrderRequest> {
