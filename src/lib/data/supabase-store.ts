@@ -5,6 +5,7 @@
 import { randomBytes } from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
+import { monthRange } from "@/lib/date";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
@@ -1431,8 +1432,8 @@ class SupabaseStore implements DataStore {
   }
 
   async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
-    const from = `${targetMonth}-01`;
-    const to = `${targetMonth}-31`;
+    // 月末は実際の日付で（「2027-02-31」のような存在しない日付は PostgreSQL がエラーにするため）
+    const { from, to } = monthRange(targetMonth);
     const del = await this.sb
       .from("dayoff_requests")
       .delete()
