@@ -24,6 +24,7 @@ export type IconName =
   | "help"
   | "book"
   | "layoutGrid"
+  | "home"
   | "users"
   | "share"
   | "menu"
@@ -130,6 +131,14 @@ const PATHS: Record<IconName, JSX.Element> = {
       <rect x="14" y="3" width="7" height="7" rx="1.5" />
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
       <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  // ホーム（家のかたち）。メニューの先頭の「ホーム」に使う
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+      <path d="M10 21v-6h4v6" />
     </>
   ),
   users: (

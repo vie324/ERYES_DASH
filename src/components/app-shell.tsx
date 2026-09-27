@@ -2,7 +2,8 @@
 
 // アプリ全体の骨組み。
 //  ・PC/iPad横（lg以上）… 左に固定サイドバー、右に内容。項目はグループごとにまとめて表示する。
-//  ・スマホ … 親指の届く下部タブによく使う操作を置き、「メニュー」から全項目を引き出す。
+//  ・スマホ … 親指の届く下部タブに毎日さわる操作だけを置き、「メニュー」から全項目を引き出す。
+//    ホームと外部サービス（サロンボード・ノーションなど）はメニューを開いてすぐの位置に置く。
 // メニューの中身は @/lib/nav の定義（役割・業態別）をそのまま並べるだけ。
 
 /* eslint-disable @next/next/no-img-element */
@@ -11,6 +12,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { logoutAction } from "@/lib/auth/actions";
+import { accentStyle } from "@/lib/menu-accent";
 import { findCurrent, matchesNav, type NavGroup, type NavItem } from "@/lib/nav";
 
 export type ShellUser = {
@@ -23,23 +25,27 @@ export type ShellUser = {
 };
 
 export function AppShell({
+  home,
+  shortcuts,
   groups,
   tabs,
   user,
   logoSrc,
   logoAlt,
-  homeHref,
   helpHref,
   banner,
   children,
 }: {
+  /** メニューのいちばん上に置く「ホーム」（ロゴの飛び先も兼ねる） */
+  home: NavItem;
+  /** ホームの下に並べる外部サービスのタイル（サロンボード・ノーションなど） */
+  shortcuts: NavItem[];
   groups: NavGroup[];
-  /** スマホの下部タブに置く「よく使う操作」 */
+  /** スマホの下部タブに置く「毎日さわる操作」。右端の「メニュー」は画面側で足す */
   tabs: NavItem[];
   user: ShellUser;
   logoSrc: string;
   logoAlt: string;
-  homeHref: string;
   /** 未指定ならヘッダーの「使い方」ボタンを出さない */
   helpHref?: string;
   /** デモモードの注意バナーなど、内容の上に出す帯 */
@@ -48,13 +54,16 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const homeHref = home.href;
 
-  // 下部タブの詰め具合。ホーム＋タブ＋メニューの数で決める（多いほど小さくする）
-  const density = tabDensity(tabs.length + 2);
-  const tab = TAB_SIZES[density];
+  // 下部タブの詰め具合。タブ＋メニューの数で決める（多いほど小さくする）
+  const density = tabDensity(tabs.length + 1);
 
   // いま開いているメニュー項目（サイドバーの強調と、上部バーの現在地表示に使う）
-  const current = findCurrent(pathname, groups);
+  const onHome = matchesNav(pathname, home);
+  const current = onHome ? null : findCurrent(pathname, groups);
+  // 下部タブにない画面（ホーム・サンクスなど）にいるときは「メニュー」を点けて、どこから来たかを示す
+  const inMenu = !tabs.some((t) => matchesNav(pathname, t));
 
   // ページを移動したらドロワーは閉じる
   useEffect(() => {
@@ -75,11 +84,13 @@ export function AppShell({
       {/* ---------------- PC・iPad：左に固定 ---------------- */}
       <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 w-64 z-30 print:hidden">
         <SidebarBody
+          home={home}
+          shortcuts={shortcuts}
           groups={groups}
           user={user}
           logoSrc={logoSrc}
           logoAlt={logoAlt}
-          homeHref={homeHref}
+          onHome={onHome}
           currentHref={current?.item.href ?? null}
         />
       </aside>
@@ -94,11 +105,13 @@ export function AppShell({
           />
           <div className="relative w-[17rem] max-w-[85vw] animate-slide-in">
             <SidebarBody
+              home={home}
+              shortcuts={shortcuts}
               groups={groups}
               user={user}
               logoSrc={logoSrc}
               logoAlt={logoAlt}
-              homeHref={homeHref}
+              onHome={onHome}
               currentHref={current?.item.href ?? null}
               onClose={() => setOpen(false)}
             />
@@ -116,13 +129,18 @@ export function AppShell({
             </Link>
 
             {/* いま開いている場所（PCのみ） */}
-            {current && (
+            {onHome ? (
+              <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-700 min-w-0">
+                <Icon name="home" className="w-3.5 h-3.5 shrink-0 text-ink-400" />
+                {home.label}
+              </p>
+            ) : current ? (
               <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-400 min-w-0">
                 <span className="truncate">{current.group}</span>
                 <Icon name="chevronRight" className="w-3 h-3 shrink-0" />
                 <span className="text-ink-700 truncate">{current.item.label}</span>
               </p>
-            )}
+            ) : null}
 
             <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
               <Link
@@ -160,37 +178,34 @@ export function AppShell({
       </div>
 
       {/* ---------------- スマホ：下部タブ ---------------- */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-brand-200/80 bg-brand-50/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] print:hidden">
+      {/* ホームは置かない（メニューの先頭とロゴから戻れる）。毎日さわる操作だけを並べて、文字を読める大きさに保つ */}
+      <nav
+        aria-label="よく使う操作"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-brand-200/80 bg-brand-50/95 backdrop-blur-md shadow-[0_-4px_16px_-12px_rgba(65,56,40,0.35)] pb-[env(safe-area-inset-bottom)] print:hidden"
+      >
         <ul className="flex items-stretch">
-          <TabLink
-            href={homeHref}
-            icon="layoutGrid"
-            label="ホーム"
-            density={density}
-            active={pathname === homeHref}
-          />
           {tabs.map((t) => (
-            <TabLink
-              key={t.href}
-              href={t.href}
-              icon={t.icon}
-              label={t.short ?? t.label}
-              badge={t.badge}
-              external={t.external}
-              density={density}
-              active={matchesNav(pathname, t)}
-            />
+            <li key={t.href} className="flex-1 min-w-0">
+              <TabLink
+                href={t.href}
+                icon={t.icon}
+                label={t.short ?? t.label}
+                badge={t.badge}
+                external={t.external}
+                density={density}
+                active={matchesNav(pathname, t)}
+              />
+            </li>
           ))}
           <li className="flex-1 min-w-0">
-            <button
-              type="button"
+            <TabButton
               onClick={() => setOpen(true)}
-              aria-label="メニューを開く"
-              className={`w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${tab.pad} min-h-[3.75rem] text-ink-500 transition-colors active:bg-brand-100`}
-            >
-              <Icon name="menu" className={tab.icon} />
-              <span className={`${tab.text} font-bold leading-none`}>メニュー</span>
-            </button>
+              icon="menu"
+              label="メニュー"
+              ariaLabel="メニューを開く"
+              density={density}
+              active={open || inMenu}
+            />
           </li>
         </ul>
       </nav>
@@ -198,24 +213,66 @@ export function AppShell({
   );
 }
 
-/** 下部タブの詰め具合。並ぶ数（ホーム・メニューを含む）で決める */
+/** 下部タブの詰め具合。並ぶ数（右端のメニューを含む）で決める */
 type TabDensity = "normal" | "dense" | "tight";
 
-const TAB_SIZES: Record<TabDensity, { pad: string; icon: string; text: string }> = {
-  normal: { pad: "px-1", icon: "w-[22px] h-[22px]", text: "text-[10px]" },
-  dense: { pad: "px-0.5", icon: "w-[22px] h-[22px]", text: "text-[9px]" },
-  // 7つ並び（ENi：ホーム・サロンボード・ノーション・カミキュラム・AIしもん・タスク・メニュー）用
-  tight: { pad: "px-px", icon: "w-5 h-5", text: "text-[9px]" },
+const TAB_SIZES: Record<TabDensity, { pad: string; icon: string; text: string; pill: string }> = {
+  // 6つまで（ENi：トーク・週報・予定・タスク・AIしもん・メニュー）は、文字を11pxで読めるまま並べられる。
+  // 幅320px級の小さい端末だけは10pxにして、「AIしもん」が欠けないようにする
+  normal: { pad: "px-0.5", icon: "w-6 h-6", text: "text-[10px] min-[360px]:text-[11px]", pill: "w-12 h-8" },
+  dense: { pad: "px-0.5", icon: "w-[22px] h-[22px]", text: "text-[10px]", pill: "w-11 h-7" },
+  tight: { pad: "px-px", icon: "w-5 h-5", text: "text-[9px]", pill: "w-10 h-7" },
 };
 
 function tabDensity(count: number): TabDensity {
-  if (count >= 7) return "tight";
-  return count >= 6 ? "dense" : "normal";
+  if (count >= 8) return "tight";
+  return count >= 7 ? "dense" : "normal";
+}
+
+/** 下部タブ1つぶんの中身（アイコン＋件数バッジ＋名前）。いまいる画面はアイコンの後ろに色を敷いて示す */
+function TabInner({
+  icon,
+  label,
+  badge,
+  active,
+  density,
+}: {
+  icon: NavItem["icon"];
+  label: string;
+  badge?: NavItem["badge"];
+  active: boolean;
+  density: TabDensity;
+}) {
+  const size = TAB_SIZES[density];
+  return (
+    <>
+      <span
+        className={`relative flex items-center justify-center rounded-full transition-colors duration-200 ${size.pill} ${
+          active ? "bg-brand-200/80 text-brand-800" : ""
+        }`}
+      >
+        <Icon name={icon} className={size.icon} />
+        {badge != null && badge !== 0 && (
+          <span className="absolute top-0 right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-brand-50">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className={`${size.text} font-bold leading-none truncate max-w-full`}>{label}</span>
+    </>
+  );
+}
+
+function tabClassName(active: boolean, density: TabDensity): string {
+  const size = TAB_SIZES[density];
+  return `w-full h-full flex flex-col items-center justify-center gap-1 pt-1.5 pb-2 ${size.pad} min-h-[3.75rem] transition-colors ${
+    active ? "text-brand-800" : "text-ink-500"
+  } active:bg-brand-100`;
 }
 
 /**
- * 下部タブの1つ。ラベルは2行にせず、はみ出す場合は省略する。
- * 外部リンク（サロンボード・カミキュラム）は新しいタブで開く（ホーム画面に追加したアプリでも戻れるように）。
+ * 下部タブの1つ（リンク）。ラベルは2行にせず、はみ出す場合は省略する。
+ * 外部リンクは新しいタブで開く（ホーム画面に追加したアプリでも戻れるように）。
  */
 function TabLink({
   href,
@@ -234,36 +291,38 @@ function TabLink({
   external?: boolean;
   density: TabDensity;
 }) {
-  const size = TAB_SIZES[density];
-  const className = `relative w-full h-full flex flex-col items-center justify-center gap-1 py-2 ${size.pad} min-h-[3.75rem] transition-colors ${active ? "text-brand-800" : "text-ink-500"} active:bg-brand-100`;
-  const inner = (
-    <>
-      {active && (
-        <span className="absolute top-0 inset-x-3 h-[3px] rounded-b-full bg-gradient-to-r from-brand-400 to-brand-600" />
-      )}
-      <span className="relative">
-        <Icon name={icon} className={size.icon} />
-        {badge != null && badge !== 0 && (
-          <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-            {badge}
-          </span>
-        )}
-      </span>
-      <span className={`${size.text} font-bold leading-none truncate max-w-full`}>{label}</span>
-    </>
+  const inner = <TabInner icon={icon} label={label} badge={badge} active={active} density={density} />;
+  return external ? (
+    <a href={href} target="_blank" rel="noreferrer" className={tabClassName(false, density)}>
+      {inner}
+    </a>
+  ) : (
+    <Link href={href} aria-current={active ? "page" : undefined} className={tabClassName(active, density)}>
+      {inner}
+    </Link>
   );
+}
+
+/** 下部タブの1つ（ボタン）。右端の「メニュー」に使う */
+function TabButton({
+  onClick,
+  icon,
+  label,
+  ariaLabel,
+  active,
+  density,
+}: {
+  onClick: () => void;
+  icon: NavItem["icon"];
+  label: string;
+  ariaLabel: string;
+  active: boolean;
+  density: TabDensity;
+}) {
   return (
-    <li className="flex-1 min-w-0">
-      {external ? (
-        <a href={href} target="_blank" rel="noreferrer" className={className}>
-          {inner}
-        </a>
-      ) : (
-        <Link href={href} aria-current={active ? "page" : undefined} className={className}>
-          {inner}
-        </Link>
-      )}
-    </li>
+    <button type="button" onClick={onClick} aria-label={ariaLabel} className={tabClassName(active, density)}>
+      <TabInner icon={icon} label={label} active={active} density={density} />
+    </button>
   );
 }
 
@@ -278,23 +337,29 @@ function Avatar({ name }: { name: string }) {
 
 /** サイドバーの中身（PC固定・スマホのドロワーで共用） */
 function SidebarBody({
+  home,
+  shortcuts,
   groups,
   user,
   logoSrc,
   logoAlt,
-  homeHref,
+  onHome,
   currentHref,
   onClose,
 }: {
+  home: NavItem;
+  shortcuts: NavItem[];
   groups: NavGroup[];
   user: ShellUser;
   logoSrc: string;
   logoAlt: string;
-  homeHref: string;
+  /** ホームを開いているか */
+  onHome: boolean;
   /** 現在地のメニュー項目（1つだけ強調する） */
   currentHref: string | null;
   onClose?: () => void;
 }) {
+  const homeHref = home.href;
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-sidebar-800 to-sidebar-900 border-r border-sidebar-line/70">
       {/* ロゴ */}
@@ -334,6 +399,33 @@ function SidebarBody({
 
       {/* メニュー */}
       <nav className="flex-1 overflow-y-auto scroll-slim px-3 pb-4">
+        {/* ホーム：下部タブから外したので、メニューを開いていちばん上に置く */}
+        <Link
+          href={homeHref}
+          aria-current={onHome ? "page" : undefined}
+          className={`nav-link mt-3 ${onHome ? "nav-link-active" : ""}`}
+        >
+          <Icon
+            name={home.icon}
+            className={`w-[18px] h-[18px] shrink-0 ${onHome ? "text-brand-300" : "text-sidebar-muted"}`}
+          />
+          <span className="flex-1 min-w-0 truncate">{home.label}</span>
+        </Link>
+
+        {/* 外部サービス：押すとすぐ開くタイル（サロンボード・ノーションなど） */}
+        {shortcuts.length > 0 && (
+          <div>
+            <p className="nav-group-label">外部サービス</p>
+            <ul className={`grid gap-2 ${shortcuts.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+              {shortcuts.map((item) => (
+                <li key={item.href}>
+                  <ShortcutTile item={item} current={!item.external && item.href === currentHref} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {groups.map((group) => (
           <div key={group.label}>
             <p className="nav-group-label">{group.label}</p>
@@ -400,5 +492,41 @@ function SidebarBody({
         </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * メニューの「外部サービス」のタイル1つ。ホームのメニューと同じ色の決まり（accent）でアイコンを塗る。
+ * 外部サイトは新しいタブで開き、右上に ↗ を出す。
+ */
+function ShortcutTile({ item, current }: { item: NavItem; current: boolean }) {
+  const className = `relative flex h-full flex-col items-center gap-1.5 rounded-xl border px-1 pt-2.5 pb-2 transition-colors ${
+    current
+      ? "border-brand-400/70 bg-white/[0.1]"
+      : "border-sidebar-line bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12]"
+  }`;
+  const inner = (
+    <>
+      <span className="menu-icon !rounded-[0.8rem] h-9 w-9" style={accentStyle(item.accent)}>
+        <Icon name={item.icon} className="w-[18px] h-[18px]" />
+      </span>
+      <span className="text-[10px] font-bold leading-tight text-sidebar-text text-center">
+        {item.short ?? item.label}
+      </span>
+      {item.external && (
+        <span className="absolute top-1 right-1.5 text-[9px] text-sidebar-muted" aria-hidden="true">
+          ↗
+        </span>
+      )}
+    </>
+  );
+  return item.external ? (
+    <a href={item.href} target="_blank" rel="noreferrer" className={className} aria-label={`${item.label}（新しいタブで開く）`}>
+      {inner}
+    </a>
+  ) : (
+    <Link href={item.href} aria-current={current ? "page" : undefined} className={className}>
+      {inner}
+    </Link>
   );
 }

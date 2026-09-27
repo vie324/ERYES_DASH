@@ -462,8 +462,8 @@ export default async function AdminSettingsPage({
           ))}
           <button type="submit" className="btn-secondary w-full">リンクを保存</button>
           <p className="text-[11px] text-ink-400">
-            ※ サロンボードはダッシュボードの「サロンボードを開く」ボタンと下部タブから、
-            カミキュラムは下部タブ・メニューから新しいタブで開きます。
+            ※ サロンボード・ノーション・カミキュラムは、メニューの「外部サービス」から新しいタブで開きます
+            （サロンボードはダッシュボードの「サロンボードを開く」ボタンからも）。
             サロンボード・カミキュラムは空欄で保存すると既定のログインページに戻ります。
           </p>
         </form>

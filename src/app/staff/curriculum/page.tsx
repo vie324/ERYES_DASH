@@ -22,7 +22,7 @@ export default async function CurriculumPage() {
         </span>
         <p className="font-bold text-ink-800 mt-3">カミキュラムのURLがまだ登録されていません</p>
         <p className="text-sm text-ink-500 mt-1 leading-relaxed">
-          登録されると、下部タブの「カミキュラム」から動画教材のサイトを直接開けるようになります。
+          登録されると、メニューの「カミキュラム」から動画教材のサイトを直接開けるようになります。
           {session.role === "admin"
             ? "マスタ設定の「外部サービスのリンク」から登録してください。"
             : "管理者にマスタ設定への登録をお願いしてください。"}

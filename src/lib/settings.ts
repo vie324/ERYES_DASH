@@ -27,7 +27,7 @@ export const APP_SETTING_DEFS: AppSettingDef[] = [
   {
     key: CURRICULUM_URL_KEY,
     label: "カミキュラムのURL",
-    note: "スマホの下部タブ「カミキュラム」の飛び先。未入力のままでも既定のログインページ（app.kamiculum.com）を開きます",
+    note: "メニューの「外部サービス」にある「カミキュラム」の飛び先。未入力のままでも既定のログインページ（app.kamiculum.com）を開きます",
     placeholder: "https://app.kamiculum.com/",
     fallback: "https://app.kamiculum.com/",
   },
@@ -57,7 +57,7 @@ export async function getSalonBoardUrl(db: DataStore): Promise<string> {
   return settingsMap(rows)[SALON_BOARD_URL_KEY];
 }
 
-/** 外部リンクをまとめて取る（下部タブ・メニュー用）。未設定のものは既定のURLで埋まる */
+/** 外部リンクをまとめて取る（メニューの「外部サービス」用）。未設定のものは既定のURLで埋まる */
 export async function getAppLinks(db: DataStore): Promise<{ salonBoardUrl: string; curriculumUrl: string }> {
   const map = settingsMap(await db.listAppSettings());
   return { salonBoardUrl: map[SALON_BOARD_URL_KEY], curriculumUrl: map[CURRICULUM_URL_KEY] ?? "" };

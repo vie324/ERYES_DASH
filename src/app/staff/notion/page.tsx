@@ -6,7 +6,7 @@ import { EmptyState, PageHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-// ノーションの入口。スマホ下部タブの「ノーション」から開く。
+// ノーションの入口。メニューの「外部サービス」にある「ノーション」から開く。
 // 接続先（ENiについて／マニュアルまとめ）の定義は lib/notion.ts、URLは管理者がマスタ設定で変更できる。
 // ノーション側はログインが要るので、アプリの中には埋め込まず新しいタブで開く。
 export default async function NotionPage() {

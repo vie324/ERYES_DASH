@@ -5,7 +5,7 @@
 import { getDataStore, isDemoMode } from "@/lib/data";
 import { getBrand, BRAND_INFO, type Brand } from "@/lib/brand";
 import { getBrandName, getLogoSrc } from "@/lib/logo";
-import { buildMobileTabs, buildNav, type NavContext } from "@/lib/nav";
+import { buildMenuShortcuts, buildMobileTabs, buildNav, homeNavItem, type NavContext } from "@/lib/nav";
 import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { getChatOverview } from "@/lib/chat";
@@ -98,7 +98,7 @@ export async function AppFrame({
     }
   }
 
-  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通。外部リンクは下部タブ用
+  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通。外部リンクはメニューの「外部サービス」用
   const [taskSummary, chatOverview, links] = await Promise.all([
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
@@ -136,13 +136,12 @@ export async function AppFrame({
     badges,
     links,
   };
-  const groups = buildNav(navContext);
-  const tabs = buildMobileTabs(navContext);
-
   return (
     <AppShell
-      groups={groups}
-      tabs={tabs}
+      home={homeNavItem(navContext)}
+      shortcuts={buildMenuShortcuts(navContext)}
+      groups={buildNav(navContext)}
+      tabs={buildMobileTabs(navContext)}
       user={{
         name: session.name,
         roleLabel: isAdmin ? "全体管理者" : "スタッフ",
@@ -152,7 +151,6 @@ export async function AppFrame({
       }}
       logoSrc={getLogoSrc(brand)}
       logoAlt={getBrandName(brand)}
-      homeHref={isAdmin ? "/admin" : "/staff"}
       helpHref={isAdmin ? "/admin/help" : "/staff/help"}
       banner={<DemoBanner show={isDemoMode()} />}
     >

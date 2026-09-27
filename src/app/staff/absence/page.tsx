@@ -12,7 +12,7 @@ import {
 import { isExecutive } from "@/lib/eni/access";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import type { AbsenceKind } from "@/lib/data/types";
-import { createAbsenceReportAction } from "./actions";
+import { cancelAbsenceReportAction, createAbsenceReportAction } from "./actions";
 
 const KIND_LABEL: Record<AbsenceKind, string> = {
   absence: "欠勤",
@@ -23,13 +23,15 @@ const KIND_LABEL: Record<AbsenceKind, string> = {
 // 欠勤・早退の報告：誰が・いつ・何時間・どんな理由かを記録する。
 // 対応するのは幹部メンバー以上なので、この画面は幹部・管理者だけが開ける
 // （アシスタント・スタイリストにはメニューにも出さない）。
+// 報告の取り消しは管理者アカウントだけができる。
 export default async function AbsencePage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ month?: string; saved?: string; cancelled?: string; error?: string }>;
 }) {
   const session = await requireSession();
   if (!(await isExecutive(session))) redirect("/staff");
+  const isAdmin = session.role === "admin";
 
   const params = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
@@ -59,7 +61,11 @@ export default async function AbsencePage({
       <PageHeader
         title="欠勤・早退の報告"
         backHref="/staff"
-        description="幹部メンバー以上が記録・確認します"
+        description={
+          isAdmin
+            ? "幹部メンバー以上が記録・確認します。取り消しは管理者だけができます"
+            : "幹部メンバー以上が記録・確認します"
+        }
         icon="alertTriangle"
       />
 
@@ -68,11 +74,15 @@ export default async function AbsencePage({
           報告を送信しました
         </p>
       )}
-      {params.error && (
+      {params.error === "forbidden" ? (
+        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
+          報告の取り消しは管理者アカウントだけができます
+        </p>
+      ) : params.error ? (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           入力内容を確認してください（理由は必須です）
         </p>
-      )}
+      ) : null}
 
       {/* 報告フォーム */}
       <form action={createAbsenceReportAction} className="card space-y-3 mb-4">
@@ -169,6 +179,12 @@ export default async function AbsencePage({
 
       <section className="card">
         <h2 className="section-title">全員の報告（{formatMonthJa(month)}）</h2>
+        {/* 取り消しは一覧の中で押すので、結果も一覧のすぐ上に出す（ページ上部だと見えないことがある） */}
+        {params.cancelled && (
+          <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-3">
+            報告を取り消しました
+          </p>
+        )}
         {visible.length === 0 ? (
           <EmptyState message="この月の報告はありません" />
         ) : (
@@ -185,6 +201,28 @@ export default async function AbsencePage({
                   理由:{r.reason}
                   <span className="text-ink-400 ml-2">（報告:{staffMap.get(r.reportedBy) ?? "？"}）</span>
                 </p>
+                {/* 取り消し（管理者のみ）。誤って押さないよう、開いてからもう一度押す2段階にする */}
+                {isAdmin && (
+                  <details className="group mt-2 border-t border-ink-100">
+                    <summary className="flex min-h-9 cursor-pointer list-none items-center justify-end pt-2 text-xs font-bold text-red-600 [&::-webkit-details-marker]:hidden">
+                      <span className="group-open:hidden">この報告を取り消す</span>
+                      <span className="hidden text-ink-400 group-open:inline">やめる</span>
+                    </summary>
+                    <form
+                      action={cancelAbsenceReportAction}
+                      className="mt-1 flex items-center gap-3 rounded-xl bg-red-50 px-3 py-2.5"
+                    >
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="month" value={month} />
+                      <p className="flex-1 text-xs font-bold text-red-700">
+                        この{KIND_LABEL[r.kind]}の報告を取り消しますか？（元に戻せません）
+                      </p>
+                      <button type="submit" className="btn-danger btn-sm shrink-0">
+                        取り消す
+                      </button>
+                    </form>
+                  </details>
+                )}
               </div>
             ))}
           </div>

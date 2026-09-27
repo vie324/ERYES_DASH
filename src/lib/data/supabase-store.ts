@@ -5,6 +5,7 @@
 import { randomBytes } from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
+import { monthRange } from "@/lib/date";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
@@ -1431,8 +1432,8 @@ class SupabaseStore implements DataStore {
   }
 
   async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
-    const from = `${targetMonth}-01`;
-    const to = `${targetMonth}-31`;
+    // 月末は実際の日付で（「2027-02-31」のような存在しない日付は PostgreSQL がエラーにするため）
+    const { from, to } = monthRange(targetMonth);
     const del = await this.sb
       .from("dayoff_requests")
       .delete()
@@ -1979,6 +1980,21 @@ class SupabaseStore implements DataStore {
     if (filter.staffId) query = query.eq("staff_id", filter.staffId);
     const { data, error } = await query;
     return must(data, error, "欠勤報告一覧").map(mapAbsenceReport);
+  }
+
+  async getAbsenceReport(id: string): Promise<AbsenceReport | null> {
+    const { data, error } = await this.sb
+      .from("absence_reports")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`[supabase] 欠勤報告取得: ${error.message}`);
+    return data ? mapAbsenceReport(data) : null;
+  }
+
+  async deleteAbsenceReport(id: string): Promise<void> {
+    const { error } = await this.sb.from("absence_reports").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] 欠勤報告の取り消し: ${error.message}`);
   }
 
   async createOrderRequest(
