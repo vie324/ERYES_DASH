@@ -2,20 +2,31 @@
 
 // 予約表（Googleカレンダー風）のスケジュール入力。
 // ・縦が時間、横が日（1日 or 1週間）。空いているところをタップすると予定を追加できる。
+// ・1日は 3:00〜翌3:00。表は枠の中でスクロールでき、開いたときは予定のあたり（無ければ朝5時）を出す。
 // ・内容は「MTG」「練習」などの登録済み項目から選べて、手入力もできる。
 // ・入力結果は hidden input（name）に JSON で入り、そのままサーバーアクションへ送られる。
 
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ScheduleBlock } from "@/lib/data/types";
 import {
+  DAY_END_HOUR,
+  DAY_START_HOUR,
   PX_PER_HOUR,
   SLOT_MIN,
   blockColor,
+  clockLabel,
   durationLabel,
+  fromClockInput,
+  hourLabel,
+  isNextDayTime,
   placeBlocks,
+  toClockInput,
   toHM,
   toMin,
 } from "@/lib/eni/schedule-blocks";
+
+/** 予定が1つも無いときに最初に見せる時刻（朝の予定から入れられるように） */
+const DEFAULT_VIEW_HOUR = 5;
 
 interface Draft {
   index: number | null; // null＝新規
@@ -27,8 +38,8 @@ export function ScheduleBoard({
   initial,
   presets,
   dayLabels,
-  startHour = 8,
-  endHour = 22,
+  startHour = DAY_START_HOUR,
+  endHour = DAY_END_HOUR,
   ghostBlocks = [],
   ghostLabel = "計画",
 }: {
@@ -45,6 +56,26 @@ export function ScheduleBoard({
   const [blocks, setBlocks] = useState<ScheduleBlock[]>(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showGhost, setShowGhost] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // 開いたときは、いちばん早い予定の1時間前（予定が無ければ朝5時）から見せる
+  useLayoutEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const starts = [...initial, ...ghostBlocks].map((b) => toMin(b.s));
+    const firstHour = starts.length > 0 ? Math.floor(Math.min(...starts) / 60) - 1 : DEFAULT_VIEW_HOUR;
+    // 目盛りの文字は線より少し上に出るので、その分だけ手前で止めて見出しに隠れないようにする
+    box.scrollTop = Math.max(0, (firstHour - startHour) * PX_PER_HOUR - 10);
+    // 開いた直後の位置決めだけ。以降は利用者のスクロールに任せる
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 追加・修正のパネルを出したら、画面の外にならないよう見える位置まで送る
+  const panelOpen = draft !== null;
+  useEffect(() => {
+    if (panelOpen) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [panelOpen]);
 
   const ghostByDay = useMemo(
     () =>
@@ -123,11 +154,12 @@ export function ScheduleBoard({
   return (
     <div>
       <div className="rounded-xl border border-brand-200 bg-white overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* 3:00〜翌3:00（24時間）は長いので、枠の中でスクロールする。見出しと時刻の列は固定 */}
+        <div ref={scrollRef} className="overflow-auto max-h-[70vh] scroll-slim">
           <div style={{ minWidth: multiDay ? `${3 + dayLabels.length * 5.5}rem` : undefined }}>
             {/* 曜日の見出し */}
-            <div className="flex border-b border-brand-100 bg-brand-50/60">
-              <div className="w-12 shrink-0" />
+            <div className="flex border-b border-brand-100 bg-brand-50 sticky top-0 z-20">
+              <div className="w-12 shrink-0 sticky left-0 z-10 bg-brand-50" />
               {dayLabels.map((label, d) => (
                 <div
                   key={label}
@@ -142,15 +174,17 @@ export function ScheduleBoard({
 
             {/* 本体（縦＝時間） */}
             <div className="flex" style={{ height: gridHeight }}>
-              {/* 時間の目盛り */}
-              <div className="w-12 shrink-0 relative bg-brand-50/40">
+              {/* 時間の目盛り（24時以降は「翌」をつける） */}
+              <div className="w-12 shrink-0 relative bg-brand-50 sticky left-0 z-10 border-r border-brand-100">
                 {hours.map((h, i) => (
                   <div
                     key={h}
-                    className="absolute left-0 right-0 text-[10px] font-bold text-ink-400 text-center"
-                    style={{ top: i * PX_PER_HOUR - 6, height: PX_PER_HOUR }}
+                    className={`absolute left-0 right-0 text-[10px] font-bold text-center leading-none ${
+                      h === 24 ? "text-brand-600" : "text-ink-400"
+                    }`}
+                    style={{ top: i === 0 ? 3 : i * PX_PER_HOUR - 5 }}
                   >
-                    {i === 0 ? "" : `${h}:00`}
+                    {hourLabel(h)}
                   </div>
                 ))}
               </div>
@@ -163,10 +197,10 @@ export function ScheduleBoard({
                   className="flex-1 min-w-0 relative border-l border-brand-100 cursor-copy"
                   role="presentation"
                 >
-                  {/* 1時間ごとの線（30分は薄い線） */}
+                  {/* 1時間ごとの線（30分は薄い線。日付が変わる0時は少し濃く） */}
                   {hours.map((h, i) => (
                     <div key={h} className="absolute left-0 right-0" style={{ top: i * PX_PER_HOUR }}>
-                      <div className="border-t border-brand-100" />
+                      <div className={h === 24 ? "border-t-2 border-brand-200" : "border-t border-brand-100"} />
                       <div className="border-t border-dashed border-brand-50" style={{ marginTop: PX_PER_HOUR / 2 - 1 }} />
                     </div>
                   ))}
@@ -211,7 +245,7 @@ export function ScheduleBoard({
                     >
                       <span className="block text-[10px] font-bold truncate">{p.block.a}</span>
                       <span className="block text-[9px] opacity-70 truncate">
-                        {p.block.s}〜{p.block.e}
+                        {clockLabel(p.block.s)}〜{clockLabel(p.block.e)}
                       </span>
                     </button>
                   ))}
@@ -241,13 +275,17 @@ export function ScheduleBoard({
       <div className="flex items-center justify-between gap-2 mt-2">
         <p className="text-[11px] text-ink-400">
           空いているところをタップすると予定を追加できます（帯をタップで修正・削除）。
-          {multiDay && "表は横にスクロールすると日曜まで見られます。"}
+          表は3:00〜翌3:00で、上下にスクロールできます。
+          {multiDay && "横にスクロールすると日曜まで見られます。"}
         </p>
         <button
           type="button"
-          onClick={() =>
-            setDraft({ index: null, block: { d: 0, s: `${String(startHour + 1).padStart(2, "0")}:00`, e: `${String(startHour + 2).padStart(2, "0")}:00`, a: "" } })
-          }
+          onClick={() => {
+            // いま表で見えているあたりの時刻で下書きを作る
+            const top = scrollRef.current?.scrollTop ?? 0;
+            const hour = Math.min(endHour - 1, startHour + Math.ceil(top / PX_PER_HOUR));
+            setDraft({ index: null, block: { d: 0, s: toHM(hour * 60), e: toHM(hour * 60 + 60), a: "" } });
+          }}
           className="shrink-0 text-xs font-bold text-brand-700 border border-brand-300 rounded-full px-3 py-1.5"
         >
           ＋予定を追加
@@ -256,7 +294,7 @@ export function ScheduleBoard({
 
       {/* 追加・修正パネル */}
       {draft && (
-        <div className="mt-3 rounded-xl border-2 border-brand-300 bg-brand-50/50 p-3 space-y-3">
+        <div ref={panelRef} className="mt-3 rounded-xl border-2 border-brand-300 bg-brand-50/50 p-3 space-y-3 scroll-mb-24">
           <p className="text-xs font-bold text-brand-800">
             {draft.index === null ? "予定を追加" : "予定を修正"}
           </p>
@@ -283,16 +321,21 @@ export function ScheduleBoard({
             </div>
           )}
 
+          {/* 時刻の入力は 0:00〜23:59。3時より前は「翌」（日付をまたいだ後）として扱う */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label !mb-1.5 !text-xs" htmlFor={`${name}-start`}>開始</label>
+              <label className="label !mb-1.5 !text-xs" htmlFor={`${name}-start`}>
+                開始
+                {isNextDayTime(draft.block.s) && <span className="ml-1 text-brand-600">（翌日）</span>}
+              </label>
               <input
                 id={`${name}-start`}
                 type="time"
                 step={900}
-                value={draft.block.s}
+                value={toClockInput(draft.block.s)}
                 onChange={(e) => {
-                  const s = e.target.value;
+                  const s = fromClockInput(e.target.value, "start");
+                  if (!s) return;
                   const keepLength = toMin(draft.block.e) - toMin(draft.block.s);
                   patchDraft({ s, e: toHM(toMin(s) + Math.max(SLOT_MIN, keepLength)) });
                 }}
@@ -300,13 +343,19 @@ export function ScheduleBoard({
               />
             </div>
             <div>
-              <label className="label !mb-1.5 !text-xs" htmlFor={`${name}-end`}>終了</label>
+              <label className="label !mb-1.5 !text-xs" htmlFor={`${name}-end`}>
+                終了
+                {isNextDayTime(draft.block.e) && <span className="ml-1 text-brand-600">（翌日）</span>}
+              </label>
               <input
                 id={`${name}-end`}
                 type="time"
                 step={900}
-                value={draft.block.e}
-                onChange={(e) => patchDraft({ e: e.target.value })}
+                value={toClockInput(draft.block.e)}
+                onChange={(e) => {
+                  const end = fromClockInput(e.target.value, "end");
+                  if (end) patchDraft({ e: end });
+                }}
                 className="input !min-h-11 !py-2 !text-sm"
               />
             </div>
@@ -340,8 +389,12 @@ export function ScheduleBoard({
               placeholder="手入力もできます（例：撮影、ロープレ）"
               className="input !min-h-11 !py-2 !text-sm"
             />
-            {toMin(draft.block.e) > toMin(draft.block.s) && (
-              <p className="text-[11px] text-ink-400 mt-1">所要 {durationLabel(draft.block)}</p>
+            {toMin(draft.block.e) > toMin(draft.block.s) ? (
+              <p className="text-[11px] text-ink-400 mt-1">
+                {clockLabel(draft.block.s)}〜{clockLabel(draft.block.e)}（所要 {durationLabel(draft.block)}）
+              </p>
+            ) : (
+              <p className="text-[11px] font-bold text-red-500 mt-1">終了は開始より後にしてください（翌3:00まで）</p>
             )}
           </div>
 

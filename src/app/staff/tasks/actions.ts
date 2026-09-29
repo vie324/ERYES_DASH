@@ -15,6 +15,10 @@ function backOf(formData: FormData, fallback = "/staff/tasks"): string {
   return back.startsWith("/staff/") ? back : fallback;
 }
 
+/**
+ * 画面の再検証。チェック・進捗・削除はリダイレクトせずにこれだけで済ませる
+ * （リダイレクトすると画面が先頭に戻り、続けてチェックできなくなるため）。
+ */
 function refresh(): void {
   revalidatePath("/staff/tasks");
   revalidatePath("/staff/exec");
@@ -176,7 +180,6 @@ export async function toggleTaskDoneAction(formData: FormData): Promise<void> {
     await db.updateStaffTask(taskId, { status: done ? "done" : "open" });
   }
   refresh();
-  redirect(back);
 }
 
 /** 単発タスクの進捗変更（未着手・進行中・完了） */
@@ -200,7 +203,6 @@ export async function setTaskStatusAction(formData: FormData): Promise<void> {
 
   await db.updateStaffTask(taskId, { status });
   refresh();
-  redirect(back);
 }
 
 /** タスクの削除（作成者・担当者本人・幹部のみ） */
@@ -221,7 +223,6 @@ export async function deleteTaskAction(formData: FormData): Promise<void> {
 
   await db.deleteStaffTask(taskId);
   refresh();
-  redirect(back);
 }
 
 /** 議事録から整理されたタスク（会社のタスク）の完了切り替え */
@@ -241,5 +242,4 @@ export async function toggleCompanyMeetingTaskAction(formData: FormData): Promis
   await db.setMeetingTaskDone(taskId, done);
   refresh();
   revalidatePath("/staff/meetings");
-  redirect(back);
 }

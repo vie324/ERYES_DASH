@@ -14,6 +14,7 @@ import {
 import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
+import { findOwner } from "@/lib/ai-shimon/access";
 
 import { MAX_TIERS } from "@/lib/eni/forms";
 
@@ -60,6 +61,8 @@ export default async function AdminSettingsPage({
     // 03_フル版SKILL は語り口が旧ルールのままなので、full を使っていたら警告を出す
     usingFullPrompt: promptSource() === "full",
     model: env.aiShimonModel,
+    // 相談の記録を読める代表（staff.is_owner。画面からは変えられない）
+    owner: findOwner(staffList),
   };
 
   return (
@@ -489,6 +492,11 @@ export default async function AdminSettingsPage({
             <StatusBadge label="呼称表：読み込めていません" tone="pending" />
           )}
           <StatusBadge label={`モデル：${aiShimon.model}`} tone="muted" />
+          {aiShimon.owner ? (
+            <StatusBadge label={`相談を読める代表：${aiShimon.owner.name}`} tone="ok" />
+          ) : (
+            <StatusBadge label="相談を読める代表：未設定" tone="pending" />
+          )}
         </div>
         {aiShimon.usingFullPrompt && (
           <p className="text-xs text-amber-700 font-bold mb-2">
@@ -515,6 +523,12 @@ export default async function AdminSettingsPage({
           AIへの入力にしか使わず、画面・ログには一切出しません。モデルは環境変数 AI_SHIMON_MODEL で変更できます。
           しもんはスタッフをフルネームで呼ばないため、ログイン中の氏名は呼称表（07）で呼び名に変換してから渡しています。
           差し替え後に「呼称表」の人数が急に減ったときは、表の書式が変わっていないか確認してください。
+        </p>
+        <p className="hint">
+          相談文と返答は記録され、代表だけが「AIしもん → みんなの相談」で読めます（スタッフの画面には表示していません）。
+          代表は他の管理者が自分に付けられないよう、この画面からは変えられません。
+          <code className="font-bold">supabase/schema.sql</code> を実行すると「中 至紋」さんのアカウントが代表になります
+          （変えるときは同ファイル末尾の手順どおりSQLで設定）。
         </p>
       </section>
 

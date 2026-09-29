@@ -18,6 +18,7 @@ import type { MeetingTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Markdown } from "@/lib/markdown";
 import { MinutesEditor } from "@/components/minutes-editor";
+import { TaskCheckSubmit } from "@/components/task-check";
 import type { Meeting, MeetingTask, Staff } from "@/lib/data/types";
 import { MeetingCreateForm } from "./create-form";
 import { deleteMeetingAction, toggleMeetingTaskAction } from "./actions";
@@ -86,9 +87,7 @@ export default async function MeetingsPage({
         ? "議事録とタスクを保存しました"
         : params.saved === "deleted"
           ? "ミーティングを削除しました"
-          : params.saved === "task"
-            ? "タスクの状態を更新しました"
-            : "";
+          : "";
 
   const shortName = (id: string | null) => (id ? (staffMap.get(id)?.name.split(" ")[0] ?? "？") : "");
   const chipClass = (m: Meeting) =>
@@ -291,15 +290,11 @@ export default async function MeetingsPage({
                                     <input type="hidden" name="meeting_id" value={m.id} />
                                     <input type="hidden" name="month" value={month} />
                                     <input type="hidden" name="done" value={t.done ? "0" : "1"} />
-                                    <button
-                                      type="submit"
-                                      aria-label={t.done ? `${t.title}を未完了に戻す` : `${t.title}を完了にする`}
-                                      className={`w-5 h-5 rounded border-2 text-xs font-bold leading-none ${
-                                        t.done ? "bg-emerald-500 border-emerald-500 text-white" : "border-ink-300 text-transparent"
-                                      }`}
-                                    >
-                                      ✓
-                                    </button>
+                                    <TaskCheckSubmit
+                                      shape="square"
+                                      done={t.done}
+                                      label={t.done ? `${t.title}を未完了に戻す` : `${t.title}を完了にする`}
+                                    />
                                   </form>
                                   <span className="flex-1 min-w-0 text-sm">
                                     <span className={t.done ? "line-through text-ink-400" : "text-ink-800"}>{t.title}</span>

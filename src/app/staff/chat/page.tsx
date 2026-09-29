@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatTimeJa, jstDateOf, todayJst } from "@/lib/date";
-import { ALL_ROOM_KEY, getChatOverview, messagePreview } from "@/lib/chat";
+import { ALL_ROOM_KEY, avatarColor, getChatOverview, messagePreview } from "@/lib/chat";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { AutoRefresh, MemberPicker, RoomSearch } from "./chat-client";
@@ -18,7 +18,7 @@ const FLASH: Record<string, { tone: "ok" | "error"; text: string }> = {
   "left=1": { tone: "ok", text: "グループから抜けました" },
 };
 
-// トークルーム一覧：LINEのトーク一覧のように「相手・最後のメッセージ・未読数」を並べる。
+// トークルーム一覧：LINEのトーク一覧のように「相手・最後のメッセージ・未読数」を並べる（見た目もLINEに合わせる）。
 // 全体共有は常に先頭。ここからDMの開始・グループの作成もできる。
 export default async function ChatListPage({
   searchParams,
@@ -69,30 +69,32 @@ export default async function ChatListPage({
 
       {/* トーク一覧（名前・本文で絞り込める） */}
       <RoomSearch />
-      <div className="space-y-2 mb-5" id="room-list">
+      <div
+        className="mb-5 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5"
+        id="room-list"
+      >
         {overview.rooms.length === 0 ? (
-          <EmptyState message="まだトークがありません。下からDMやグループを始めましょう" />
+          <div className="p-3">
+            <EmptyState message="まだトークがありません。下からDMやグループを始めましょう" />
+          </div>
         ) : (
-          overview.rooms.map(({ room, displayName, unread, lastMessage, memberCount, mentioned }) => {
+          overview.rooms.map(({ room, displayName, others, unread, lastMessage, memberCount, mentioned }, index) => {
             const isAll = room.roomKey === ALL_ROOM_KEY;
             const preview = messagePreview(lastMessage);
+            // DMのアイコンの色は、トークルームの中の相手のアイコンと同じ色にする
+            const dmColor = avatarColor(others[0]?.id ?? room.id);
             return (
               <Link
                 key={room.id}
                 href={`/staff/chat/${room.id}`}
                 data-room-search={`${displayName} ${preview}`.toLowerCase()}
-                className={`card !p-3.5 flex items-center gap-3 hover:border-brand-300 transition-colors ${
-                  isAll ? "border-brand-300 bg-brand-50/50" : ""
+                className={`flex items-center gap-3 px-3.5 py-3 transition-colors hover:bg-black/[0.03] active:bg-black/5 ${
+                  index > 0 ? "border-t border-black/5" : ""
                 }`}
               >
                 <span
-                  className={`w-12 h-12 shrink-0 rounded-full flex items-center justify-center font-display text-lg font-bold ${
-                    isAll
-                      ? "bg-gradient-to-br from-brand-500 to-brand-700 text-white"
-                      : room.isGroup
-                        ? "bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700 border border-brand-200"
-                        : "bg-gradient-to-br from-brand-400 to-brand-700 text-white"
-                  }`}
+                  className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center text-lg font-bold text-white"
+                  style={{ backgroundColor: isAll ? "#06c755" : room.isGroup ? "#8e9fb8" : dmColor }}
                 >
                   {isAll ? (
                     <Icon name="megaphone" className="w-5 h-5" />
@@ -104,37 +106,30 @@ export default async function ChatListPage({
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="flex items-baseline gap-2">
-                    <span className="text-sm font-bold text-ink-900 truncate">
+                    <span className="truncate text-[15px] font-bold text-[#111]">
                       {displayName}
-                      {room.isGroup && (
-                        <span className="text-xs text-ink-400 font-normal ml-1">（{memberCount}）</span>
-                      )}
+                      {room.isGroup && <span className="ml-0.5 font-normal text-[#111]">({memberCount})</span>}
                     </span>
-                    {isAll && (
-                      <span className="shrink-0 text-[9px] font-bold text-brand-700 border border-brand-300 rounded-full px-1.5 py-0.5">
-                        全員
-                      </span>
-                    )}
                     {lastMessage && (
-                      <span className="ml-auto shrink-0 text-[10px] font-bold text-ink-400">
+                      <span className="ml-auto shrink-0 text-[11px] text-[#999]">
                         {jstDateOf(lastMessage.createdAt) === today
                           ? formatTimeJa(lastMessage.createdAt)
                           : formatDateJa(jstDateOf(lastMessage.createdAt))}
                       </span>
                     )}
                   </span>
-                  <span className="block text-xs text-ink-500 truncate mt-0.5">{preview}</span>
+                  <span className="mt-0.5 flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-[#888]">
+                      {mentioned && <span className="mr-1 font-bold text-[#1d4ed8]">[メンション]</span>}
+                      {preview}
+                    </span>
+                    {unread > 0 && (
+                      <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-[#06c755] text-white text-[11px] font-bold flex items-center justify-center">
+                        {unread > 999 ? "999+" : unread}
+                      </span>
+                    )}
+                  </span>
                 </span>
-                {mentioned && (
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
-                    @
-                  </span>
-                )}
-                {unread > 0 && (
-                  <span className="shrink-0 min-w-6 h-6 px-1.5 rounded-full bg-gradient-to-b from-brand-500 to-brand-600 text-white text-xs font-bold flex items-center justify-center">
-                    {unread}
-                  </span>
-                )}
               </Link>
             );
           })
@@ -156,7 +151,10 @@ export default async function ChatListPage({
                 type="submit"
                 className="w-full flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm font-bold text-ink-700 hover:border-brand-300 hover:bg-brand-50 transition-colors"
               >
-                <span className="w-7 h-7 shrink-0 rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-white flex items-center justify-center text-xs font-display font-bold">
+                <span
+                  className="w-7 h-7 shrink-0 rounded-full text-white flex items-center justify-center text-xs font-bold"
+                  style={{ backgroundColor: avatarColor(s.id) }}
+                >
                   {s.name.trim().charAt(0)}
                 </span>
                 <span className="truncate">{s.name}</span>

@@ -64,6 +64,8 @@ export function AppShell({
   const current = onHome ? null : findCurrent(pathname, groups);
   // 下部タブにない画面（ホーム・サンクスなど）にいるときは「メニュー」を点けて、どこから来たかを示す
   const inMenu = !tabs.some((t) => matchesNav(pathname, t));
+  // トークルームの中はLINEのように画面いっぱいで使う（上部バー・下部タブ・帯は出さず、ルーム側の見出しで戻る）
+  const immersive = isImmersivePath(pathname);
 
   // ページを移動したらドロワーは閉じる
   useEffect(() => {
@@ -120,97 +122,113 @@ export function AppShell({
       )}
 
       <div className="lg:pl-64 flex flex-col min-h-dvh">
-        {banner}
+        {!immersive && banner}
         {/* ---------------- 上部バー ---------------- */}
-        <header className="sticky top-0 z-20 bg-brand-50/85 backdrop-blur-md border-b border-brand-200/60 print:hidden">
-          <div className="mx-auto max-w-6xl px-3 sm:px-5 h-14 flex items-center gap-2">
-            <Link href={homeHref} className="lg:hidden flex items-center min-w-0 py-2 pr-2">
-              <img src={logoSrc} alt={logoAlt} className="h-7 w-auto max-w-24 object-contain object-left" />
-            </Link>
-
-            {/* いま開いている場所（PCのみ） */}
-            {onHome ? (
-              <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-700 min-w-0">
-                <Icon name="home" className="w-3.5 h-3.5 shrink-0 text-ink-400" />
-                {home.label}
-              </p>
-            ) : current ? (
-              <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-400 min-w-0">
-                <span className="truncate">{current.group}</span>
-                <Icon name="chevronRight" className="w-3 h-3 shrink-0" />
-                <span className="text-ink-700 truncate">{current.item.label}</span>
-              </p>
-            ) : null}
-
-            <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-              <Link
-                href="/select"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
-                aria-label="業態を切り替え"
-              >
-                <Icon name="swap" className="w-3.5 h-3.5 text-brand-500" />
-                {user.brandLabel}
+        {!immersive && (
+          <header className="sticky top-0 z-20 bg-brand-50/85 backdrop-blur-md border-b border-brand-200/60 print:hidden">
+            <div className="mx-auto max-w-6xl px-3 sm:px-5 h-14 flex items-center gap-2">
+              <Link href={homeHref} className="lg:hidden flex items-center min-w-0 py-2 pr-2">
+                <img src={logoSrc} alt={logoAlt} className="h-7 w-auto max-w-24 object-contain object-left" />
               </Link>
-              {helpHref && (
+
+              {/* いま開いている場所（PCのみ） */}
+              {onHome ? (
+                <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-700 min-w-0">
+                  <Icon name="home" className="w-3.5 h-3.5 shrink-0 text-ink-400" />
+                  {home.label}
+                </p>
+              ) : current ? (
+                <p className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-ink-400 min-w-0">
+                  <span className="truncate">{current.group}</span>
+                  <Icon name="chevronRight" className="w-3 h-3 shrink-0" />
+                  <span className="text-ink-700 truncate">{current.item.label}</span>
+                </p>
+              ) : null}
+
+              <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
                 <Link
-                  href={helpHref}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
+                  href="/select"
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
+                  aria-label="業態を切り替え"
                 >
-                  <Icon name="help" className="w-3.5 h-3.5 text-brand-500" />
-                  <span className="hidden sm:inline">使い方</span>
+                  <Icon name="swap" className="w-3.5 h-3.5 text-brand-500" />
+                  {user.brandLabel}
                 </Link>
-              )}
-              <div className="flex items-center gap-2 pl-1.5 sm:pl-2.5 sm:ml-1 sm:border-l border-brand-200">
-                <div className="hidden sm:block text-right leading-tight">
-                  <p className="text-[13px] font-bold text-ink-800 truncate max-w-32">{user.name}</p>
-                  <p className="text-[10px] font-bold text-ink-400">{user.roleLabel}</p>
+                {helpHref && (
+                  <Link
+                    href={helpHref}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-brand-800 transition-colors hover:bg-white hover:border-brand-400"
+                  >
+                    <Icon name="help" className="w-3.5 h-3.5 text-brand-500" />
+                    <span className="hidden sm:inline">使い方</span>
+                  </Link>
+                )}
+                <div className="flex items-center gap-2 pl-1.5 sm:pl-2.5 sm:ml-1 sm:border-l border-brand-200">
+                  <div className="hidden sm:block text-right leading-tight">
+                    <p className="text-[13px] font-bold text-ink-800 truncate max-w-32">{user.name}</p>
+                    <p className="text-[10px] font-bold text-ink-400">{user.roleLabel}</p>
+                  </div>
+                  <Avatar name={user.name} />
                 </div>
-                <Avatar name={user.name} />
               </div>
             </div>
-          </div>
-        </header>
+          </header>
+        )}
 
-        {/* 下部タブぶんの余白（スマホのみ）。iPhoneのホームバーぶんも確保する */}
-        <main className="flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16 animate-fade-up">
+        {/* 下部タブぶんの余白（スマホのみ）。iPhoneのホームバーぶんも確保する。
+            全画面の画面は中身が自分で位置を決めるので、余白と表示アニメーション（transform）を付けない */}
+        <main
+          className={
+            immersive
+              ? "flex-1 w-full"
+              : "flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16 animate-fade-up"
+          }
+        >
           {children}
         </main>
       </div>
 
       {/* ---------------- スマホ：下部タブ ---------------- */}
       {/* ホームは置かない（メニューの先頭とロゴから戻れる）。毎日さわる操作だけを並べて、文字を読める大きさに保つ */}
-      <nav
-        aria-label="よく使う操作"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-brand-200/80 bg-brand-50/95 backdrop-blur-md shadow-[0_-4px_16px_-12px_rgba(65,56,40,0.35)] pb-[env(safe-area-inset-bottom)] print:hidden"
-      >
-        <ul className="flex items-stretch">
-          {tabs.map((t) => (
-            <li key={t.href} className="flex-1 min-w-0">
-              <TabLink
-                href={t.href}
-                icon={t.icon}
-                label={t.short ?? t.label}
-                badge={t.badge}
-                external={t.external}
+      {!immersive && (
+        <nav
+          aria-label="よく使う操作"
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-brand-200/80 bg-brand-50/95 backdrop-blur-md shadow-[0_-4px_16px_-12px_rgba(65,56,40,0.35)] pb-[env(safe-area-inset-bottom)] print:hidden"
+        >
+          <ul className="flex items-stretch">
+            {tabs.map((t) => (
+              <li key={t.href} className="flex-1 min-w-0">
+                <TabLink
+                  href={t.href}
+                  icon={t.icon}
+                  label={t.short ?? t.label}
+                  badge={t.badge}
+                  external={t.external}
+                  density={density}
+                  active={matchesNav(pathname, t)}
+                />
+              </li>
+            ))}
+            <li className="flex-1 min-w-0">
+              <TabButton
+                onClick={() => setOpen(true)}
+                icon="menu"
+                label="メニュー"
+                ariaLabel="メニューを開く"
                 density={density}
-                active={matchesNav(pathname, t)}
+                active={open || inMenu}
               />
             </li>
-          ))}
-          <li className="flex-1 min-w-0">
-            <TabButton
-              onClick={() => setOpen(true)}
-              icon="menu"
-              label="メニュー"
-              ariaLabel="メニューを開く"
-              density={density}
-              active={open || inMenu}
-            />
-          </li>
-        </ul>
-      </nav>
+          </ul>
+        </nav>
+      )}
     </div>
   );
+}
+
+/** 画面いっぱいで使う画面か（トークルームの中。一覧 /staff/chat は通常の画面） */
+function isImmersivePath(pathname: string): boolean {
+  return /^\/staff\/chat\/[^/]+\/?$/.test(pathname);
 }
 
 /** 下部タブの詰め具合。並ぶ数（右端のメニューを含む）で決める */

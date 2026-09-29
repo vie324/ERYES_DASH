@@ -608,6 +608,17 @@ create table if not exists push_subscriptions (
   updated_at timestamptz not null default now()
 );
 
+-- AIしもんへの相談の記録（相談した人の発言とAIしもんの返答を1件ずつ）。
+-- アプリで読めるのは代表（staff.is_owner）だけ。スタッフを削除すると本人の相談も消える。
+create table if not exists ai_shimon_messages (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  thread_id text not null,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
 -- ---- 既存DBへの追従（あとから足した列・制約）----
 -- 新しく作ったDBでは「すでにある」ので何も起きません。
 -- 本番DBに貼り付けて再実行したときに、足りない列だけが追加されます。
@@ -621,6 +632,8 @@ alter table staff add column if not exists is_executive boolean not null default
 alter table staff add column if not exists mission text not null default '';
 alter table staff add column if not exists tiers integer not null default 1;
 alter table staff add column if not exists theme_color text not null default '';
+-- 代表（AIしもんの相談を全員ぶん読める人）。アプリの画面からは変えられない（下の「代表の設定」参照）
+alter table staff add column if not exists is_owner boolean not null default false;
 
 -- 日報：ふりかえりの3項目
 alter table daily_reports add column if not exists good_point text not null default '';
@@ -719,6 +732,8 @@ create index if not exists idx_manager_routine_checks_period on manager_routine_
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
+create index if not exists idx_ai_shimon_messages_thread on ai_shimon_messages (staff_id, thread_id, created_at);
+create index if not exists idx_ai_shimon_messages_created on ai_shimon_messages (created_at desc);
 
 -- ---- Row Level Security ----
 -- 本システムはサーバー側からサービスロールキーのみで接続する構成のため、
@@ -769,6 +784,7 @@ alter table manager_routines enable row level security;
 alter table manager_routine_checks enable row level security;
 alter table app_settings enable row level security;
 alter table push_subscriptions enable row level security;
+alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
 -- TODO: 店舗名・住所・緯度経度は実際の値に書き換える。最初の行が「本店」扱い。
@@ -818,3 +834,15 @@ from stores
 order by created_at, name
 limit 1
 on conflict (login_id) do nothing;
+
+-- ---- 代表の設定（AIしもんの相談をスタッフ全員ぶん読める人）----
+-- まだ誰も代表になっていなければ、「中 至紋」さんのアカウントを代表にします（1回だけ）。
+-- 氏名の空白（半角・全角）は無視して照合し、同じ氏名のアカウントが2件以上あるときは何もしません。
+-- アカウントがまだ無い場合は、作ってからこのファイルをもう一度実行してください。
+-- 代表を別の人に変えるときは、次の2行を実行します（ログインIDは実際のものに置き換え）：
+--   update staff set is_owner = false where is_owner;
+--   update staff set is_owner = true where login_id = '＜代表のログインID＞';
+update staff set is_owner = true
+where replace(replace(name, ' ', ''), '　', '') = '中至紋'
+  and not exists (select 1 from staff where is_owner)
+  and (select count(*) from staff where replace(replace(name, ' ', ''), '　', '') = '中至紋') = 1;

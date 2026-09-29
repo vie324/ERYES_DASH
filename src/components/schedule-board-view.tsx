@@ -2,7 +2,14 @@
 // ScheduleBoardView：グリッド表示（1日・1週間）／ScheduleList：時間順の一覧（一覧画面向け）
 
 import type { ScheduleBlock } from "@/lib/data/types";
-import { PX_PER_HOUR, blockColor, fitHourRange, placeBlocks } from "@/lib/eni/schedule-blocks";
+import {
+  PX_PER_HOUR,
+  blockColor,
+  clockLabel,
+  fitHourRange,
+  hourLabel,
+  placeBlocks,
+} from "@/lib/eni/schedule-blocks";
 
 export function ScheduleBoardView({
   blocks,
@@ -48,7 +55,7 @@ export function ScheduleBoardView({
                   className="absolute left-0 right-0 text-[10px] font-bold text-ink-400 text-center"
                   style={{ top: i * PX_PER_HOUR - 6 }}
                 >
-                  {i === 0 ? "" : `${h}:00`}
+                  {i === 0 ? "" : hourLabel(h)}
                 </div>
               ))}
             </div>
@@ -84,7 +91,7 @@ export function ScheduleBoardView({
                     >
                       <span className="block text-[10px] font-bold truncate">{p.block.a}</span>
                       <span className="block text-[9px] opacity-70 truncate">
-                        {p.block.s}〜{p.block.e}
+                        {clockLabel(p.block.s)}〜{clockLabel(p.block.e)}
                       </span>
                     </div>
                   ))}
@@ -105,8 +112,8 @@ export function ScheduleList({ blocks }: { blocks: ScheduleBlock[] }) {
     <ul className="rounded-xl border border-ink-200 overflow-hidden">
       {blocks.map((b, i) => (
         <li key={`${b.s}-${i}`} className={`flex items-center gap-2 ${i > 0 ? "border-t border-ink-100" : ""}`}>
-          <span className="w-24 shrink-0 text-[11px] font-bold text-ink-400 bg-ink-50 py-1.5 text-center">
-            {b.s}〜{b.e}
+          <span className="w-28 shrink-0 text-[11px] font-bold text-ink-400 bg-ink-50 py-1.5 text-center">
+            {clockLabel(b.s)}〜{clockLabel(b.e)}
           </span>
           <span className="flex-1 min-w-0 px-2 py-1.5 text-sm text-ink-700 truncate">{b.a}</span>
         </li>
