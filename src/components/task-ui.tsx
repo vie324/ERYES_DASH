@@ -1,9 +1,11 @@
 // タスク管理の共通部品（タスク画面・幹部画面で共用）。
 // チェックはサーバーアクションのフォーム送信で行う（JS不要・スマホでも確実に動く）。
+// アクションはリダイレクトせずに画面をその場で更新するので、続けてチェックしても先頭に戻らない。
 
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { StatusBadge } from "@/components/ui";
+import { TaskCheckSubmit } from "@/components/task-check";
 import { repeatLabel } from "@/lib/tasks";
 import { formatDateJa, weekdayJa } from "@/lib/date";
 import type { StaffTask } from "@/lib/data/types";
@@ -31,17 +33,7 @@ export function TaskCheckButton({
       <input type="hidden" name="date" value={date} />
       <input type="hidden" name="done" value={done ? "0" : "1"} />
       <input type="hidden" name="back" value={back} />
-      <button
-        type="submit"
-        aria-label={done ? "完了を取り消す" : "完了にする"}
-        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors ${
-          done
-            ? "bg-emerald-500 border-emerald-500 text-white"
-            : "bg-white border-ink-300 text-transparent hover:border-brand-400"
-        }`}
-      >
-        <Icon name="checkCircle" className="w-4 h-4" />
-      </button>
+      <TaskCheckSubmit done={done} label={done ? "完了を取り消す" : "完了にする"} />
     </form>
   );
 }

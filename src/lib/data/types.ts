@@ -39,6 +39,11 @@ export interface Staff {
   jobType: JobType;
   rank: AssistantRank; // アシスタントのランク（ファースト/ミドル/ファイナル）
   isExecutive: boolean; // 幹部（欠勤・早退の閲覧、発注管理、ペア設定などができる）
+  /**
+   * 代表（管理権限のいちばん上）。AIしもんへの相談をスタッフ全員ぶん読める。
+   * 他の管理者が自分に付けられないよう、アプリの画面からは変えられない（DBで設定する）。
+   */
+  isOwner: boolean;
   mission: string; // その人の役割・担っていること（組織図に表示）
   /** 段数＝一人当たり同時に回す席数。稼働率（入客時間 ÷ 段数×8時間）の分母に使う */
   tiers: number;
@@ -617,6 +622,33 @@ export interface ThanksComment {
   createdAt: Date;
 }
 
+// ============================================================
+// AIしもん（相談の記録。アプリで読めるのは代表だけ）
+// ============================================================
+
+/** AIしもんとのやりとり1件（相談した人の発言、またはAIしもんの返答） */
+export interface AiShimonMessage {
+  id: string;
+  staffId: string;
+  /** ひと続きの相談のID（画面の「新しく相談する」で新しくなる） */
+  threadId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: Date;
+}
+
+/** 相談（ひと続きのやりとり）1つぶんのまとめ。代表の一覧画面で使う */
+export interface AiShimonThread {
+  staffId: string;
+  threadId: string;
+  startedAt: Date;
+  lastAt: Date;
+  /** 最初の相談文（一覧の見出し） */
+  firstMessage: string;
+  /** 相談した回数（相談した人の発言の数） */
+  turns: number;
+}
+
 /**
  * 会社のイベント・全体で共有しておきたい予定（全員が見る。登録は幹部・管理者）。
  * 出勤シフトとは別で、勉強会・全体ミーティング・ENi会・研修などを置く場所。
@@ -638,7 +670,10 @@ export interface CompanyEvent {
   createdAt: Date;
 }
 
-/** 予約表（タイムテーブル）の1件。d=曜日index（1日だけの場合は0）、s/e="HH:mm" */
+/**
+ * 予約表（タイムテーブル）の1件。d=曜日index（1日だけの場合は0）、s/e="HH:mm"。
+ * 1日は 3:00〜翌3:00 で区切るので、日付をまたいだ後の時刻は "25:30"（＝翌1:30）のように24時以降で持つ。
+ */
 export interface ScheduleBlock {
   d: number;
   s: string;
@@ -1052,6 +1087,14 @@ export interface DataStore {
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+
+  // ---- AIしもん（相談の記録。アプリで読めるのは代表だけ） ----
+  /** 相談と返答を記録する */
+  addAiShimonMessages(rows: Omit<AiShimonMessage, "id">[]): Promise<void>;
+  /** 相談の一覧（最後のやりとりが新しい順）。staffId を指定するとその人のぶんだけ */
+  listAiShimonThreads(filter?: { staffId?: string; limit?: number }): Promise<AiShimonThread[]>;
+  /** 1つの相談のやりとり（古い順） */
+  listAiShimonMessages(staffId: string, threadId: string): Promise<AiShimonMessage[]>;
 
   // ---- 会議体マスタ ----
   /** 会議体の一覧（初回はテンプレートから自動で作られる） */

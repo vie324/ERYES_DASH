@@ -1,57 +1,63 @@
 /* eslint-disable @next/next/no-img-element */
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatDateTimeJa, formatTimeJa, jstDateOf } from "@/lib/date";
 import {
   ALL_ROOM_KEY,
-  CHAT_REACTION_EMOJIS,
+  avatarColor,
   mediaMessages,
   messagePreview,
   roomDisplayName,
   splitMentionParts,
 } from "@/lib/chat";
 import { isExecutive } from "@/lib/eni/access";
-import { PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { AutoRefresh, ChatComposer, Lightbox, MemberPicker, ScrollToBottom } from "../chat-client";
 import {
-  deleteMessageAction,
-  toggleAnnounceAction,
-  togglePinAction,
-  toggleReactionAction,
-  updateGroupAction,
-} from "../actions";
+  AutoRefresh,
+  ChatComposer,
+  ChatRoomFrame,
+  ChatRoomProvider,
+  ChatScroller,
+  Lightbox,
+  MemberPicker,
+  MessageActions,
+  RoomMenu,
+} from "../chat-client";
+import { togglePinAction, toggleReactionAction, updateGroupAction } from "../actions";
 import type { ChatMessage, ChatReaction, Staff } from "@/lib/data/types";
 
-const TABS = [
-  { key: "talk", label: "トーク", icon: "chat" as const },
-  { key: "notes", label: "ノート", icon: "book" as const },
-  { key: "media", label: "写真・ファイル", icon: "fileText" as const },
-  { key: "members", label: "メンバー", icon: "users" as const },
-];
+const TAB_LABELS: Record<string, string> = {
+  talk: "トーク",
+  notes: "ノート",
+  media: "写真・ファイル",
+  members: "メンバー",
+};
 
 const FLASH: Record<string, string> = {
   members: "メンバーを更新しました",
-  announced: "ダッシュボードのトップに掲示しました",
-  unannounced: "掲示をやめました",
   forwarded: "議事録を転送しました（ノートにも残しています）",
 };
 
-// トークルーム（LINE風＋）：自分は右・相手は左の吹き出し。
-// 既読数・リアクション・写真・PDF・返信・メンション・ノート（固定）・アナウンス。
-// 数秒ごとの自動更新で新着を取り込む。開いている間は常に既読になる。
+/** 同じ人の続けての発言とみなす間隔（これ以内ならアイコン・名前を省いてまとめる） */
+const RUN_GAP_MS = 10 * 60 * 1000;
+
+// トークルーム（見た目はLINEに合わせる）：青い背景に、自分は右の緑・相手は左の白の吹き出し。
+// 既読数・リアクション・写真・PDF・リプライ・メンション・ノート・アナウンス。
+// 吹き出しをタップ（写真は長押し）するとメニューが出る。数秒ごとの自動更新で新着を取り込み、
+// 開いている間は常に既読になる。画面いっぱいで使い、左上の「＜」でトーク一覧へ戻る。
 export default async function ChatRoomPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; reply?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string; error?: string }>;
 }) {
   const session = await requireSession();
   const { id: roomId } = await params;
   const query = await searchParams;
-  const tab = TABS.some((t) => t.key === query.tab) ? query.tab! : "talk";
+  const tab = query.tab && query.tab in TAB_LABELS ? query.tab : "talk";
   const db = getDataStore();
 
   const room = await db.getChatRoom(roomId);
@@ -84,12 +90,11 @@ export default async function ChatRoomPage({
     others.map((m) => ({ name: nameOf(m.staffId) }))
   );
 
-  // 返信元・引用の表示に使う（本文中のIDから引く）
+  // リプライの引用元（本文中のIDから引く）
   const quotedIds = [...new Set(messages.map((m) => m.replyToId).filter(Boolean))];
   const quoted = new Map(
     (await db.listChatMessagesByIds(quotedIds)).map((m) => [m.id, m] as const)
   );
-  const replyTarget = query.reply ? (quoted.get(query.reply) ?? messages.find((m) => m.id === query.reply)) : null;
 
   // 既読数：自分のメッセージを、自分以外の何人が読んだか
   const readCountOf = (message: ChatMessage) =>
@@ -119,454 +124,472 @@ export default async function ChatRoomPage({
   const photos = media.filter((m) => m.image);
   const files = media.filter((m) => m.file);
   const memberNames = memberStaff.map((s) => s.name);
+  const lastMessage = messages.at(-1) ?? null;
+  const flash = query.saved ? FLASH[query.saved] : "";
 
   return (
-    <div className={`page-narrow ${tab === "talk" ? "pb-32" : "pb-8"}`}>
+    <ChatRoomFrame tone={tab === "talk" ? "talk" : "sheet"}>
       <AutoRefresh seconds={5} />
-      <PageHeader
-        title={title}
-        backHref="/staff/chat"
-        backLabel="トークルーム一覧へ戻る"
-        icon={isAllRoom ? "megaphone" : room.isGroup ? "users" : "user"}
-        description={
-          isAllRoom
-            ? "全員が参加するルーム。大事な連絡はアナウンスにするとダッシュボードのトップに出ます"
-            : room.isGroup
-              ? `メンバー ${members.length}名`
-              : undefined
-        }
-      />
 
-      {query.saved && FLASH[query.saved] && (
-        <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
-          {FLASH[query.saved]}
-        </p>
+      {/* 見出し（LINEと同じく、左に戻る・真ん中に名前・右にメニュー） */}
+      <header
+        className={`shrink-0 pt-[env(safe-area-inset-top)] ${
+          tab === "talk" ? "bg-[var(--line-bg)]" : "bg-white border-b border-black/10"
+        }`}
+      >
+        <div className="mx-auto flex h-12 max-w-3xl items-center gap-0.5 px-1">
+          <Link
+            href={tab === "talk" ? "/staff/chat" : `/staff/chat/${roomId}`}
+            aria-label={tab === "talk" ? "トーク一覧へ戻る" : "トークへ戻る"}
+            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-[#111] active:bg-black/10"
+          >
+            <Icon name="chevronLeft" className="w-7 h-7" />
+          </Link>
+          <div className="min-w-0 flex-1 leading-tight">
+            {tab === "talk" ? (
+              <h1 className="truncate text-[17px] font-bold text-[#111]">
+                {title}
+                {room.isGroup && <span className="ml-0.5 font-normal">({members.length})</span>}
+              </h1>
+            ) : (
+              <>
+                <h1 className="truncate text-[16px] font-bold text-[#111]">{TAB_LABELS[tab]}</h1>
+                <p className="truncate text-[11px] text-[#777]">{title}</p>
+              </>
+            )}
+          </div>
+          <RoomMenu
+            roomId={roomId}
+            current={tab}
+            counts={{ notes: pinned.length, media: media.length, members: members.length }}
+          />
+        </div>
+      </header>
+
+      {flash && (
+        <p className="shrink-0 bg-emerald-50 px-4 py-2 text-center text-xs font-bold text-emerald-700">{flash}</p>
       )}
       {query.error && (
-        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
+        <p className="shrink-0 bg-red-50 px-4 py-2 text-center text-xs font-bold text-red-600">
           {query.error === "forbidden" ? "この操作の権限がありません" : "入力内容を確認してください"}
         </p>
       )}
 
-      {/* タブ（トーク／ノート／写真・ファイル／メンバー） */}
-      <div className="flex gap-1.5 mb-4">
-        {TABS.map((t) => {
-          const count =
-            t.key === "notes" ? pinned.length : t.key === "media" ? media.length : t.key === "members" ? members.length : 0;
-          return (
-            <a
-              key={t.key}
-              href={`/staff/chat/${roomId}?tab=${t.key}`}
-              className={`chip flex-1 justify-center !text-[11px] sm:!text-xs !py-2.5 ${
-                tab === t.key ? "chip-active" : ""
-              }`}
-            >
-              <Icon name={t.icon} className="w-3.5 h-3.5" />
-              <span className="truncate">{t.label}</span>
-              {count > 0 && <span className="opacity-70">{count}</span>}
-            </a>
-          );
-        })}
-      </div>
-
       {/* ---------------- トーク ---------------- */}
       {tab === "talk" && (
-        <>
-          {/* ノートのダイジェスト（大事な連絡を上に置いておく） */}
+        <ChatRoomProvider>
+          {/* ノート（大事な連絡）を見出しの下に掲示しておく（LINEのアナウンスの位置） */}
           {pinned.length > 0 && (
-            <a
-              href={`/staff/chat/${roomId}?tab=notes`}
-              className="card !p-3 mb-4 flex items-center gap-2 border-brand-300 bg-brand-50/60"
-            >
-              <Icon name="book" className="w-4 h-4 text-brand-600 shrink-0" />
-              <span className="flex-1 min-w-0">
-                <span className="block text-[10px] font-bold text-brand-700">ノート（{pinned.length}件）</span>
-                <span className="block text-xs text-ink-600 truncate">{messagePreview(pinned[0])}</span>
-              </span>
-              <Icon name="chevronRight" className="w-4 h-4 text-brand-400 shrink-0" />
-            </a>
+            <div className="shrink-0 px-2 pb-1.5">
+              <Link
+                href={`/staff/chat/${roomId}?tab=notes`}
+                className="mx-auto flex max-w-3xl items-center gap-2.5 rounded-xl bg-white/95 px-3 py-2 shadow-sm"
+              >
+                <Icon name="megaphone" className="w-4 h-4 shrink-0 text-[var(--line-green)]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-bold text-[#777]">ノート（{pinned.length}件）</span>
+                  <span className="block truncate text-xs text-[#222]">{messagePreview(pinned[0])}</span>
+                </span>
+                <Icon name="chevronRight" className="w-4 h-4 shrink-0 text-[#aaa]" />
+              </Link>
+            </div>
           )}
 
-          <div className="space-y-4">
-            {messages.length === 0 && (
-              <p className="text-center text-sm text-ink-400 py-8">最初のメッセージを送ってみましょう</p>
-            )}
-            {groups.map((group) => (
-              <div key={group.date}>
-                <p className="text-center my-3">
-                  <span className="inline-block rounded-full bg-ink-100 text-ink-500 text-[11px] font-bold px-3 py-1">
-                    {formatDateJa(group.date)}
-                  </span>
+          <ChatScroller lastKey={lastMessage?.id ?? ""} lastMine={lastMessage?.senderId === session.staffId}>
+            <div className="mx-auto max-w-3xl pt-1 pb-4">
+              {messages.length === 0 && (
+                <p className="mt-10 text-center">
+                  <span className="line-pill">最初のメッセージを送ってみましょう</span>
                 </p>
-                <div className="space-y-2.5">
-                  {group.messages.map((message) => {
+              )}
+              {groups.map((group) => (
+                <section key={group.date}>
+                  <p className="mt-4 mb-1 text-center">
+                    <span className="line-pill">{formatDateJa(group.date)}</span>
+                  </p>
+                  {group.messages.map((message, i) => {
+                    const prev = group.messages[i - 1];
+                    // 同じ人が続けて送ったときは、2つ目からアイコン・名前・しっぽを省く（LINEと同じ）
+                    const continued =
+                      Boolean(prev) &&
+                      prev.senderId === message.senderId &&
+                      !prev.deleted &&
+                      message.createdAt.getTime() - prev.createdAt.getTime() < RUN_GAP_MS;
                     const mine = message.senderId === session.staffId;
-                    const reactionMap = reactionsOf(message.id);
-                    const readCount = mine && !message.deleted ? readCountOf(message) : 0;
-                    const quote = message.replyToId ? quoted.get(message.replyToId) : null;
-                    const mentionsMe = message.mentions.includes(session.staffId);
+                    const quote = message.replyToId ? (quoted.get(message.replyToId) ?? null) : null;
                     return (
-                      <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[86%] flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                          {!mine && (
-                            <p className="text-[10px] font-bold text-ink-400 mb-0.5 px-1">
-                              {nameOf(message.senderId)}
-                            </p>
-                          )}
-
-                          {/* 返信元の引用 */}
-                          {quote && !message.deleted && (
-                            <div
-                              className={`mb-1 max-w-full rounded-lg border-l-4 border-brand-300 bg-white/90 px-2 py-1 ${
-                                mine ? "text-right" : ""
-                              }`}
-                            >
-                              <span className="block text-[9px] font-bold text-brand-700">
-                                {nameOf(quote.senderId)}
-                              </span>
-                              <span className="block text-[11px] text-ink-500 truncate">
-                                {messagePreview(quote)}
-                              </span>
-                            </div>
-                          )}
-
-                          <div className={`flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}>
-                            {/* 吹き出し */}
-                            <div
-                              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                                message.deleted
-                                  ? "bg-ink-100 text-ink-400 italic"
-                                  : mine
-                                    ? "bg-gradient-to-b from-brand-500 to-brand-600 text-white rounded-br-md"
-                                    : mentionsMe
-                                      ? "bg-amber-50 border-2 border-amber-300 text-ink-900 rounded-bl-md"
-                                      : "bg-white border border-ink-200 text-ink-900 rounded-bl-md"
-                              }`}
-                            >
-                              {message.deleted ? (
-                                "メッセージの送信を取り消しました"
-                              ) : (
-                                <>
-                                  {message.image && (
-                                    <Lightbox
-                                      src={message.image}
-                                      alt="添付画像"
-                                      className="block rounded-xl max-h-64 overflow-hidden mb-1.5 border border-black/5"
-                                    />
-                                  )}
-                                  {message.file && (
-                                    <a
-                                      href={message.file}
-                                      download={message.fileName || "資料.pdf"}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className={`flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5 ${
-                                        mine ? "bg-white/15" : "bg-brand-50 border border-brand-200"
-                                      }`}
-                                    >
-                                      <Icon
-                                        name="fileText"
-                                        className={`w-5 h-5 shrink-0 ${mine ? "text-white" : "text-brand-600"}`}
-                                      />
-                                      <span className="min-w-0">
-                                        <span className="block text-xs font-bold truncate">
-                                          {message.fileName || "資料.pdf"}
-                                        </span>
-                                        <span className={`block text-[10px] ${mine ? "text-white/70" : "text-ink-400"}`}>
-                                          PDF・タップで開く
-                                        </span>
-                                      </span>
-                                    </a>
-                                  )}
-                                  <MessageBody body={message.body} names={memberNames} mine={mine} />
-                                </>
-                              )}
-                            </div>
-                            {/* 時刻・既読 */}
-                            <div
-                              className={`shrink-0 text-[9px] font-bold text-ink-400 leading-tight ${
-                                mine ? "text-right" : ""
-                              }`}
-                            >
-                              {message.pinned && !message.deleted && (
-                                <span className="block text-brand-600">ノート</span>
-                              )}
-                              {message.announcedAt && !message.deleted && (
-                                <span className="block text-amber-600">掲示中</span>
-                              )}
-                              {mine && readCount > 0 && (
-                                <span className="block text-brand-600">
-                                  既読{room.isGroup ? ` ${readCount}` : ""}
-                                </span>
-                              )}
-                              <span className="block">{formatTimeJa(message.createdAt)}</span>
-                            </div>
-                          </div>
-
-                          {/* リアクション・操作 */}
-                          {!message.deleted && (
-                            <div className={`flex flex-wrap items-center gap-1 mt-1 ${mine ? "justify-end" : ""}`}>
-                              {[...reactionMap.entries()].map(([emoji, list]) => {
-                                const reacted = list.some((r) => r.staffId === session.staffId);
-                                return (
-                                  <form key={emoji} action={toggleReactionAction}>
-                                    <input type="hidden" name="message_id" value={message.id} />
-                                    <input type="hidden" name="room_id" value={roomId} />
-                                    <input type="hidden" name="emoji" value={emoji} />
-                                    <button
-                                      type="submit"
-                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-bold transition-colors ${
-                                        reacted
-                                          ? "border-brand-400 bg-brand-100 text-brand-800"
-                                          : "border-ink-200 bg-white text-ink-600"
-                                      }`}
-                                      title={list.map((r) => nameOf(r.staffId)).join("、")}
-                                    >
-                                      {emoji} {list.length}
-                                    </button>
-                                  </form>
-                                );
-                              })}
-
-                              {/* 返信 */}
-                              <a
-                                href={`/staff/chat/${roomId}?reply=${message.id}#composer`}
-                                className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2 py-0.5 text-[10px] font-bold text-ink-500"
-                              >
-                                返信
-                              </a>
-
-                              {/* その他の操作 */}
-                              <details className="relative">
-                                <summary className="list-none cursor-pointer w-6 h-6 rounded-full border border-ink-200 bg-white text-ink-400 flex items-center justify-center hover:border-brand-300">
-                                  <Icon name="plus" className="w-3 h-3" />
-                                </summary>
-                                <div
-                                  className={`absolute z-10 mt-1 flex flex-wrap gap-1 rounded-xl border border-ink-200 bg-white px-2 py-1.5 shadow-lg w-56 ${
-                                    mine ? "right-0" : "left-0"
-                                  }`}
-                                >
-                                  {CHAT_REACTION_EMOJIS.map((emoji) => (
-                                    <form key={emoji} action={toggleReactionAction}>
-                                      <input type="hidden" name="message_id" value={message.id} />
-                                      <input type="hidden" name="room_id" value={roomId} />
-                                      <input type="hidden" name="emoji" value={emoji} />
-                                      <button type="submit" className="text-lg leading-none hover:scale-125 transition-transform">
-                                        {emoji}
-                                      </button>
-                                    </form>
-                                  ))}
-                                  <div className="w-full border-t border-ink-100 my-1" />
-                                  <form action={togglePinAction} className="w-full">
-                                    <input type="hidden" name="message_id" value={message.id} />
-                                    <input type="hidden" name="room_id" value={roomId} />
-                                    <input type="hidden" name="pinned" value={message.pinned ? "0" : "1"} />
-                                    <button type="submit" className="w-full text-left text-[11px] font-bold text-brand-700 py-1">
-                                      {message.pinned ? "ノートから外す" : "ノートに保存する"}
-                                    </button>
-                                  </form>
-                                  {isAllRoom && isExec && (
-                                    <form action={toggleAnnounceAction} className="w-full">
-                                      <input type="hidden" name="message_id" value={message.id} />
-                                      <input type="hidden" name="room_id" value={roomId} />
-                                      <input type="hidden" name="announced" value={message.announcedAt ? "0" : "1"} />
-                                      <button type="submit" className="w-full text-left text-[11px] font-bold text-amber-700 py-1">
-                                        {message.announcedAt ? "掲示をやめる" : "アナウンス（トップに掲示）"}
-                                      </button>
-                                    </form>
-                                  )}
-                                  {mine && (
-                                    <form action={deleteMessageAction} className="w-full">
-                                      <input type="hidden" name="message_id" value={message.id} />
-                                      <input type="hidden" name="room_id" value={roomId} />
-                                      <button type="submit" className="w-full text-left text-[11px] font-bold text-red-500 py-1">
-                                        送信取消
-                                      </button>
-                                    </form>
-                                  )}
-                                </div>
-                              </details>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      <MessageRow
+                        key={message.id}
+                        message={message}
+                        roomId={roomId}
+                        mine={mine}
+                        first={!continued}
+                        showName={room.isGroup}
+                        senderName={nameOf(message.senderId)}
+                        quote={quote}
+                        quoteName={quote ? nameOf(quote.senderId) : ""}
+                        readCount={mine && !message.deleted ? readCountOf(message) : 0}
+                        showReadCount={room.isGroup}
+                        reactions={reactionsOf(message.id)}
+                        myStaffId={session.staffId}
+                        reactionNames={(list) => list.map((r) => nameOf(r.staffId)).join("、")}
+                        memberNames={memberNames}
+                        canAnnounce={isAllRoom && isExec}
+                      />
                     );
                   })}
-                </div>
-              </div>
-            ))}
-            <ScrollToBottom />
-          </div>
+                </section>
+              ))}
+            </div>
+          </ChatScroller>
 
-          <div id="composer" />
           <ChatComposer
             roomId={roomId}
             members={memberStaff
               .filter((s) => s.id !== session.staffId)
               .map((s) => ({ id: s.id, name: s.name }))}
-            reply={
-              replyTarget
-                ? {
-                    id: replyTarget.id,
-                    senderName: nameOf(replyTarget.senderId),
-                    preview: messagePreview(replyTarget),
-                  }
-                : null
-            }
           />
-        </>
+        </ChatRoomProvider>
       )}
 
-      {/* ---------------- ノート ---------------- */}
-      {tab === "notes" && (
-        <section className="space-y-3">
-          <p className="text-xs text-ink-500">
-            大事な連絡・議事録をここにためておけます。トークのメッセージから「ノートに保存する」で追加できます。
-          </p>
-          {pinned.length === 0 ? (
-            <p className="text-sm text-ink-400 py-6 text-center">まだノートはありません</p>
-          ) : (
-            pinned.map((m) => (
-              <div key={m.id} className="card">
-                <p className="text-[11px] font-bold text-ink-500 mb-1.5">
-                  {nameOf(m.senderId)} ／ {formatDateTimeJa(m.createdAt)}
+      {/* ---------------- ノート・写真・ファイル・メンバー ---------------- */}
+      {tab !== "talk" && (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="mx-auto max-w-3xl px-3 pt-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+            {tab === "notes" && (
+              <section className="space-y-3">
+                <p className="text-xs text-ink-500">
+                  大事な連絡・議事録をここにためておけます。トークの吹き出しをタップして「ノート保存」で追加できます。
                 </p>
-                {m.image && (
-                  <Lightbox
-                    src={m.image}
-                    alt="ノートの画像"
-                    className="block rounded-xl max-h-64 overflow-hidden mb-2 border border-ink-200"
-                  />
-                )}
-                {m.file && (
-                  <a
-                    href={m.file}
-                    download={m.fileName || "資料.pdf"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 rounded-xl bg-brand-50 border border-brand-200 px-2.5 py-2 mb-2"
-                  >
-                    <Icon name="fileText" className="w-5 h-5 text-brand-600 shrink-0" />
-                    <span className="text-xs font-bold truncate">{m.fileName || "資料.pdf"}</span>
-                  </a>
-                )}
-                <p className="text-sm whitespace-pre-wrap text-ink-800">{m.body}</p>
-                <form action={togglePinAction} className="mt-2">
-                  <input type="hidden" name="message_id" value={m.id} />
-                  <input type="hidden" name="room_id" value={roomId} />
-                  <input type="hidden" name="pinned" value="0" />
-                  <button type="submit" className="text-[11px] font-bold text-red-500 underline">
-                    ノートから外す
-                  </button>
-                </form>
-              </div>
-            ))
-          )}
-        </section>
-      )}
-
-      {/* ---------------- 写真・ファイル ---------------- */}
-      {tab === "media" && (
-        <section className="space-y-5">
-          <div>
-            <h2 className="section-title">写真（{photos.length}）</h2>
-            {photos.length === 0 ? (
-              <p className="text-sm text-ink-400">まだ写真はありません</p>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-                {photos.map((m) => (
-                  <Lightbox
-                    key={m.id}
-                    src={m.image}
-                    alt={`${nameOf(m.senderId)}の写真`}
-                    className="block aspect-square rounded-lg overflow-hidden border border-ink-200 bg-white"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <h2 className="section-title">ファイル（{files.length}）</h2>
-            {files.length === 0 ? (
-              <p className="text-sm text-ink-400">まだファイルはありません</p>
-            ) : (
-              <div className="space-y-2">
-                {files.map((m) => (
-                  <a
-                    key={m.id}
-                    href={m.file}
-                    download={m.fileName || "資料.pdf"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="card !p-3 flex items-center gap-3"
-                  >
-                    <Icon name="fileText" className="w-5 h-5 text-brand-600 shrink-0" />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-bold text-ink-900 truncate">
-                        {m.fileName || "資料.pdf"}
-                      </span>
-                      <span className="block text-[11px] text-ink-400">
+                {pinned.length === 0 ? (
+                  <p className="text-sm text-ink-400 py-6 text-center">まだノートはありません</p>
+                ) : (
+                  pinned.map((m) => (
+                    <div key={m.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                      <p className="text-[11px] font-bold text-ink-500 mb-1.5">
                         {nameOf(m.senderId)} ／ {formatDateTimeJa(m.createdAt)}
+                      </p>
+                      {m.image && (
+                        <Lightbox
+                          src={m.image}
+                          alt="ノートの画像"
+                          className="block rounded-xl max-h-64 overflow-hidden mb-2 border border-ink-200"
+                        />
+                      )}
+                      {m.file && (
+                        <a
+                          href={m.file}
+                          download={m.fileName || "資料.pdf"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 rounded-xl bg-[#f5f6f8] px-2.5 py-2 mb-2"
+                        >
+                          <Icon name="fileText" className="w-5 h-5 text-[#e0463a] shrink-0" />
+                          <span className="text-xs font-bold truncate">{m.fileName || "資料.pdf"}</span>
+                        </a>
+                      )}
+                      <p className="text-sm whitespace-pre-wrap text-ink-800">{m.body}</p>
+                      <form action={togglePinAction} className="mt-2">
+                        <input type="hidden" name="message_id" value={m.id} />
+                        <input type="hidden" name="room_id" value={roomId} />
+                        <input type="hidden" name="pinned" value="0" />
+                        <button type="submit" className="text-[11px] font-bold text-red-500 underline">
+                          ノートから外す
+                        </button>
+                      </form>
+                    </div>
+                  ))
+                )}
+              </section>
+            )}
+
+            {tab === "media" && (
+              <section className="space-y-5">
+                <div>
+                  <h2 className="mb-2 text-sm font-bold text-[#333]">写真（{photos.length}）</h2>
+                  {photos.length === 0 ? (
+                    <p className="text-sm text-ink-400">まだ写真はありません</p>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
+                      {photos.map((m) => (
+                        <Lightbox
+                          key={m.id}
+                          src={m.image}
+                          alt={`${nameOf(m.senderId)}の写真`}
+                          className="block aspect-square overflow-hidden bg-white"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h2 className="mb-2 text-sm font-bold text-[#333]">ファイル（{files.length}）</h2>
+                  {files.length === 0 ? (
+                    <p className="text-sm text-ink-400">まだファイルはありません</p>
+                  ) : (
+                    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+                      {files.map((m, i) => (
+                        <a
+                          key={m.id}
+                          href={m.file}
+                          download={m.fileName || "資料.pdf"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`flex items-center gap-3 px-3.5 py-3 ${i > 0 ? "border-t border-black/5" : ""}`}
+                        >
+                          <PdfBadge />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-[#111] truncate">
+                              {m.fileName || "資料.pdf"}
+                            </span>
+                            <span className="block text-[11px] text-[#888]">
+                              {nameOf(m.senderId)} ／ {formatDateTimeJa(m.createdAt)}
+                            </span>
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {tab === "members" && (
+              <section className="space-y-4">
+                <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+                  <p className="px-4 pt-3 pb-1 text-xs font-bold text-[#888]">参加中のメンバー（{memberStaff.length}名）</p>
+                  {memberStaff.map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <Avatar name={s.name} id={s.id} size="sm" />
+                      <span className="flex-1 min-w-0 truncate text-sm font-bold text-[#111]">
+                        {s.name}
+                        {s.id === session.staffId && <span className="ml-1 text-xs text-[#888]">（自分）</span>}
                       </span>
-                    </span>
-                  </a>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+
+                {room.isGroup && !isAllRoom && (
+                  <form action={updateGroupAction} className="card space-y-3">
+                    <input type="hidden" name="room_id" value={roomId} />
+                    <div>
+                      <label className="label" htmlFor="room-name">グループ名</label>
+                      <input id="room-name" name="name" defaultValue={room.name} className="input" required />
+                    </div>
+                    <MemberPicker
+                      staff={staffList
+                        .filter((s) => s.isActive)
+                        .map((s) => ({ id: s.id, name: s.name }))}
+                      label="メンバー"
+                      selected={memberStaff.map((s) => s.id)}
+                    />
+                    <button type="submit" className="btn-secondary w-full">この内容で更新</button>
+                    <p className="text-[11px] text-ink-400">
+                      ※ 自分のチェックを外すとこのグループから抜けます（メッセージは残ります）。
+                    </p>
+                  </form>
+                )}
+
+                {isAllRoom && (
+                  <p className="text-xs text-ink-500">
+                    全体共有は在籍スタッフ全員が自動で参加します（メンバーの変更はできません）。
+                  </p>
+                )}
+              </section>
             )}
           </div>
-        </section>
+        </div>
       )}
+    </ChatRoomFrame>
+  );
+}
 
-      {/* ---------------- メンバー ---------------- */}
-      {tab === "members" && (
-        <section className="space-y-4">
-          <div className="card">
-            <h2 className="section-title">参加中のメンバー（{memberStaff.length}名）</h2>
-            <div className="flex flex-wrap gap-1.5">
-              {memberStaff.map((s) => (
-                <span key={s.id} className="chip">
-                  {s.name}
-                  {s.id === session.staffId && <span className="text-brand-600">（自分）</span>}
-                </span>
-              ))}
-            </div>
-          </div>
+/** 1通ぶんの表示（相手は左にアイコン＋白い吹き出し、自分は右に緑の吹き出し） */
+function MessageRow({
+  message,
+  roomId,
+  mine,
+  first,
+  showName,
+  senderName,
+  quote,
+  quoteName,
+  readCount,
+  showReadCount,
+  reactions,
+  myStaffId,
+  reactionNames,
+  memberNames,
+  canAnnounce,
+}: {
+  message: ChatMessage;
+  roomId: string;
+  mine: boolean;
+  /** 続けて送られた吹き出しの1つ目か（アイコン・名前・しっぽを出す） */
+  first: boolean;
+  /** 相手の名前を出すか（グループのみ。1対1では出さない） */
+  showName: boolean;
+  senderName: string;
+  quote: ChatMessage | null;
+  quoteName: string;
+  readCount: number;
+  /** 既読の人数を出すか（グループのみ。1対1は「既読」だけ） */
+  showReadCount: boolean;
+  reactions: Map<string, ChatReaction[]>;
+  myStaffId: string;
+  reactionNames: (list: ChatReaction[]) => string;
+  memberNames: string[];
+  canAnnounce: boolean;
+}) {
+  // 送信取消はLINEと同じく、真ん中のお知らせとして出す
+  if (message.deleted) {
+    return (
+      <p className="my-2 px-4 text-center">
+        <span className="line-pill">
+          {mine ? "メッセージの送信を取り消しました" : `${senderName}がメッセージの送信を取り消しました`}
+        </span>
+      </p>
+    );
+  }
 
-          {room.isGroup && !isAllRoom && (
-            <form action={updateGroupAction} className="card space-y-3">
+  const hasText = Boolean(message.body) || Boolean(quote);
+  // しっぽは、いちばん上に来る吹き出し（ファイル or 本文）にだけ付ける。写真が上なら付けない
+  const tail = first && !message.image;
+  const bubbleTone = mine ? "line-bubble-out" : "line-bubble-in";
+  const tailClass = mine ? "line-tail-out" : "line-tail-in";
+
+  const content = (
+    <div className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
+      {message.image && (
+        <Lightbox
+          src={message.image}
+          alt="添付の写真"
+          className="line-no-callout block max-w-[min(15rem,100%)] overflow-hidden rounded-2xl bg-white/40"
+          imgClassName="block w-full h-auto max-h-80 object-cover"
+        />
+      )}
+      {message.file && (
+        <a
+          href={message.file}
+          download={message.fileName || "資料.pdf"}
+          target="_blank"
+          rel="noreferrer"
+          className={`line-bubble line-bubble-in ${tail ? (mine ? "line-tail-out" : "line-tail-in") : ""} flex w-60 max-w-full items-center gap-2.5 whitespace-normal py-2.5`}
+        >
+          <PdfBadge />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold">{message.fileName || "資料.pdf"}</span>
+            <span className="block text-[11px] text-[#888]">PDF・タップで開く</span>
+          </span>
+        </a>
+      )}
+      {hasText && (
+        <div className={`line-bubble ${bubbleTone} ${tail && !message.file ? tailClass : ""}`}>
+          {/* 引用は1行に切り詰める（truncate だと長い引用の幅で吹き出しが時刻に重なるので line-clamp） */}
+          {quote && (
+            <span className="mb-1.5 block border-b border-black/10 pb-1.5 text-[12px] leading-snug">
+              <span className="line-clamp-1 font-bold text-black/70">{quoteName}</span>
+              <span className="line-clamp-1 text-black/55">{messagePreview(quote)}</span>
+            </span>
+          )}
+          <MessageBody body={message.body} names={memberNames} />
+        </div>
+      )}
+    </div>
+  );
+
+  const labels = (
+    <>
+      {message.pinned && <span className="block font-bold text-[#0b7a3b]">ノート</span>}
+      {message.announcedAt && <span className="block font-bold text-[#8a4b00]">掲示中</span>}
+    </>
+  );
+
+  const actions = (
+    <MessageActions
+      messageId={message.id}
+      roomId={roomId}
+      mine={mine}
+      text={message.body}
+      senderName={senderName}
+      preview={messagePreview(message)}
+      pinned={message.pinned}
+      canAnnounce={canAnnounce}
+      announced={Boolean(message.announcedAt)}
+      className="min-w-0 max-w-[calc(100%-3rem)]"
+    >
+      {content}
+    </MessageActions>
+  );
+
+  const reactionRow =
+    reactions.size > 0 ? (
+      <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : ""}`}>
+        {[...reactions.entries()].map(([emoji, list]) => {
+          const reacted = list.some((r) => r.staffId === myStaffId);
+          return (
+            <form key={emoji} action={toggleReactionAction}>
+              <input type="hidden" name="message_id" value={message.id} />
               <input type="hidden" name="room_id" value={roomId} />
-              <div>
-                <label className="label" htmlFor="room-name">グループ名</label>
-                <input id="room-name" name="name" defaultValue={room.name} className="input" required />
-              </div>
-              <MemberPicker
-                staff={staffList
-                  .filter((s) => s.isActive)
-                  .map((s) => ({ id: s.id, name: s.name }))}
-                label="メンバー"
-                selected={memberStaff.map((s) => s.id)}
-              />
-              <button type="submit" className="btn-secondary w-full">この内容で更新</button>
-              <p className="text-[11px] text-ink-400">
-                ※ 自分のチェックを外すとこのグループから抜けます（メッセージは残ります）。
-              </p>
+              <input type="hidden" name="emoji" value={emoji} />
+              <button
+                type="submit"
+                title={reactionNames(list)}
+                aria-label={`${emoji} ${list.length}人（${reacted ? "押すと取り消し" : "押すと自分も付ける"}）`}
+                className={`inline-flex items-center gap-0.5 rounded-full bg-white/95 px-1.5 py-0.5 text-[13px] leading-none shadow-sm ${
+                  reacted ? "ring-2 ring-[var(--line-green)]" : ""
+                }`}
+              >
+                {emoji}
+                <span className="text-[11px] font-bold text-[#444]">{list.length}</span>
+              </button>
             </form>
-          )}
+          );
+        })}
+      </div>
+    ) : null;
 
-          {isAllRoom && (
-            <p className="text-xs text-ink-500">
-              全体共有は在籍スタッフ全員が自動で参加します（メンバーの変更はできません）。
-            </p>
-          )}
-        </section>
-      )}
+  if (mine) {
+    return (
+      <div className={`flex justify-end pl-14 pr-3 ${first ? "mt-3" : "mt-1"}`}>
+        <div className="flex min-w-0 flex-1 flex-col items-end">
+          {/* 行は幅いっぱいにしておく（吹き出しの最大幅＝行の幅−時刻の欄。行を中身の幅にすると短い文でも折り返してしまう） */}
+          <div className="flex w-full items-end justify-end gap-1.5">
+            {/* 既読・時刻は吹き出しの左下（LINEと同じ位置） */}
+            <div className="line-meta shrink-0 pb-0.5 text-right">
+              {labels}
+              {readCount > 0 && <span className="block">既読{showReadCount ? ` ${readCount}` : ""}</span>}
+              <span className="block">{formatTimeJa(message.createdAt)}</span>
+            </div>
+            {actions}
+          </div>
+          {reactionRow}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-start gap-2 pl-2.5 pr-12 ${first ? "mt-3" : "mt-1"}`}>
+      <div className="w-9 shrink-0">{first && <Avatar name={senderName} id={message.senderId} />}</div>
+      <div className="flex min-w-0 flex-1 flex-col items-start">
+        {first && showName && <p className="line-meta mb-1 max-w-full truncate px-0.5 text-[11px]">{senderName}</p>}
+        <div className="flex w-full items-end gap-1.5">
+          {actions}
+          <div className="line-meta shrink-0 pb-0.5">
+            {labels}
+            <span className="block">{formatTimeJa(message.createdAt)}</span>
+          </div>
+        </div>
+        {reactionRow}
+      </div>
     </div>
   );
 }
 
-/** 本文の @メンション だけ色を変えて表示する */
-function MessageBody({ body, names, mine }: { body: string; names: string[]; mine: boolean }) {
+/** 本文の @メンション だけ青くして表示する（LINEと同じ） */
+function MessageBody({ body, names }: { body: string; names: string[] }) {
   if (!body) return null;
   const flatNames = names.map((n) => n.replace(/\s+/g, ""));
   const parts = splitMentionParts(body, [...flatNames, ...names]);
@@ -574,10 +597,7 @@ function MessageBody({ body, names, mine }: { body: string; names: string[]; min
     <>
       {parts.map((p, i) =>
         p.mention ? (
-          <span
-            key={i}
-            className={`font-bold rounded px-0.5 ${mine ? "bg-white/20" : "bg-brand-100 text-brand-800"}`}
-          >
+          <span key={i} className="font-bold text-[#1d4ed8]">
             {p.text}
           </span>
         ) : (
@@ -585,5 +605,29 @@ function MessageBody({ body, names, mine }: { body: string; names: string[]; min
         )
       )}
     </>
+  );
+}
+
+/** アイコン（写真の代わりに名前の頭文字。色は人ごとに固定） */
+function Avatar({ name, id, size = "md" }: { name: string; id: string; size?: "sm" | "md" }) {
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-full font-bold text-white ${
+        size === "sm" ? "w-8 h-8 text-xs" : "w-9 h-9 text-sm"
+      }`}
+      style={{ backgroundColor: avatarColor(id) }}
+      aria-hidden="true"
+    >
+      {name.trim().charAt(0) || "？"}
+    </span>
+  );
+}
+
+/** PDFの目印（LINEのファイル表示のように、赤い四角に「PDF」） */
+function PdfBadge() {
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e0463a] text-[10px] font-bold text-white">
+      PDF
+    </span>
   );
 }

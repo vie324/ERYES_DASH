@@ -22,6 +22,7 @@ import {
   blocksFromLegacyRows,
   comparePlan,
   minutesLabel,
+  normalizeBlocks,
   parseWeekContent,
   planBlocksForDate,
   planScopeOfDate,
@@ -46,10 +47,13 @@ const WEEK_LABELS: Record<string, string> = {
   week4: "第4週",
 };
 
-/** 保存済みの予定を予約表の帯に変換（旧形式の1時間グリッドも読めるようにする） */
+/**
+ * 保存済みの予定を予約表の帯に変換（旧形式の1時間グリッドも読めるようにする）。
+ * 3時はじまりの1日に揃えるため、保存済みの帯も正規化してから使う。
+ */
 function planBlocks(plan: DailyPlan | null | undefined): ScheduleBlock[] {
   if (!plan) return [];
-  const blocks = plan.fields.timetableBlocks ?? [];
+  const blocks = normalizeBlocks(plan.fields.timetableBlocks ?? [], 1);
   return blocks.length > 0 ? blocks : blocksFromLegacyRows(plan.fields.timetableRows);
 }
 
@@ -249,8 +253,6 @@ export default async function PlanPage({
                 initial={actualForDay}
                 presets={presetLabels}
                 dayLabels={[formatDateJa(date)]}
-                startHour={8}
-                endHour={22}
                 ghostBlocks={plannedForDay}
                 ghostLabel="計画"
               />
@@ -523,8 +525,6 @@ function PlanEditor({
           initial={initialBlocks}
           presets={presetLabels}
           dayLabels={WEEK_DAY_LABELS}
-          startHour={7}
-          endHour={23}
         />
 
         <div>

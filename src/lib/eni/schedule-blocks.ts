@@ -1,5 +1,8 @@
 // 予約表（タイムテーブル）の共通ロジック。サーバー・クライアント双方から使う純粋関数だけを置く。
 // ScheduleBlock = { d: 曜日index, s: "HH:mm", e: "HH:mm", a: 内容 }
+//
+// 1日は 3:00〜翌3:00 で区切る（朝5時台の予定も、日付をまたぐ夜の予定も同じ1日に入れられるように）。
+// 0:00〜2:59 は「翌」とみなして "24:00"〜"27:00" の形で持つ（例：翌1:30 → "25:30"）。
 
 import { weekdayOf } from "@/lib/date";
 import type { ScheduleBlock } from "@/lib/data/types";
@@ -7,16 +10,58 @@ import type { ScheduleBlock } from "@/lib/data/types";
 export const PX_PER_HOUR = 56; // グリッド1時間の高さ（px）
 export const SLOT_MIN = 30; // タップしたときに作られる枠の刻み
 
-/** "HH:mm" → 0:00からの分 */
+/** 予約表の1日のはじまり・おわり（時）。3時はじまり〜翌3時おわり */
+export const DAY_START_HOUR = 3;
+export const DAY_END_HOUR = 27;
+const DAY_START_MIN = DAY_START_HOUR * 60;
+const DAY_END_MIN = DAY_END_HOUR * 60;
+const MIN_PER_DAY = 24 * 60;
+
+/** "HH:mm" → 0:00からの分（"25:30" のような翌日の時刻もそのまま分にする） */
 export function toMin(hm: string): number {
   const [h, m] = hm.split(":").map(Number);
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
 }
 
-/** 分 → "HH:mm"（0:00〜24:00にまるめる） */
+/** 分 → "HH:mm"（0:00〜翌3:00＝27:00 にまるめる。24時以降は翌日の時刻） */
 export function toHM(min: number): string {
-  const c = Math.max(0, Math.min(24 * 60, Math.round(min)));
+  const c = Math.max(0, Math.min(DAY_END_MIN, Math.round(min)));
   return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`;
+}
+
+/** 表示用の時刻："09:30" → "9:30"、"25:30" → "翌1:30" */
+export function clockLabel(hm: string): string {
+  const min = toMin(hm);
+  const h = Math.floor(min / 60);
+  const m = String(min % 60).padStart(2, "0");
+  return h >= 24 ? `翌${h - 24}:${m}` : `${h}:${m}`;
+}
+
+/** 目盛りの見出し：9 → "9:00"、25 → "翌1:00" */
+export function hourLabel(hour: number): string {
+  return hour >= 24 ? `翌${hour - 24}:00` : `${hour}:00`;
+}
+
+/** 24時以降（日付をまたいだ後）の時刻か */
+export function isNextDayTime(hm: string): boolean {
+  return toMin(hm) >= MIN_PER_DAY;
+}
+
+/**
+ * 時刻入力（<input type="time"> は 0:00〜23:59）の値 → 予約表の時刻。
+ * 3時より前は翌日とみなす。終了の「3:00」は1日のおわり（翌3:00）にする。
+ */
+export function fromClockInput(value: string, edge: "start" | "end"): string {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return "";
+  const min = toMin(value);
+  const nextDay = edge === "start" ? min < DAY_START_MIN : min <= DAY_START_MIN;
+  return toHM(nextDay ? min + MIN_PER_DAY : min);
+}
+
+/** 予約表の時刻 → 時刻入力の値（"25:30" → "01:30"） */
+export function toClockInput(hm: string): string {
+  const min = toMin(hm) % MIN_PER_DAY;
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
 /** 所要時間の表示："90 → 1時間30分" */
@@ -28,11 +73,36 @@ export function durationLabel(block: ScheduleBlock): string {
   return m === 0 ? `${h}時間` : `${h}時間${m}分`;
 }
 
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const HM_RE = /^\d{2}:[0-5]\d$/;
+
+/**
+ * 開始・終了を 3:00〜翌3:00 の1日の中に置き直す（分で返す。帯にならなければ null）。
+ *  ・0:00〜2:59 は翌日とみなす（例：22:00〜1:00 → 22:00〜25:00）
+ *  ・終了の 3:00 は1日のおわり（翌3:00）
+ *  ・0時はじまりだった頃の、3時をまたぐ帯（例：2:00〜10:00）は 3:00 からに切る
+ */
+function fitToDay(s: string, e: string): { s: number; e: number } | null {
+  if (!HM_RE.test(s) || !HM_RE.test(e)) return null;
+  const rawS = toMin(s);
+  const rawE = toMin(e);
+  if (rawS >= DAY_END_MIN || rawE > DAY_END_MIN) return null;
+  let start: number;
+  let end: number;
+  if (rawS < DAY_START_MIN && rawE > DAY_START_MIN && rawE <= MIN_PER_DAY) {
+    start = DAY_START_MIN;
+    end = rawE;
+  } else {
+    start = rawS < DAY_START_MIN ? rawS + MIN_PER_DAY : rawS;
+    end = rawE <= DAY_START_MIN ? rawE + MIN_PER_DAY : rawE;
+  }
+  end = Math.min(end, DAY_END_MIN);
+  return end > start ? { s: start, e: end } : null;
+}
 
 /**
  * 保存前の正規化。時刻の形式・前後関係・件数・文字数をここで揃える。
  * サーバーアクションからもクライアントからも同じ結果になるようにしておく。
+ * 表示の前にも通すので、以前（0時はじまり）に保存した帯もここで3時はじまりの1日に揃う。
  */
 export function normalizeBlocks(input: unknown, dayCount: number): ScheduleBlock[] {
   if (!Array.isArray(input)) return [];
@@ -40,16 +110,15 @@ export function normalizeBlocks(input: unknown, dayCount: number): ScheduleBlock
     .map((raw) => {
       const r = (raw ?? {}) as Record<string, unknown>;
       const d = Number(r.d);
-      const s = String(r.s ?? "");
-      const e = String(r.e ?? "");
+      const span = fitToDay(String(r.s ?? ""), String(r.e ?? ""));
       return {
         d: Number.isInteger(d) && d >= 0 && d < dayCount ? d : 0,
-        s: TIME_RE.test(s) ? s : "",
-        e: TIME_RE.test(e) || e === "24:00" ? e : "",
+        s: span ? toHM(span.s) : "",
+        e: span ? toHM(span.e) : "",
         a: String(r.a ?? "").trim().slice(0, 60),
       };
     })
-    .filter((b) => b.s && b.e && b.a && toMin(b.e) > toMin(b.s))
+    .filter((b) => b.s && b.e && b.a)
     .sort((a, b) => a.d - b.d || toMin(a.s) - toMin(b.s))
     .slice(0, 120);
 }
@@ -107,7 +176,10 @@ export function fitHourRange(
     startHour = Math.min(startHour, Math.floor(toMin(b.s) / 60));
     endHour = Math.max(endHour, Math.ceil(toMin(b.e) / 60));
   }
-  return { startHour: Math.max(0, startHour), endHour: Math.min(24, Math.max(endHour, startHour + 1)) };
+  return {
+    startHour: Math.max(DAY_START_HOUR, startHour),
+    endHour: Math.min(DAY_END_HOUR, Math.max(endHour, startHour + 1)),
+  };
 }
 
 export interface PlacedBlock {

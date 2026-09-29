@@ -9,8 +9,11 @@ import { generateAssignments } from "@/lib/shift/assign";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
+import { summarizeThreads } from "@/lib/ai-shimon/threads";
 import type {
   AbsenceReport,
+  AiShimonMessage,
+  AiShimonThread,
   AppSetting,
   PushSubscriptionRow,
   AppointmentPatch,
@@ -116,6 +119,7 @@ interface MockDb {
   chatMembers: ChatMember[];
   chatMessages: ChatMessage[];
   chatReactions: ChatReaction[];
+  aiShimonMessages: AiShimonMessage[];
   committees: Committee[];
   managerRoutines: ManagerRoutine[];
   managerRoutineChecks: ManagerRoutineCheck[];
@@ -197,6 +201,8 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: true,
+      // デモでは管理者を代表にして、AIしもんの「みんなの相談」を確認できるようにする
+      isOwner: true,
       mission: "",
       tiers: 1,
       themeColor: "",
@@ -213,6 +219,7 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: false,
+      isOwner: false,
       mission: "",
       tiers: 1,
       themeColor: "",
@@ -230,6 +237,7 @@ function seed(): MockDb {
       jobType: "",
       rank: "",
       isExecutive: false,
+      isOwner: false,
       mission: "",
       tiers: 1,
       themeColor: "",
@@ -282,6 +290,7 @@ function seed(): MockDb {
         jobType,
         rank,
         isExecutive,
+        isOwner: false,
         mission,
         tiers,
         themeColor: "",
@@ -799,6 +808,60 @@ function seed(): MockDb {
     ...m,
   });
 
+  // AIしもんへの相談の記録（デモ：代表の「みんなの相談」画面で見られるように数件）
+  const aiThread1 = randomUUID();
+  const aiThread2 = randomUUID();
+  const aiShimonMessages: AiShimonMessage[] = [
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      threadId: aiThread1,
+      role: "user",
+      content: "テストなかなか受からない、悔しい。どうすれば次受かれるかな。",
+      createdAt: jstAt(addDays(today, -2), 21, 5),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      threadId: aiThread1,
+      role: "assistant",
+      content: "悔しいって思えてるの、めっちゃいいじゃん。で、前回のテストで自分でも「ここだな」って思うところってどこ？",
+      createdAt: jstAt(addDays(today, -2), 21, 5),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      threadId: aiThread1,
+      role: "user",
+      content: "ワインディングの時間が足りなくなって、最後が雑になった。",
+      createdAt: jstAt(addDays(today, -2), 21, 8),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-5",
+      threadId: aiThread1,
+      role: "assistant",
+      content: "なるほどね。じゃあ1週間以内に何をやる？ 時間を計って巻く練習、何本やれそう？",
+      createdAt: jstAt(addDays(today, -2), 21, 8),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-6",
+      threadId: aiThread2,
+      role: "user",
+      content: "商品やメニューの提案がなかなかうまくできない",
+      createdAt: jstAt(addDays(today, -1), 22, 30),
+    },
+    {
+      id: randomUUID(),
+      staffId: "staff-6",
+      threadId: aiThread2,
+      role: "assistant",
+      content: "そっか。提案するとき、お客様のどんな言葉を聞いてから切り出してる？",
+      createdAt: jstAt(addDays(today, -1), 22, 30),
+    },
+  ];
+
   const chatMessages: ChatMessage[] = [
     message({
       roomId: "room-all",
@@ -1071,6 +1134,7 @@ function seed(): MockDb {
     chatMembers,
     chatMessages,
     chatReactions: [],
+    aiShimonMessages,
     committees: committeesFromTemplates().map((c) => ({ id: randomUUID(), ...c })),
     managerRoutines: DEFAULT_MANAGER_ROUTINES.map((r) => ({ id: randomUUID(), ...r })),
     managerRoutineChecks: [],
@@ -1167,6 +1231,8 @@ class MockStore implements DataStore {
       jobType: input.jobType ?? "",
       rank: input.rank ?? "",
       isExecutive: input.isExecutive ?? false,
+      // 代表はアプリから付けられない（DBで設定する）
+      isOwner: false,
       mission: input.mission ?? "",
       tiers: input.tiers ?? 1,
       themeColor: "",
@@ -1258,6 +1324,7 @@ class MockStore implements DataStore {
       d.assistantSettings = d.assistantSettings.filter((a) => a.staffId !== id);
       d.staffTasks = d.staffTasks.filter((t) => t.assigneeStaffId !== id);
       d.chatMembers = d.chatMembers.filter((m) => m.staffId !== id);
+      d.aiShimonMessages = d.aiShimonMessages.filter((m) => m.staffId !== id);
       d.chatReactions = d.chatReactions.filter((r) => r.staffId !== id);
       d.thanksPosts = d.thanksPosts.filter((t) => t.fromStaffId !== id && t.toStaffId !== id);
       d.thanksLikes = d.thanksLikes.filter((l) => l.staffId !== id);
@@ -2714,6 +2781,26 @@ class MockStore implements DataStore {
     return this.db.chatReactions
       .filter((r) => messageIds.includes(r.messageId))
       .map((r) => ({ ...r }));
+  }
+
+  // ---- AIしもん（相談の記録） ----
+
+  async addAiShimonMessages(rows: Omit<AiShimonMessage, "id">[]): Promise<void> {
+    for (const row of rows) this.db.aiShimonMessages.push({ ...row, id: randomUUID() });
+  }
+
+  async listAiShimonThreads(filter?: { staffId?: string; limit?: number }): Promise<AiShimonThread[]> {
+    const users = this.db.aiShimonMessages.filter(
+      (m) => m.role === "user" && (!filter?.staffId || m.staffId === filter.staffId)
+    );
+    return summarizeThreads(users, filter?.limit ?? 100);
+  }
+
+  async listAiShimonMessages(staffId: string, threadId: string): Promise<AiShimonMessage[]> {
+    return this.db.aiShimonMessages
+      .filter((m) => m.staffId === staffId && m.threadId === threadId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((m) => ({ ...m }));
   }
 
   // ---- 会議体マスタ ----

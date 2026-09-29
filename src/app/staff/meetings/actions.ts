@@ -121,7 +121,11 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
   redirect(`/staff/meetings?month=${month}&saved=minutes`);
 }
 
-/** 議事録タスクの完了チェック（会議の関係者、または担当者本人） */
+/**
+ * 議事録タスクの完了チェック（会議の関係者、または担当者本人）。
+ * リダイレクトすると画面が先頭に戻り、開いていた会議のカードも閉じてしまうので、
+ * 成功時は再検証だけにしてその場で更新する（続けて何個でもチェックできる）。
+ */
 export async function toggleMeetingTaskAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const taskId = String(formData.get("task_id") ?? "");
@@ -141,7 +145,7 @@ export async function toggleMeetingTaskAction(formData: FormData): Promise<void>
 
   await db.setMeetingTaskDone(taskId, done);
   revalidatePath("/staff/meetings");
-  redirect(`/staff/meetings?month=${month}&saved=task#m-${meetingId}`);
+  revalidatePath("/staff/tasks");
 }
 
 function parseTasks(raw: string): { title: string; assignee: string; due: string }[] {

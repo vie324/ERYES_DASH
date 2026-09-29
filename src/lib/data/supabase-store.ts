@@ -9,8 +9,11 @@ import { monthRange } from "@/lib/date";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
+import { summarizeThreads } from "@/lib/ai-shimon/threads";
 import type {
   AbsenceReport,
+  AiShimonMessage,
+  AiShimonThread,
   AppSetting,
   PushSubscriptionRow,
   AppointmentPatch,
@@ -99,6 +102,8 @@ const mapStaff = (r: Row): Staff => ({
   jobType: r.job_type ?? "",
   rank: r.rank ?? "",
   isExecutive: r.is_executive ?? false,
+  // 列が無い（schema.sql を流し直す前の）DBでは誰も代表にならない＝相談の記録はアプリから読めない
+  isOwner: r.is_owner === true,
   mission: r.mission ?? "",
   tiers: Number(r.tiers ?? 1) || 1,
   themeColor: r.theme_color ?? "",
@@ -431,6 +436,15 @@ const mapChatReaction = (r: Row): ChatReaction => ({
   messageId: r.message_id,
   staffId: r.staff_id,
   emoji: r.emoji,
+});
+
+const mapAiShimonMessage = (r: Row): AiShimonMessage => ({
+  id: r.id,
+  staffId: r.staff_id,
+  threadId: r.thread_id,
+  role: r.role === "assistant" ? "assistant" : "user",
+  content: r.content ?? "",
+  createdAt: new Date(r.created_at),
 });
 
 const mapThanksPost = (r: Row): ThanksPost => ({
@@ -2616,6 +2630,46 @@ class SupabaseStore implements DataStore {
       .select("*")
       .in("message_id", messageIds);
     return must(data, error, "リアクション一覧").map(mapChatReaction);
+  }
+
+  // ---- AIしもん（相談の記録） ----
+
+  async addAiShimonMessages(rows: Omit<AiShimonMessage, "id">[]): Promise<void> {
+    if (rows.length === 0) return;
+    const { error } = await this.sb.from("ai_shimon_messages").insert(
+      rows.map((r) => ({
+        staff_id: r.staffId,
+        thread_id: r.threadId,
+        role: r.role,
+        content: r.content,
+        created_at: r.createdAt.toISOString(),
+      }))
+    );
+    if (error) throw new Error(`[supabase] AIしもんの相談の記録: ${error.message}`);
+  }
+
+  async listAiShimonThreads(filter?: { staffId?: string; limit?: number }): Promise<AiShimonThread[]> {
+    // 一覧は相談した人の発言だけから組み立てる（返答の本文まで読むと重いため）。直近2000件ぶん
+    let query = this.sb
+      .from("ai_shimon_messages")
+      .select("id, staff_id, thread_id, role, content, created_at")
+      .eq("role", "user")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (filter?.staffId) query = query.eq("staff_id", filter.staffId);
+    const { data, error } = await query;
+    return summarizeThreads(must(data, error, "AIしもんの相談一覧").map(mapAiShimonMessage), filter?.limit ?? 100);
+  }
+
+  async listAiShimonMessages(staffId: string, threadId: string): Promise<AiShimonMessage[]> {
+    const { data, error } = await this.sb
+      .from("ai_shimon_messages")
+      .select("*")
+      .eq("staff_id", staffId)
+      .eq("thread_id", threadId)
+      .order("created_at")
+      .limit(500);
+    return must(data, error, "AIしもんの相談").map(mapAiShimonMessage);
   }
 
   // ---- 会議体マスタ ----

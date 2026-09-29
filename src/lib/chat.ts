@@ -122,6 +122,16 @@ export function messagePreview(message: ChatMessage | null): string {
   return "";
 }
 
+// アイコン（写真の代わりの頭文字）の色。人ごとに固定して、一覧とトークルームで同じ色にする
+const AVATAR_COLORS = ["#f4a261", "#2a9d8f", "#e76f51", "#6d8fd6", "#b07cc6", "#e5989b", "#57a773", "#d4a017"];
+
+/** スタッフID → アイコンの色 */
+export function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 /** 添付を持つメッセージだけ（写真一覧・ファイル一覧に使う） */
 export function mediaMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((m) => !m.deleted && (m.image || m.file));

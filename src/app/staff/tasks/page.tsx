@@ -6,7 +6,8 @@ import { defaultDayoffTargetMonth, dayoffDeadline, isDayoffEditable } from "@/li
 import { getMyTaskSummary, isTaskActionable, isTaskDueOn } from "@/lib/tasks";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { CompanyTaskLink, RepeatFields, TaskCheckButton, TaskRow } from "@/components/task-ui";
+import { CompanyTaskLink, RepeatFields, TaskRow } from "@/components/task-ui";
+import { TaskCheckSubmit } from "@/components/task-check";
 import {
   createRequestTaskAction,
   createRoutineTaskAction,
@@ -158,13 +159,7 @@ export default async function TasksPage({
                 <input type="hidden" name="task_id" value={t.id} />
                 <input type="hidden" name="done" value="1" />
                 <input type="hidden" name="back" value={BACK} />
-                <button
-                  type="submit"
-                  aria-label="完了にする"
-                  className="w-7 h-7 rounded-full border-2 bg-white border-ink-300 text-transparent hover:border-brand-400 flex items-center justify-center"
-                >
-                  <Icon name="checkCircle" className="w-4 h-4" />
-                </button>
+                <TaskCheckSubmit done={false} label={`${t.title}を完了にする`} />
               </form>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-ink-900 leading-snug">{t.title}</p>

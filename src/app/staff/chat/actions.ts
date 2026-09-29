@@ -71,7 +71,8 @@ export async function updateGroupAction(formData: FormData): Promise<void> {
 
 /**
  * メッセージ送信。クライアントの送信フォームから直接呼ぶため、
- * リダイレクトせずに再検証だけ行う（画面はクライアント側で refresh する）。
+ * リダイレクトせずに再検証だけ行う（再検証した画面が送信の応答で届き、その場で更新される。
+ * リダイレクトするとトークが作り直されて先頭に戻ってしまう）。
  */
 export async function sendMessageAction(formData: FormData): Promise<void> {
   const session = await requireSession();
@@ -129,6 +130,9 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
   ]);
 }
 
+// 送信取消・リアクション・ノート・アナウンスは、トークを見ている途中で押す操作なので
+// リダイレクトせずに再検証だけで画面を更新する（リダイレクトすると一覧が作り直されて読んでいた位置が飛ぶ）。
+
 /** メッセージの送信取消（自分のメッセージのみ） */
 export async function deleteMessageAction(formData: FormData): Promise<void> {
   const session = await requireSession();
@@ -136,7 +140,7 @@ export async function deleteMessageAction(formData: FormData): Promise<void> {
   const roomId = String(formData.get("room_id") ?? "");
   if (id) await getDataStore().deleteChatMessage(id, session.staffId);
   revalidatePath(`/staff/chat/${roomId}`);
-  redirect(`/staff/chat/${roomId}`);
+  revalidatePath("/staff/chat");
 }
 
 /** リアクションの付け外し */
@@ -150,7 +154,6 @@ export async function toggleReactionAction(formData: FormData): Promise<void> {
   await requireMembership(roomId, session.staffId);
   await getDataStore().toggleChatReaction(messageId, session.staffId, emoji);
   revalidatePath(`/staff/chat/${roomId}`);
-  redirect(`/staff/chat/${roomId}`);
 }
 
 /** ノートへの固定・解除（あとから読み返したい連絡をルームの上部にためる） */
@@ -164,7 +167,6 @@ export async function togglePinAction(formData: FormData): Promise<void> {
   await requireMembership(roomId, session.staffId);
   await getDataStore().setChatMessagePinned(messageId, pinned);
   revalidatePath(`/staff/chat/${roomId}`);
-  redirect(`/staff/chat/${roomId}?tab=notes`);
 }
 
 /**
@@ -203,7 +205,6 @@ export async function toggleAnnounceAction(formData: FormData): Promise<void> {
       }
     );
   }
-  redirect(`/staff/chat/${roomId}?saved=${announced ? "announced" : "unannounced"}`);
 }
 
 /** 議事録をトークルームへ転送する（ミーティング画面から呼ぶ。中身を見られる人だけ） */

@@ -629,6 +629,103 @@ html {
   background: linear-gradient(to bottom, var(--dash-accent-2), var(--dash-accent));
 }
 
+/* ============================================================
+   トーク（LINE風）
+   背景・吹き出し・既読の色をLINEに合わせる。
+   吹き出しのしっぽは疑似要素で作り、切り欠きをトーク背景の色で塗るので、
+   .line-talk（背景 --line-bg）の上でだけ使う。
+   components 層に置き、画面側のユーティリティ（py-2.5 など）で上書きできるようにしている。
+   ============================================================ */
+@layer components {
+  .line-talk {
+    --line-bg: #7494c0;
+    --line-green: #06c755;
+    --line-bubble-out: #8de055;
+    --line-bubble-in: #ffffff;
+    --line-meta: #1f2b45;
+  }
+  .line-bubble {
+    position: relative;
+    isolation: isolate;
+    border-radius: 18px;
+    padding: 7px 12px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: #111;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .line-bubble-in {
+    background: var(--line-bubble-in);
+  }
+  .line-bubble-out {
+    background: var(--line-bubble-out);
+  }
+  /* しっぽ（ひと続きの最初の吹き出しにだけ付ける）。上の角から相手側へ細く伸びる。
+     しっぽの色は吹き出しの色をそのまま受け継ぐ（白いファイルの吹き出しにも使える） */
+  .line-tail-in {
+    border-top-left-radius: 0;
+  }
+  .line-tail-out {
+    border-top-right-radius: 0;
+  }
+  .line-tail-in::before,
+  .line-tail-in::after,
+  .line-tail-out::before,
+  .line-tail-out::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    z-index: -1;
+    height: 16px;
+  }
+  .line-tail-in::before,
+  .line-tail-out::before {
+    width: 10px;
+    background: inherit;
+  }
+  .line-tail-in::before {
+    left: -7px;
+  }
+  .line-tail-out::before {
+    right: -7px;
+  }
+  .line-tail-in::after,
+  .line-tail-out::after {
+    width: 10px;
+    background: var(--line-bg);
+  }
+  .line-tail-in::after {
+    left: -10px;
+    border-top-right-radius: 10px 14px;
+  }
+  .line-tail-out::after {
+    right: -10px;
+    border-top-left-radius: 10px 14px;
+  }
+  /* 日付の区切り・「送信を取り消しました」などのお知らせ */
+  .line-pill {
+    display: inline-block;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.2);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.5;
+    padding: 1px 10px;
+  }
+  /* 時刻・既読・名前（背景の青の上で読める濃さ） */
+  .line-meta {
+    color: var(--line-meta);
+    font-size: 10px;
+    line-height: 1.25;
+  }
+  /* 写真は長押しでメニューを出すので、端末の画像メニュー（保存など）を出さない */
+  .line-no-callout {
+    -webkit-touch-callout: none;
+  }
+}
+
 /* 印刷時は装飾を落として紙面を読みやすく */
 @media print {
   body {

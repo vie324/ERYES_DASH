@@ -2,7 +2,9 @@
 
 // AIしもんのチャット画面。
 //  ・送信すると /api/ai-shimon/chat から返答がストリーミングで届き、1文字ずつ表示する
-//  ・履歴は端末の localStorage にだけ保存（人ごとにキーを分ける）。「新しく相談する」で消せる
+//  ・画面の履歴は端末の localStorage に保存（人ごとにキーを分ける）。「新しく相談する」で画面から消せる
+//  ・相談文と返答はサーバーにも記録され、代表だけが読める（そのことを画面にはっきり書いておく）。
+//    ひと続きの相談を同じIDでまとめるため、相談のIDも端末に覚えておく
 //  ・知識ファイルの本文や出典は一切クライアントに来ない（返答の文字だけ）
 
 import Link from "next/link";
@@ -17,6 +19,16 @@ interface Turn {
 /** サーバーへ送る会話の上限（古いものから落とす。サーバー側の上限と揃える） */
 const MAX_TURNS = 30;
 
+/** ひと続きの相談のID（サーバーの記録で、同じ相談のやりとりをまとめるのに使う） */
+function newThreadId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // 古い端末は下の作り方で
+  }
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 const EXAMPLES = [
   "テストなかなか受からない、悔しい。どうすれば次受かれるかな。",
   "商品やメニューの提案がなかなかうまくできない",
@@ -28,13 +40,18 @@ export function AiShimonChat({
   staffId,
   ready,
   isAdmin,
+  ownerName,
 }: {
   staffId: string;
   /** APIキー・プロンプトが揃っていて使える状態か */
   ready: boolean;
   isAdmin: boolean;
+  /** 相談の記録を読める代表の名前（未設定なら null） */
+  ownerName: string | null;
 }) {
   const storageKey = `ai-shimon:${staffId}`;
+  const threadKey = `ai-shimon:${staffId}:thread`;
+  const threadRef = useRef("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [input, setInput] = useState("");
@@ -45,6 +62,11 @@ export function AiShimonChat({
 
   // 端末に残した履歴を読む（初回だけ）
   useEffect(() => {
+    try {
+      threadRef.current = localStorage.getItem(threadKey) ?? "";
+    } catch {
+      threadRef.current = "";
+    }
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -62,7 +84,18 @@ export function AiShimonChat({
       // 読めなければ空から始める
     }
     setLoaded(true);
-  }, [storageKey]);
+  }, [storageKey, threadKey]);
+
+  /** 相談のIDを覚えておく（サーバーが別のIDを返してきたらそちらに合わせる） */
+  const rememberThread = (id: string) => {
+    threadRef.current = id;
+    try {
+      if (id) localStorage.setItem(threadKey, id);
+      else localStorage.removeItem(threadKey);
+    } catch {
+      // 保存できなくても相談はできる（次の相談が別の記録になるだけ）
+    }
+  };
 
   // 履歴を端末に保存
   useEffect(() => {
@@ -93,11 +126,13 @@ export function AiShimonChat({
     const controller = new AbortController();
     abortRef.current = controller;
     let received = "";
+    // 新しい相談のはじめはIDを作る（続きの相談は同じIDで送って、記録を1つにまとめる）
+    if (!threadRef.current || turns.length === 0) rememberThread(newThreadId());
     try {
       const res = await fetch("/api/ai-shimon/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-MAX_TURNS) }),
+        body: JSON.stringify({ messages: next.slice(-MAX_TURNS), threadId: threadRef.current }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -123,12 +158,13 @@ export function AiShimonChat({
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (!raw || raw === "[DONE]") continue;
-          let ev: { t?: string; error?: string };
+          let ev: { t?: string; error?: string; thread?: string };
           try {
             ev = JSON.parse(raw);
           } catch {
             continue;
           }
+          if (ev.thread && ev.thread !== threadRef.current) rememberThread(ev.thread);
           if (ev.error) setError(ev.error);
           if (ev.t) {
             received += ev.t;
@@ -152,11 +188,17 @@ export function AiShimonChat({
   const stop = () => abortRef.current?.abort();
 
   const reset = () => {
-    if (turns.length > 0 && !confirm("いまの会話を消して、新しく相談を始めますか？")) return;
+    if (turns.length > 0 && !confirm("いまの会話を画面から消して、新しく相談を始めますか？")) return;
     stop();
     setTurns([]);
     setError("");
+    rememberThread("");
   };
+
+  // 相談の記録を誰が読めるか（スタッフが安心して、納得して使えるように、いつも見える所に出す）
+  const whoCanRead = ownerName
+    ? `相談の内容は記録され、代表の${ownerName}さんだけが読めます（ほかのスタッフ・幹部・管理者は読めません）。`
+    : "相談の内容は記録されます（アプリで読めるのは代表だけです）。";
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // PCでは Ctrl/⌘+Enter で送信（スマホは改行のまま。送信はボタン）
@@ -194,6 +236,9 @@ export function AiShimonChat({
               </p>
             </div>
           </div>
+          <p className="mt-3 rounded-xl bg-brand-50 border border-brand-200 px-3 py-2 text-[11px] text-ink-600 leading-relaxed">
+            {whoCanRead}
+          </p>
           <p className="text-[11px] font-bold text-ink-400 mt-4 mb-1.5">たとえば、こんなふうに</p>
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLES.map((ex) => (
@@ -285,6 +330,9 @@ export function AiShimonChat({
             </div>
           </div>
         </div>
+        <p className="mt-1 text-center text-[10px] text-ink-400">
+          {ownerName ? `相談の内容は、代表（${ownerName}さん）だけが読めます` : "相談の内容は記録されます"}
+        </p>
       </div>
 
       {/* 使い方（05_スタッフ向け使い方ガイド の要点） */}
@@ -332,7 +380,8 @@ export function AiShimonChat({
             人に相談しなくていい、という意味でもありません。一人じゃないので、仲間や先輩も頼ってください。
           </p>
           <p className="text-[11px] text-ink-400">
-            会話の履歴はこの端末にだけ残ります（サーバーには保存しません）。
+            {whoCanRead}
+            画面の履歴はこの端末に残り、「新しく相談する」で画面から消せます（記録は消えません）。
             <Link href="/staff/help" className="underline ml-1">使い方ガイド</Link>
           </p>
         </div>
