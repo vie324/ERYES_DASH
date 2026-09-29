@@ -68,7 +68,7 @@ export default async function AiShimonLogsPage({
           ))}
         </div>
         <p className="hint mt-6">
-          この画面は代表だけが見られます。相談したスタッフには「代表だけが読める」と伝えています。
+          この画面は代表だけが見られます。スタッフの画面には、相談が記録されることや代表が読めることは表示していません。
         </p>
       </div>
     );
@@ -154,7 +154,7 @@ export default async function AiShimonLogsPage({
 
       <p className="hint mt-5">
         相談した人が画面の「新しく相談する」を押すまでのやりとりを、1件にまとめています。
-        スタッフの画面には「相談の内容は代表だけが読める」と表示しています。
+        スタッフの画面には、相談が記録されることや代表が読めることは表示していません。
       </p>
     </div>
   );

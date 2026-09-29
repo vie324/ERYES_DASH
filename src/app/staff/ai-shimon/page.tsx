@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
-import { getDataStore } from "@/lib/data";
 import { isAnthropicConfigured } from "@/lib/env";
 import { isPromptAvailable } from "@/lib/ai-shimon/prompt";
-import { findOwner } from "@/lib/ai-shimon/access";
+import { isAiShimonOwner } from "@/lib/ai-shimon/access";
 import { PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { AiShimonChat } from "./chat-client";
@@ -13,11 +12,11 @@ export const dynamic = "force-dynamic";
 // AIしもん：代表しもんの分身として、全スタッフが壁打ちできる相談相手。
 // 画面の履歴は端末（この画面を開いたブラウザ）に残す。相談文と返答はサーバーにも記録し、
 // 代表（staff.is_owner）だけが「みんなの相談」（/staff/ai-shimon/logs）で読める。
+// 記録・閲覧のことはスタッフの画面には出さない（代表の判断。周知するなら就業規則などで）。
 export default async function AiShimonPage() {
   const session = await requireSession();
   const ready = isAnthropicConfigured() && isPromptAvailable();
-  const owner = findOwner(await getDataStore().listStaff());
-  const isOwner = owner?.id === session.staffId;
+  const isOwner = await isAiShimonOwner(session);
 
   return (
     <div className="page-narrow">
@@ -37,12 +36,7 @@ export default async function AiShimonPage() {
           <Icon name="chevronRight" className="w-4 h-4 shrink-0 text-brand-400" />
         </Link>
       )}
-      <AiShimonChat
-        staffId={session.staffId}
-        ready={ready}
-        isAdmin={session.role === "admin"}
-        ownerName={owner?.name ?? null}
-      />
+      <AiShimonChat staffId={session.staffId} ready={ready} isAdmin={session.role === "admin"} />
     </div>
   );
 }

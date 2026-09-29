@@ -3,7 +3,7 @@
 // AIしもんのチャット画面。
 //  ・送信すると /api/ai-shimon/chat から返答がストリーミングで届き、1文字ずつ表示する
 //  ・画面の履歴は端末の localStorage に保存（人ごとにキーを分ける）。「新しく相談する」で画面から消せる
-//  ・相談文と返答はサーバーにも記録され、代表だけが読める（そのことを画面にはっきり書いておく）。
+//  ・相談文と返答はサーバーにも記録され、代表だけが読める（スタッフの画面には表示しない。代表の判断）。
 //    ひと続きの相談を同じIDでまとめるため、相談のIDも端末に覚えておく
 //  ・知識ファイルの本文や出典は一切クライアントに来ない（返答の文字だけ）
 
@@ -40,14 +40,11 @@ export function AiShimonChat({
   staffId,
   ready,
   isAdmin,
-  ownerName,
 }: {
   staffId: string;
   /** APIキー・プロンプトが揃っていて使える状態か */
   ready: boolean;
   isAdmin: boolean;
-  /** 相談の記録を読める代表の名前（未設定なら null） */
-  ownerName: string | null;
 }) {
   const storageKey = `ai-shimon:${staffId}`;
   const threadKey = `ai-shimon:${staffId}:thread`;
@@ -195,11 +192,6 @@ export function AiShimonChat({
     rememberThread("");
   };
 
-  // 相談の記録を誰が読めるか（スタッフが安心して、納得して使えるように、いつも見える所に出す）
-  const whoCanRead = ownerName
-    ? `相談の内容は記録され、代表の${ownerName}さんだけが読めます（ほかのスタッフ・幹部・管理者は読めません）。`
-    : "相談の内容は記録されます（アプリで読めるのは代表だけです）。";
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // PCでは Ctrl/⌘+Enter で送信（スマホは改行のまま。送信はボタン）
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -236,9 +228,6 @@ export function AiShimonChat({
               </p>
             </div>
           </div>
-          <p className="mt-3 rounded-xl bg-brand-50 border border-brand-200 px-3 py-2 text-[11px] text-ink-600 leading-relaxed">
-            {whoCanRead}
-          </p>
           <p className="text-[11px] font-bold text-ink-400 mt-4 mb-1.5">たとえば、こんなふうに</p>
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLES.map((ex) => (
@@ -330,9 +319,6 @@ export function AiShimonChat({
             </div>
           </div>
         </div>
-        <p className="mt-1 text-center text-[10px] text-ink-400">
-          {ownerName ? `相談の内容は、代表（${ownerName}さん）だけが読めます` : "相談の内容は記録されます"}
-        </p>
       </div>
 
       {/* 使い方（05_スタッフ向け使い方ガイド の要点） */}
@@ -380,9 +366,7 @@ export function AiShimonChat({
             人に相談しなくていい、という意味でもありません。一人じゃないので、仲間や先輩も頼ってください。
           </p>
           <p className="text-[11px] text-ink-400">
-            {whoCanRead}
-            画面の履歴はこの端末に残り、「新しく相談する」で画面から消せます（記録は消えません）。
-            <Link href="/staff/help" className="underline ml-1">使い方ガイド</Link>
+            <Link href="/staff/help" className="underline">使い方ガイド</Link>
           </p>
         </div>
       </details>
