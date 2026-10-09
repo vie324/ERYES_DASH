@@ -16,6 +16,7 @@
 //  3. アシスタントは「その店舗のスタイリストの段数の合計 〜 ＋2人」を目安に入れる。
 //     それ以上に人が余る日は「有休を使ってもらう候補」としてボードに出す
 //     ※ スタイリストがいない店舗（アイサロンなど）にはこの上限をかけず、出られる人を全員入れる
+//       （所属店舗を優先し、足りない店舗へ融通。連勤上限で休む日は平日に先回りして、土日を空けない）
 //  4. 土日はなるべく出勤。人を絞るときは段数の多い人を残し、1段の人から休みにする
 //  5. しもん塾・全体ミーティングなど全員参加の日は、出られる人を全員入れる（人数の上限なし）
 //  6. 幹部会議など会議のある日は、その参加者を休みにしない
@@ -262,6 +263,13 @@ export function generateAssignments(ctx: AssignContext): {
   const fixedOff = (staffId: string, d: string) => isFixedOff(ctx, staffId, d);
   const forcedOn = (staffId: string, d: string) => ctx.overrides?.get(staffId)?.get(d)?.isWorking === true;
   const stylistStores = stylistStoresOf(ctx);
+  /** スタイリストのいない店舗（アイサロンなど）にしか入れない人 */
+  const plainOnly = new Set(
+    ctx.staffIds.filter((s) => {
+      const stores = [...(ctx.availableStores.get(s) ?? [])];
+      return stores.length > 0 && stores.every((st) => !stylistStores.has(st));
+    })
+  );
 
   // 連勤判定用の割当済み日付（前月分を持ち越し）
   const assignedDates = new Map<string, Set<string>>();
@@ -367,6 +375,52 @@ export function generateAssignments(ctx: AssignContext): {
         if (isTop(s) && topResting) continue;
         resting.add(s);
         if (isTop(s)) topResting = true;
+      }
+    }
+
+    // ---- 1b. スタイリストのいない店舗（アイサロンなど）の人の休み（平日のみ）----
+    // 基本パターンが連勤上限より長い人（火〜日の6日など）は、どこかで休みが要る。何もしないと
+    // 上限に当たる日＝週末に休みが寄って、土日に誰もいなくなる。スタイリストと同じく平日に先回りして
+    // 休んでもらい、人数は残りの平日に散らす（人の多い店舗の人から休む）。
+    if (!priorityDay) {
+      const needRestPlain = availableToday.filter(
+        (s) => !isStylist(s) && plainOnly.has(s) && !mustWork(s, date) && blocksMust(s)
+      );
+      if (needRestPlain.length > 0) {
+        // 休める最後の日（今日から何日後まで）：次の土日の前日まで、かつ連勤上限に当たる日まで
+        const lastDay = new Map(
+          needRestPlain.map((s) => [
+            s,
+            Math.max(
+              0,
+              Math.min(
+                (daysUntilNextPriority(date, (d) => mustWork(s, d)) || 1) - 1,
+                ctx.rules.maxConsecutiveDays - runBefore(s)
+              )
+            ),
+          ])
+        );
+        // 締切の早い人から。今日休む人数は「k日後までに休む人を、今日〜k日後に均等に割ったとき」の最大。
+        // 今日すでに休みの人（連勤上限・希望休・個別調整の休み）も今日の休みに数える
+        // （連勤上限で2人休む日に、さらに先回りの休みを重ねて店舗が空にならないように。定休の曜日は数えない）
+        const offToday = ctx.staffIds.filter(
+          (s) =>
+            plainOnly.has(s) &&
+            !isStylist(s) &&
+            !availableToday.includes(s) &&
+            !forcedOn(s, date) &&
+            !isPatternOff(ctx, s, date)
+        ).length;
+        let slots = 0;
+        const maxLast = Math.max(...lastDay.values());
+        for (let k = 0; k <= maxLast; k++) {
+          const due = needRestPlain.filter((s) => lastDay.get(s)! <= k).length;
+          slots = Math.max(slots, Math.ceil((due + offToday) / (k + 1)) - offToday);
+        }
+        const sameStore = (s: string) =>
+          availableToday.filter((x) => plainOnly.has(x) && ctx.homeStores?.get(x) === ctx.homeStores?.get(s)).length;
+        needRestPlain.sort((a, b) => lastDay.get(a)! - lastDay.get(b)! || sameStore(b) - sameStore(a));
+        for (const s of needRestPlain.slice(0, slots)) resting.add(s);
       }
     }
 
@@ -487,7 +541,8 @@ export function generateAssignments(ctx: AssignContext): {
           Math.max(stylistTiersOf(storeId) + ASSISTANT_MARGIN, ctx.rules.minStaffPerStoreDay - pickedByStore.get(storeId)!.filter(isStylist).length);
     const assistantPool = availableToday.filter((s) => !isStylist(s) && !resting.has(s));
     // スタイリストのいない店舗（アイサロンなど）にしか入れない人は、所属店舗に入れてから、
-    // 残りを順番に配り、最低人数に足りない店舗へ融通する（2人しかいないのに2店舗に分けて両方足りない、を防ぐ）
+    // 残りを順番に配り、最低人数に足りない店舗へ融通する（2人しかいないのに2店舗に分けて両方足りない、を防ぐ）。
+    // 融通するのは、相手より2人以上多い店舗から（2人と0人なら1人ずつにして、誰もいない店舗を作らない）
     const plainStores = storeOrder.filter((st) => !stylistStores.has(st));
     if (plainStores.length > 0) {
       const onlyPlain = assistantPool.filter((s) =>
@@ -500,12 +555,15 @@ export function generateAssignments(ctx: AssignContext): {
         else rest.push(s);
       }
       fillRoundRobin(rest, () => Number.POSITIVE_INFINITY);
+      const countAt = (storeId: string) => pickedByStore.get(storeId)!.length;
       for (const short of plainStores) {
-        while (pickedByStore.get(short)!.length < ctx.rules.minStaffPerStoreDay) {
+        while (countAt(short) < ctx.rules.minStaffPerStoreDay) {
           let moved = false;
-          for (const donor of plainStores) {
+          const donors = plainStores
+            .filter((d) => d !== short && countAt(d) > countAt(short) + 1)
+            .sort((a, b) => countAt(b) - countAt(a));
+          for (const donor of donors) {
             const donorPicked = pickedByStore.get(donor)!;
-            if (donor === short || donorPicked.length <= ctx.rules.minStaffPerStoreDay) continue;
             const cands = donorPicked
               .filter((s) => !forcedToday.includes(s) && ctx.availableStores.get(s)!.has(short))
               // 所属店舗でない人から動かす
@@ -528,16 +586,19 @@ export function generateAssignments(ctx: AssignContext): {
     // 「1日あたりの目安（人数÷(連勤上限+1)）」より多ければ、一部を今日のうちに休みに変えて谷をならす。
     // 上の人数枠で今日すでに休みになった人はそのまま数え、足りない分だけ入れ替える
     // （休ませる順：アシスタント → 段数の少ないスタイリスト。3段同士は同じ日にしない）。
+    // （スタイリストのいない店舗の人は 1b. で休む日を散らしているので、ここでは動かさない）
     if (!priorityDay && !isPriorityDay(tomorrow)) {
-      const quota = Math.ceil(availableToday.length / (ctx.rules.maxConsecutiveDays + 1));
-      const forcedTomorrow = availableToday.filter(
+      const scoped = availableToday.filter((s) => !plainOnly.has(s));
+      const quota = Math.ceil(scoped.length / (ctx.rules.maxConsecutiveDays + 1));
+      const forcedTomorrow = scoped.filter(
         (s) =>
           !mustWork(s, date) &&
           runBefore(s) + 1 >= ctx.rules.maxConsecutiveDays &&
           !fixedOff(s, tomorrow) &&
           !forcedOn(s, tomorrow)
       );
-      const extra = forcedTomorrow.length - Math.max(0, quota - resting.size);
+      const restingScoped = [...resting].filter((s) => !plainOnly.has(s)).length;
+      const extra = forcedTomorrow.length - Math.max(0, quota - restingScoped);
       let need = extra - forcedTomorrow.filter((s) => !assignedToday.has(s)).length;
       if (need > 0) {
         const storeOf = (s: string) => assignments.find((a) => a.date === date && a.staffId === s)?.storeId ?? "";

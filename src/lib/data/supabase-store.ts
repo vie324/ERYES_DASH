@@ -1389,21 +1389,39 @@ class SupabaseStore implements DataStore {
   }
 
   async listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]> {
-    let query = this.sb
-      .from("shift_assignments")
-      .select("*")
-      .eq("target_month", targetMonth)
-      .order("date");
-    if (staffId) query = query.eq("staff_id", staffId);
-    const { data, error } = await query;
-    return must(data, error, "割当一覧").map(mapShiftAssignment);
+    // 1か月で（人数×出勤日）が1000行を超えると、PostgREST の既定の上限で後ろの日が切れてしまうので、
+    // 1000行ずつ読み足す
+    const PAGE = 1000;
+    const rows: ShiftAssignment[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let query = this.sb
+        .from("shift_assignments")
+        .select("*")
+        .eq("target_month", targetMonth)
+        .order("date")
+        .order("id")
+        .range(from, from + PAGE - 1);
+      if (staffId) query = query.eq("staff_id", staffId);
+      const { data, error } = await query;
+      const page = must(data, error, "シフト表一覧").map(mapShiftAssignment);
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows;
   }
 
-  async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
-    const del = await this.sb.from("shift_assignments").delete().eq("target_month", targetMonth);
-    if (del.error) throw new Error(`[supabase] シフト表削除: ${del.error.message}`);
+  async replaceMonthAssignments(
+    targetMonth: string,
+    rows: NewShiftAssignment[],
+    opts: { staffIds?: string[]; status?: AssignmentStatus } = {}
+  ): Promise<void> {
+    if (opts.staffIds && opts.staffIds.length === 0 && rows.length === 0) return;
+    let del = this.sb.from("shift_assignments").delete().eq("target_month", targetMonth);
+    if (opts.staffIds) del = del.in("staff_id", opts.staffIds);
+    const delRes = await del;
+    if (delRes.error) throw new Error(`[supabase] シフト表削除: ${delRes.error.message}`);
     if (rows.length === 0) return;
-    const built = rows.map((r) => shiftAssignmentRow({ ...r, targetMonth, status: "draft" }));
+    const built = rows.map((r) => shiftAssignmentRow({ ...r, targetMonth, status: opts.status ?? "draft" }));
     let ins = await this.sb.from("shift_assignments").insert(built.map((b) => b.full));
     if (isMissingColumn(ins.error)) {
       ins = await this.sb.from("shift_assignments").insert(built.map((b) => b.legacy));
@@ -1431,12 +1449,11 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] シフト削除: ${error.message}`);
   }
 
-  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus): Promise<number> {
-    const { data, error } = await this.sb
-      .from("shift_assignments")
-      .update({ status })
-      .eq("target_month", targetMonth)
-      .select("id");
+  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus, staffIds?: string[]): Promise<number> {
+    if (staffIds && staffIds.length === 0) return 0;
+    let query = this.sb.from("shift_assignments").update({ status }).eq("target_month", targetMonth);
+    if (staffIds) query = query.in("staff_id", staffIds);
+    const { data, error } = await query.select("id");
     return must(data, error, "シフト表の状態変更").length;
   }
 

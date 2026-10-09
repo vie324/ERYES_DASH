@@ -9,11 +9,14 @@ import { sendDayoffRequestNotice } from "@/lib/shift/notify";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  if (env.cronSecret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${env.cronSecret}`) {
-      return NextResponse.json({ error: "認証エラー" }, { status: 401 });
-    }
+  // 全スタッフに通知が飛ぶので、CRON_SECRET が無いときは送らない（外から何度も呼ばれて通知が連発しないように）
+  if (!env.cronSecret) {
+    console.warn("[cron] 希望休の募集通知：CRON_SECRET が未設定のため送信しません");
+    return NextResponse.json({ ok: true, skipped: "CRON_SECRET not set" });
+  }
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${env.cronSecret}`) {
+    return NextResponse.json({ error: "認証エラー" }, { status: 401 });
   }
   if (!isPushConfigured()) {
     return NextResponse.json({ ok: true, skipped: "push not configured" });

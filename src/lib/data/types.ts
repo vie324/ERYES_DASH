@@ -1184,14 +1184,22 @@ export interface DataStore {
 
   // ---- シフト表（自動作成→調整→公開）----
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
-  /** 自動作成：対象月のシフト表を全削除して下書き(draft)として入れ直す（空配列なら下書きの削除） */
-  replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void>;
+  /**
+   * 自動作成：対象月のシフト表を消して入れ直す（空配列なら削除だけ）。
+   * staffIds を渡すと、その人たちの行だけを入れ替える（ほかの業態・店舗の人の行はそのまま）。
+   * 入れる行の状態は status（既定は下書き draft）。
+   */
+  replaceMonthAssignments(
+    targetMonth: string,
+    rows: NewShiftAssignment[],
+    opts?: { staffIds?: string[]; status?: AssignmentStatus }
+  ): Promise<void>;
   /** 1マスの保存（同じスタッフ・同じ日があれば置き換える） */
   upsertShiftAssignment(
     input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
   ): Promise<void>;
   /** 1マスを休みにする（その日の割当を消す） */
   deleteShiftAssignmentAt(staffId: string, date: string): Promise<void>;
-  /** 対象月のシフト表の状態をまとめて変える（公開・下書きに戻す）。変えた件数を返す */
-  setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus): Promise<number>;
+  /** 対象月のシフト表の状態をまとめて変える（公開・下書きに戻す。staffIds を渡すとその人たちの行だけ）。変えた件数を返す */
+  setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus, staffIds?: string[]): Promise<number>;
 }

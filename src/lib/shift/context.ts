@@ -7,7 +7,7 @@ import { addMonths, monthRange } from "@/lib/date";
 import { isAllHands, participantsOf } from "@/lib/eni/committees";
 import { normalizeTiers } from "@/lib/eni/forms";
 import { buildMonthSchedule, workingDatesOf } from "@/lib/shift/month";
-import { listRequestStatuses, type RequestStatus } from "@/lib/shift/requests";
+import { listDayoffsWithLegacy, listRequestStatuses, type RequestStatus } from "@/lib/shift/requests";
 import type {
   AssistantRank,
   DataStore,
@@ -76,12 +76,12 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     db.listAvailableStores(month),
     db.getShiftRules(),
     db.listWorkPatterns(),
-    db.listDayoffRequests(range),
+    listDayoffsWithLegacy(db, range),
     db.listScheduleOverrides(range),
     listRequestStatuses(db, month),
     db.listShiftAssignments(month),
     db.listShiftAssignments(prevMonth),
-    db.listDayoffRequests(prevRange),
+    listDayoffsWithLegacy(db, prevRange),
     db.listScheduleOverrides(prevRange),
     db.listMeetings(range),
     db.listCommittees(),

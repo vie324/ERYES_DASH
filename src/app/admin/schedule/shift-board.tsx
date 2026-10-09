@@ -38,10 +38,14 @@ export interface BoardStaff {
   storeId: string;
   /** 「スタイリスト・2段」などの補足 */
   sub: string;
+  /** シフト表に入っているか（シフト表のある月で false の人は、いつもどおりの予定を出している） */
+  inShift: boolean;
 }
 
 export interface ShiftBoardProps {
   month: string;
+  /** 画面の店舗の絞り込み（保存のときに、どの人たちのシフト表かをサーバーに伝える） */
+  storeKey: string;
   status: ShiftStatus;
   dates: string[];
   staff: BoardStaff[];
@@ -155,14 +159,25 @@ export function ShiftBoard(props: ShiftBoardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // いま開いているパネルのマス（保存の結果を、そのマスのパネルにだけ反映するため）
+  const draftKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    draftKeyRef.current = draft ? `${draft.staffId}|${draft.date}` : null;
+  }, [draft]);
+
+  /** パネルを閉じる（保存の途中は閉じない＝結果が別のマスに出たり、次に開いたマスが閉じたりしないように） */
+  const close = () => {
+    if (!isPending) setDraft(null);
+  };
+
   useEffect(() => {
     if (!draft) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDraft(null);
+      if (e.key === "Escape" && !isPending) setDraft(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [draft]);
+  }, [draft, isPending]);
 
   useEffect(() => {
     if (!toast) return;
@@ -191,20 +206,30 @@ export function ShiftBoard(props: ShiftBoardProps) {
   };
 
   const save = (reset = false) => {
-    if (!draft) return;
-    const input = { month, ...draft, reset };
+    if (!draft || isPending) return;
+    const input = { month, store: props.storeKey, ...draft, reset };
     const key = `${draft.staffId}|${draft.date}`;
     const preview = previewOf(draft, reset);
     const base = cells;
     anchorTop.current = rootRef.current?.getBoundingClientRect().top ?? null;
     startTransition(async () => {
-      const res = await saveShiftCellAction(input);
+      let res: Awaited<ReturnType<typeof saveShiftCellAction>>;
+      try {
+        res = await saveShiftCellAction(input);
+      } catch {
+        // 通信が切れたときなど。画面全体をエラーにせず、パネルの中で知らせる
+        res = { ok: false, message: "保存できませんでした（通信のエラー）。電波のよい所でもう一度お試しください。" };
+      }
+      // 結果は、保存したマスのパネルがまだ開いているときだけパネルに反映する
+      const stillOpen = draftKeyRef.current === key;
       if (res.ok) {
         setOptimistic((prev) => ({ base, map: { ...(prev?.base === base ? prev.map : {}), [key]: preview } }));
-        setDraft(null);
+        if (stillOpen) setDraft(null);
         setToast(res.message);
-      } else {
+      } else if (stillOpen) {
         setMessage({ ok: false, text: res.message });
+      } else {
+        setToast(res.message);
       }
     });
   };
@@ -223,8 +248,13 @@ export function ShiftBoard(props: ShiftBoardProps) {
             <tr>
               <th className="!z-30">日付</th>
               {staff.map((s) => (
-                <th key={s.id} className="text-center !px-1 min-w-[3.4rem]" title={`${s.name}${s.sub ? `（${s.sub}）` : ""}`}>
+                <th
+                  key={s.id}
+                  className="text-center !px-1 min-w-[3.4rem]"
+                  title={`${s.name}${s.sub ? `（${s.sub}）` : ""}${shiftMode && !s.inShift ? "：シフト表に入っていません（いつもどおりの予定）" : ""}`}
+                >
                   <span className="block text-ink-800">{names.get(s.id)}</span>
+                  {shiftMode && !s.inShift && <span className="block text-[9px] font-bold text-ink-400">表の外</span>}
                   {showStoreDots && storeIndex.has(s.storeId) && (
                     <span className={`mx-auto mt-0.5 block w-1.5 h-1.5 rounded-full ${storeColor(storeIndex.get(s.storeId)!).dot}`} />
                   )}
@@ -333,7 +363,7 @@ export function ShiftBoard(props: ShiftBoardProps) {
       {draft && current && member && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-ink-900/35"
-          onClick={() => setDraft(null)}
+          onClick={close}
           role="presentation"
         >
           <div
@@ -353,7 +383,7 @@ export function ShiftBoard(props: ShiftBoardProps) {
                   {Number(draft.date.slice(5, 7))}月{Number(draft.date.slice(8))}日({WEEK[weekdayOf(draft.date)]})
                 </p>
               </div>
-              <button type="button" onClick={() => setDraft(null)} className="btn-ghost !px-2" aria-label="閉じる">
+              <button type="button" onClick={close} disabled={isPending} className="btn-ghost !px-2" aria-label="閉じる">
                 <Icon name="close" className="w-5 h-5" />
               </button>
             </div>

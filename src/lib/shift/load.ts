@@ -2,6 +2,7 @@
 
 import { monthRange } from "@/lib/date";
 import { buildMonthSchedule, type MonthSchedule } from "@/lib/shift/month";
+import { listDayoffsWithLegacy } from "@/lib/shift/requests";
 import type {
   DataStore,
   DayoffRequest,
@@ -30,7 +31,7 @@ export async function loadMonthSchedule(db: DataStore, month: string, showDraft:
     db.listStores(),
     db.listStaff(),
     db.listWorkPatterns(),
-    db.listDayoffRequests(range),
+    listDayoffsWithLegacy(db, range),
     db.listScheduleOverrides(range),
     db.listShiftAssignments(month),
   ]);
@@ -56,7 +57,7 @@ export async function loadDaySchedule(
   const [staffList, patterns, dayoffs, overrides, assignments] = await Promise.all([
     db.listStaff(),
     db.listWorkPatterns(),
-    db.listDayoffRequests({ from: date, to: date }),
+    listDayoffsWithLegacy(db, { from: date, to: date }),
     db.listScheduleOverrides({ from: date, to: date }),
     db.listShiftAssignments(month),
   ]);

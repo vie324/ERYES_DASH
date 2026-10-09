@@ -44,8 +44,9 @@ export async function submitDayoffAction(formData: FormData): Promise<void> {
       typeof item === "object" && item !== null ? (item as Record<string, unknown>) : { date: item };
     const date = typeof obj.date === "string" ? obj.date : "";
     if (!date.startsWith(`${targetMonth}-`) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || seen.has(date)) continue;
-    // 実在する日付だけ（「02-30」などは落とす）
-    if (new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) continue;
+    // 実在する日付だけ（「02-30」「02-32」などは落とす）
+    const parsedDate = new Date(`${date}T00:00:00Z`);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) continue;
     seen.add(date);
     days.push({
       date,

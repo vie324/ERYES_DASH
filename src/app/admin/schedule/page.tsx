@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { getBrand, BRAND_INFO } from "@/lib/brand";
+import { resolveShiftView, viewStatus } from "@/lib/shift/view";
 import { addDays, addMonths, formatDateJa, formatDateTimeJa, formatMonthJa, thisMonthJst, todayJst, weekdayOf } from "@/lib/date";
 import { computeBoardWarnings, countBoardWarnings, TOP_TIER, type BoardWarnings } from "@/lib/shift/assign";
 import { buildShiftMonthInputs, meetingNamesOn } from "@/lib/shift/context";
@@ -12,7 +13,6 @@ import {
   shiftStatusOf,
   shortNames,
   shortStoreName,
-  staffForStores,
 } from "@/lib/shift/month";
 import {
   buildTargetMonth,
@@ -46,11 +46,21 @@ const ERRORS: Record<string, string> = {
   input: "うまく受け取れませんでした。もう一度お試しください。",
 };
 
-/** 最初に開く月：今月から「いま作る月」までで、まだ公開していない最初の月（無ければ今月） */
-async function defaultMonth(db: DataStore, thisMonth: string, buildMonth: string): Promise<string> {
+/**
+ * 最初に開く月：今月から「いま作る月」までで、まだ公開していない最初の月（無ければ今月）。
+ * 表に出す店舗に所属する人のシフト表だけを見る（ほかの業態の公開状況に引っぱられない）
+ */
+async function defaultMonth(
+  db: DataStore,
+  thisMonth: string,
+  buildMonth: string,
+  staffIds: Set<string>
+): Promise<string> {
   const months: string[] = [];
   for (let m = thisMonth; m <= buildMonth && months.length < 13; m = addMonths(m, 1)) months.push(m);
-  const statuses = await Promise.all(months.map(async (m) => shiftStatusOf(await db.listShiftAssignments(m))));
+  const statuses = await Promise.all(
+    months.map(async (m) => shiftStatusOf((await db.listShiftAssignments(m)).filter((a) => staffIds.has(a.staffId))))
+  );
   // シフト表を使っていない（基本パターンだけで回している）お店は今月を開く
   if (statuses.every((s) => s === "none")) return thisMonth;
   const idx = statuses.findIndex((s) => s !== "confirmed");
@@ -89,9 +99,19 @@ export default async function AdminSchedulePage({
   const thisMonth = thisMonthJst();
   const openMonth = currentTargetMonth(rules, today);
   const buildMonth = buildTargetMonth(rules, today);
-  const month = /^\d{4}-\d{2}$/.test(params.month ?? "")
-    ? params.month!
-    : await defaultMonth(db, thisMonth, buildMonth);
+  let month = params.month ?? "";
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    const [allStores, allStaff] = await Promise.all([db.listStores(), db.listStaff()]);
+    const brandStores = new Set(
+      params.store === "all" || !params.store
+        ? params.store === "all"
+          ? allStores.map((s) => s.id)
+          : brandStoreIds(allStores, BRAND_INFO[brand].label)
+        : [params.store]
+    );
+    const homeIds = new Set(allStaff.filter((s) => s.isActive && brandStores.has(s.storeId)).map((s) => s.id));
+    month = await defaultMonth(db, thisMonth, buildMonth, homeIds);
+  }
 
   const inputs = await buildShiftMonthInputs(db, month);
   const { stores, activeStaff, assignments, requestStatuses } = inputs;
@@ -104,8 +124,6 @@ export default async function AdminSchedulePage({
     assignments,
     showDraft: true,
   });
-  const status = schedule.status;
-  const allWarnings = status === "none" ? null : computeBoardWarnings(month, assignments, inputs);
   const staffMap = new Map(inputs.staffList.map((s) => [s.id, s]));
   const storeMap = new Map(stores.map((s) => [s.id, s]));
   const nameOf = (id: string) => staffMap.get(id)?.name ?? "？";
@@ -113,15 +131,19 @@ export default async function AdminSchedulePage({
   const familyOf = (id: string) => shortName.get(id) ?? nameOf(id).split(/\s+/)[0];
   const committeeNames = new Map((await db.listCommittees()).map((c) => [c.committeeKey, c.name]));
 
-  // ---- 店舗の絞り込み（既定は今の業態の店舗）----
+  // ---- 店舗の絞り込み（既定は今の業態の店舗）。月の操作も、この表に出ている人にだけ効く ----
   const multiStore = stores.length > 1;
-  const defaultStores = brandStoreIds(stores, BRAND_INFO[brand].label);
-  const filterKey = params.store === "all" || stores.some((s) => s.id === params.store) ? params.store! : "";
-  const storeFilter =
-    filterKey === "all" ? stores.map((s) => s.id) : filterKey ? [filterKey] : defaultStores;
+  const view = resolveShiftView({
+    stores,
+    activeStaff,
+    schedule,
+    storeParam: params.store,
+    brandLabel: BRAND_INFO[brand].label,
+  });
+  const { filterKey, storeFilter, defaultStores } = view;
   const shownStores = stores.filter((s) => storeFilter.includes(s.id));
   const jobOrder = { stylist: 0, assistant: 1, "": 2 } as const;
-  const boardMembers = staffForStores(activeStaff, schedule, storeFilter, { includeIdle: true })
+  const boardMembers = view.members
     .map((s, i) => ({ s, i }))
     .sort(
       (a, b) =>
@@ -131,7 +153,17 @@ export default async function AdminSchedulePage({
         a.i - b.i
     )
     .map(({ s }) => s);
-  const memberIds = new Set(boardMembers.map((s) => s.id));
+  const memberIds = view.memberIds;
+  // この表に出ている人のシフト表の状態（ほかの業態の人の公開状況は見ない）
+  const status = viewStatus(assignments, memberIds);
+  // 警告は「実際に出勤する日」で見る（シフト表に入っていない人は、いつもどおりの予定で数える）
+  const effective = activeStaff.flatMap((s) =>
+    schedule.dates
+      .map((d) => schedule.cell(s.id, d))
+      .filter((c) => c.working)
+      .map((c) => ({ date: c.date, staffId: s.id, storeId: c.storeId }))
+  );
+  const allWarnings = status === "none" ? null : computeBoardWarnings(month, effective, inputs);
 
   // 気になる所は、いま表に出している店舗・スタッフの分だけ（ほかの業態の店舗の人数不足まで並べない）
   const warnings: BoardWarnings | null = allWarnings && {
@@ -217,7 +249,13 @@ export default async function AdminSchedulePage({
       note(w.date, `${familyOf(w.staffId)}さんは${meetingNamesOn(inputs.meetings, w.date, committeeNames) || "会議"}の参加者`);
     }
   }
-  const boardStaff: BoardStaff[] = boardMembers.map((s) => ({ id: s.id, name: s.name, storeId: s.storeId, sub: staffSub(s) }));
+  const boardStaff: BoardStaff[] = boardMembers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    storeId: s.storeId,
+    sub: staffSub(s),
+    inShift: schedule.fromShift(s.id),
+  }));
   // 表で扱う店舗：絞り込みの店舗＋表のスタッフが出勤する店舗（編集パネルで選べる店舗・色の凡例）
   const memberWorkStores = new Set(
     boardMembers.flatMap((s) => schedule.dates.map((d) => schedule.cell(s.id, d))).filter((c) => c.working).map((c) => c.storeId)
@@ -305,6 +343,12 @@ export default async function AdminSchedulePage({
 
       {/* ---- 進め方と状態 ---- */}
       <section className="card mb-4">
+        {multiStore && boardMembers.length < activeStaff.length && (
+          <p className="text-[11px] text-ink-500 mb-2">
+            下のボタン（自動で作る・公開など）は、表に出ている{boardMembers.length}人
+            {filterKey === "" ? `（${BRAND_INFO[brand].label}の店舗）` : ""}にだけ効きます。ほかの店舗のシフトは変わりません。
+          </p>
+        )}
         <ol className="grid gap-2 sm:grid-cols-3">
           <li className="card-quiet">
             <p className="text-[11px] font-bold text-ink-400">1. 希望休を集める</p>
@@ -324,7 +368,9 @@ export default async function AdminSchedulePage({
               )}
             </p>
             <p className="text-xs text-ink-500 mt-0.5">
-              {status === "none" ? "いまは基本パターン＋希望休の予定" : `出勤 ${assignments.length}件`}
+              {status === "none"
+                ? "いまは基本パターン＋希望休の予定"
+                : `出勤 ${assignments.filter((a) => memberIds.has(a.staffId)).length}件`}
             </p>
           </li>
           <li className="card-quiet">
@@ -346,6 +392,7 @@ export default async function AdminSchedulePage({
             <>
               <form action={generateShiftAction}>
                 <input type="hidden" name="target_month" value={month} />
+                <input type="hidden" name="store" value={filterKey} />
                 <ConfirmSubmit
                   className="btn-primary w-full"
                   pendingLabel="作っています…"
@@ -370,6 +417,7 @@ export default async function AdminSchedulePage({
             <>
               <form action={publishShiftAction}>
                 <input type="hidden" name="target_month" value={month} />
+                <input type="hidden" name="store" value={filterKey} />
                 <ConfirmSubmit
                   className="btn-primary w-full"
                   pendingLabel="公開しています…"
@@ -384,6 +432,7 @@ export default async function AdminSchedulePage({
               <div className="flex gap-2 flex-wrap">
                 <form action={generateShiftAction}>
                   <input type="hidden" name="target_month" value={month} />
+                  <input type="hidden" name="store" value={filterKey} />
                   <ConfirmSubmit
                     className="btn-secondary !min-h-0 !py-2 !px-3 !text-sm"
                     pendingLabel="作っています…"
@@ -394,6 +443,7 @@ export default async function AdminSchedulePage({
                 </form>
                 <form action={discardDraftAction}>
                   <input type="hidden" name="target_month" value={month} />
+                  <input type="hidden" name="store" value={filterKey} />
                   <ConfirmSubmit
                     className="btn-danger"
                     message="下書きを削除して、いつもどおりの予定（基本パターン＋希望休）に戻します。よろしいですか？"
@@ -412,6 +462,7 @@ export default async function AdminSchedulePage({
               </p>
               <form action={unpublishShiftAction}>
                 <input type="hidden" name="target_month" value={month} />
+                <input type="hidden" name="store" value={filterKey} />
                 <ConfirmSubmit
                   className="btn-secondary !min-h-0 !py-2 !px-3 !text-sm"
                   message="公開をやめて下書きに戻します。スタッフには、いつもどおりの予定（基本パターン＋希望休）が出るようになります。よろしいですか？"
@@ -539,6 +590,7 @@ export default async function AdminSchedulePage({
           <ShiftBoard
             key={`${month}:${filterKey}`}
             month={month}
+            storeKey={filterKey}
             status={status}
             dates={schedule.dates}
             staff={boardStaff}

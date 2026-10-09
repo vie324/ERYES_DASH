@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { getBrand, BRAND_INFO } from "@/lib/brand";
 import { brandStoreIds } from "@/lib/shift/month";
+import { listDayoffsWithLegacy } from "@/lib/shift/requests";
 import { addMonths, formatDateJa, formatDateTimeJa, formatMonthJa, monthRange, thisMonthJst, todayJst } from "@/lib/date";
 import {
   REQUEST_LEAD_REASON,
@@ -42,7 +43,8 @@ export default async function DayoffRequestPage({
   const [me, stores, myDayoffs, record, chosen, prevChosen, myPatterns] = await Promise.all([
     db.getStaff(session.staffId),
     db.listStores(),
-    db.listDayoffRequests({ staffId: session.staffId, ...monthRange(month) }),
+    // 旧「シフト希望」で出した休みも入れて見せる（出し直したときに消えないように）
+    listDayoffsWithLegacy(db, { staffId: session.staffId, ...monthRange(month) }),
     db.getShiftRequestMonth(session.staffId, month),
     db.listAvailableStores(month, session.staffId),
     db.listAvailableStores(addMonths(month, -1), session.staffId),

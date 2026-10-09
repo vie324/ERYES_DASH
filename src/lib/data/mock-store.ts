@@ -1758,12 +1758,17 @@ class MockStore implements DataStore {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
+  async replaceMonthAssignments(
+    targetMonth: string,
+    rows: NewShiftAssignment[],
+    opts: { staffIds?: string[]; status?: AssignmentStatus } = {}
+  ): Promise<void> {
+    const only = opts.staffIds ? new Set(opts.staffIds) : null;
     this.db.shiftAssignments = this.db.shiftAssignments.filter(
-      (a) => a.targetMonth !== targetMonth
+      (a) => !(a.targetMonth === targetMonth && (!only || only.has(a.staffId)))
     );
     for (const row of rows) {
-      this.db.shiftAssignments.push(toMockAssignment({ ...row, targetMonth, status: "draft" }));
+      this.db.shiftAssignments.push(toMockAssignment({ ...row, targetMonth, status: opts.status ?? "draft" }));
     }
   }
 
@@ -1782,10 +1787,11 @@ class MockStore implements DataStore {
     );
   }
 
-  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus): Promise<number> {
+  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus, staffIds?: string[]): Promise<number> {
+    const only = staffIds ? new Set(staffIds) : null;
     let count = 0;
     for (const a of this.db.shiftAssignments) {
-      if (a.targetMonth === targetMonth) {
+      if (a.targetMonth === targetMonth && (!only || only.has(a.staffId))) {
         a.status = status;
         count++;
       }

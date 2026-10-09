@@ -2,10 +2,13 @@
 //
 // 以前は「出勤スケジュール（基本パターン＋希望休）」と「旧シフト機能（店舗・早番／遅番）」が
 // 別々に動いていて、片方で出した希望休がもう片方に入らなかった。いまは1つにまとめている。
-//  ・シフト表（自動作成 → 調整 → 公開）を作った月：シフト表がそのまま予定になる
+//  ・シフト表（自動作成 → 調整 → 公開）に入っている人：シフト表がそのまま予定になる
 //      下書きのうちは管理者にだけ見え、スタッフには「いつもどおりの予定」を出す
-//  ・シフト表を作っていない月：基本パターン＋希望休＋個別調整で「いつもどおりの予定」を出す
+//  ・シフト表に入っていない人・シフト表を作っていない月：基本パターン＋希望休＋個別調整の「いつもどおりの予定」
 //  ・どちらの場合も、希望休（理由・有休）は印として残す（出勤に変えられた日も分かるように）
+// シフト表は「人ごと」に見る（その月に1日でも行がある人が、シフト表に入っている人）。
+// 業態（店舗）ごとに別々に作って公開でき、旧システムで一部の人だけで確定した月があっても、
+// それ以外の人はいつもどおりの予定のまま（全員が毎日「休み」になったりしない）。
 
 import { datesOfMonth, weekdayOf } from "@/lib/date";
 import { compactTimeRange, resolveScheduleDay } from "@/lib/schedule";
@@ -18,7 +21,7 @@ import type {
   WorkPatternDay,
 } from "@/lib/data/types";
 
-/** 月のシフト表の状態：未作成／下書き（管理者のみ）／公開中 */
+/** シフト表の状態：未作成／下書き（管理者のみ）／公開中 */
 export type ShiftStatus = "none" | "draft" | "confirmed";
 
 export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = {
@@ -33,9 +36,9 @@ export interface ShiftCell {
   working: boolean;
   startTime: string;
   endTime: string;
-  /** 出勤する店舗。シフト表の月は割当の店舗、それ以外は所属店舗（休みの日は空） */
+  /** 出勤する店舗。シフト表の人は割当の店舗、それ以外は所属店舗（休みの日は空） */
   storeId: string;
-  /** 早番・遅番（シフト表の月だけ。それ以外は空） */
+  /** 早番・遅番（シフト表の人だけ。それ以外は空） */
   shiftType: ShiftType | "";
   /** 管理者のメモ（シフト表のメモ・個別調整のメモ） */
   note: string;
@@ -45,8 +48,8 @@ export interface ShiftCell {
   dayoff: { reason: string; paidLeave: boolean } | null;
 }
 
-/** 月のシフト表の状態（割当が1件もなければ未作成、1件でも公開済みがあれば公開中） */
-export function shiftStatusOf(assignments: ShiftAssignment[]): ShiftStatus {
+/** シフト表の行の状態（行が無ければ未作成、1件でも公開済みがあれば公開中） */
+export function shiftStatusOf(assignments: Pick<ShiftAssignment, "status">[]): ShiftStatus {
   if (assignments.length === 0) return "none";
   return assignments.some((a) => a.status === "confirmed") ? "confirmed" : "draft";
 }
@@ -54,9 +57,12 @@ export function shiftStatusOf(assignments: ShiftAssignment[]): ShiftStatus {
 export interface MonthSchedule {
   month: string;
   dates: string[];
+  /** 月全体の状態（1人でも公開中なら公開中） */
   status: ShiftStatus;
-  /** 表に出しているのがシフト表か（false＝基本パターン＋希望休＋個別調整の「いつもどおりの予定」） */
-  fromShift: boolean;
+  /** その人のシフト表の状態（その人の行で決まる） */
+  statusOf(staffId: string): ShiftStatus;
+  /** その人の予定をシフト表から出しているか（false＝いつもどおりの予定） */
+  fromShift(staffId: string): boolean;
   cell(staffId: string, date: string): ShiftCell;
 }
 
@@ -80,20 +86,25 @@ export function buildMonthSchedule(input: {
   /** 下書きのシフト表も表に出すか（管理者の画面だけ true） */
   showDraft: boolean;
 }): MonthSchedule {
-  const status = shiftStatusOf(input.assignments);
-  const fromShift = status === "confirmed" || (status === "draft" && input.showDraft);
   const homeStore = new Map(input.staff.map((s) => [s.id, s.storeId]));
   const patternsByStaff = groupBy(input.patterns, (p) => p.staffId);
   const dayoffsByStaff = groupBy(input.dayoffs, (d) => d.staffId);
   const overridesByStaff = groupBy(input.overrides, (o) => o.staffId);
+  const rowsByStaff = groupBy(input.assignments, (a) => a.staffId);
   const dayoffAt = new Map(input.dayoffs.map((d) => [`${d.staffId}|${d.date}`, d]));
   const assignmentAt = new Map(input.assignments.map((a) => [`${a.staffId}|${a.date}`, a]));
   const cache = new Map<string, ShiftCell>();
 
+  const statusOf = (staffId: string) => shiftStatusOf(rowsByStaff.get(staffId) ?? []);
+  const fromShift = (staffId: string) => {
+    const st = statusOf(staffId);
+    return st === "confirmed" || (st === "draft" && input.showDraft);
+  };
+
   const resolve = (staffId: string, date: string): ShiftCell => {
     const d = dayoffAt.get(`${staffId}|${date}`);
     const dayoff = d ? { reason: d.reason, paidLeave: d.paidLeave } : null;
-    if (fromShift) {
+    if (fromShift(staffId)) {
       const a = assignmentAt.get(`${staffId}|${date}`);
       if (a) {
         return {
@@ -148,7 +159,8 @@ export function buildMonthSchedule(input: {
   return {
     month: input.month,
     dates: datesOfMonth(input.month),
-    status,
+    status: shiftStatusOf(input.assignments),
+    statusOf,
     fromShift,
     cell(staffId, date) {
       const key = `${staffId}|${date}`;

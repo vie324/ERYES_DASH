@@ -106,7 +106,7 @@ export default async function StaffSchedulePage({
         nextHref={href({ month: addMonths(month, 1) })}
       />
 
-      {schedule.status === "confirmed" ? (
+      {schedule.statusOf(session.staffId) === "confirmed" ? (
         <p className="note note-ok mb-4 flex items-center gap-2">
           <Icon name="checkCircle" className="w-4 h-4 shrink-0" />
           この月のシフトは確定しています
@@ -114,7 +114,7 @@ export default async function StaffSchedulePage({
       ) : (
         <p className="note note-warn mb-4 !font-normal">
           <span className="font-bold">
-            {schedule.status === "draft" ? "この月のシフトは作成中です。" : "この月のシフトはまだ確定していません。"}
+            {schedule.statusOf(session.staffId) === "draft" ? "この月のシフトは作成中です。" : "この月のシフトはまだ確定していません。"}
           </span>
           いつもの出勤日（基本パターン）と希望休から出した予定です。確定すると、ここが確定したシフトに変わります。
         </p>

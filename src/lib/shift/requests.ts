@@ -4,7 +4,7 @@
 //
 // 「提出済み」＝提出の記録がある（休み0日での提出を含む）か、その月の希望休が1日でもある。
 
-import { monthRange, todayJst } from "@/lib/date";
+import { addMonths, monthRange, todayJst } from "@/lib/date";
 import {
   currentTargetMonth,
   deadlineLabel,
@@ -12,7 +12,45 @@ import {
   remainingLabel,
   requestDeadline,
 } from "@/lib/shift/period";
-import type { DataStore } from "@/lib/data/types";
+import type { DataStore, DayoffRequest } from "@/lib/data/types";
+
+/**
+ * 希望休の一覧（dayoff_requests）に、まだ移していない旧「シフト希望」の休み（shift_requests の off）を足す。
+ * schema.sql を流し直すと dayoff_requests に移るが、それまでの間も旧画面で出された休みが見えて、
+ * 出し直しても消えないようにする（出し直すと旧シフト希望のその月の分は消えるので、その前に見せておく）。
+ */
+export async function listDayoffsWithLegacy(
+  db: DataStore,
+  filter: { staffId?: string; from: string; to: string }
+): Promise<DayoffRequest[]> {
+  const months: string[] = [];
+  for (let m = filter.from.slice(0, 7); m <= filter.to.slice(0, 7) && months.length < 24; m = addMonths(m, 1)) {
+    months.push(m);
+  }
+  const [rows, legacy] = await Promise.all([
+    db.listDayoffRequests(filter),
+    Promise.all(months.map((m) => db.listShiftRequests(m, filter.staffId))),
+  ]);
+  const have = new Set(rows.map((r) => `${r.staffId}|${r.date}`));
+  const extra: DayoffRequest[] = legacy
+    .flat()
+    .filter(
+      (r) =>
+        r.preference === "off" &&
+        r.date >= filter.from &&
+        r.date <= filter.to &&
+        !have.has(`${r.staffId}|${r.date}`)
+    )
+    .map((r) => ({
+      id: r.id,
+      staffId: r.staffId,
+      date: r.date,
+      reason: r.reason,
+      paidLeave: r.paidLeave,
+      createdAt: new Date(0),
+    }));
+  return extra.length === 0 ? rows : [...rows, ...extra].sort((a, b) => a.date.localeCompare(b.date));
+}
 
 export interface RequestStatus {
   submitted: boolean;
@@ -28,7 +66,7 @@ export interface RequestStatus {
 export async function getMyRequestStatus(db: DataStore, staffId: string, month: string): Promise<RequestStatus> {
   const [record, dayoffs] = await Promise.all([
     db.getShiftRequestMonth(staffId, month),
-    db.listDayoffRequests({ staffId, ...monthRange(month) }),
+    listDayoffsWithLegacy(db, { staffId, ...monthRange(month) }),
   ]);
   return {
     submitted: Boolean(record) || dayoffs.length > 0,
@@ -43,7 +81,7 @@ export async function getMyRequestStatus(db: DataStore, staffId: string, month: 
 export async function listRequestStatuses(db: DataStore, month: string): Promise<Map<string, RequestStatus>> {
   const [records, dayoffs] = await Promise.all([
     db.listShiftRequestMonths(month),
-    db.listDayoffRequests(monthRange(month)),
+    listDayoffsWithLegacy(db, monthRange(month)),
   ]);
   const map = new Map<string, RequestStatus>();
   const ensure = (staffId: string) => {
