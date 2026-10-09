@@ -136,7 +136,9 @@ create table if not exists next_appointments (
 );
 
 -- ============================================================
--- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能）
+-- 出勤予定のもと（基本パターン＋希望休＋個別調整）
+-- シフト表（shift_assignments）を作っていない月は、これで「いつもどおりの予定」を出す。
+-- 希望休はシフト表の自動作成にも使う（以前は旧シフトの「シフト希望」と別々に集めていた）。
 -- ============================================================
 
 -- 週の基本出勤パターン（スタッフ×曜日）。weekday: 0=日〜6=土。行が無い曜日は「休み」扱い
@@ -149,7 +151,7 @@ create table if not exists work_patterns (
   primary key (staff_id, weekday)
 );
 
--- 希望休（スタッフが「3ヶ月後の月」を対象に、当月7日までに申請する休み希望日）
+-- 希望休（スタッフが先の月の分を締切までに出す休み希望日。締切はシフトのルール設定で決まる）
 create table if not exists dayoff_requests (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id) on delete cascade,
@@ -160,7 +162,7 @@ create table if not exists dayoff_requests (
   unique (staff_id, date)
 );
 
--- スケジュールの個別上書き（管理者の手動調整。パターン・希望休より優先）
+-- スケジュールの個別上書き（シフト表を作っていない月の、管理者の手動調整。パターン・希望休より優先）
 create table if not exists schedule_overrides (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id) on delete cascade,
@@ -182,7 +184,7 @@ create table if not exists broadcasts (
 );
 
 -- ============================================================
--- シフト管理（3店舗の勤務を一元管理）
+-- シフト（希望休の受付 → シフト表の自動作成 → 調整 → 公開）
 -- ============================================================
 
 -- シフトルール（1行のみ。管理者画面から変更）
@@ -194,7 +196,7 @@ create table if not exists shift_rules (
   request_lead_months integer not null default 3            -- 何ヶ月先の分を募集するか（3＝9月5日までに12月分）
 );
 
--- シフト希望（月単位：備考・提出日時）
+-- 希望休の提出記録（月単位：備考・提出日時）。休み0日でも「提出済み」が分かるように1行持つ
 create table if not exists shift_request_months (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id),
@@ -205,7 +207,8 @@ create table if not exists shift_request_months (
   unique (staff_id, target_month)
 );
 
--- シフト希望（日単位）。行が無い日は「指定なし＝早遅どちらでも可」
+-- 旧「シフト希望」の日単位の希望（早番・遅番・休み）。いまの画面からは作られない。
+-- 休みは dayoff_requests へ移した（下の移行を参照）。残っている早番・遅番の希望だけ自動作成で参考にする
 create table if not exists shift_requests (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references staff(id),
@@ -225,7 +228,7 @@ create table if not exists staff_available_stores (
   primary key (staff_id, target_month, store_id)
 );
 
--- シフト割当（1スタッフ1日1件。draft=下書き/confirmed=確定・公開）
+-- シフト表（1スタッフ1日1件。行が無い日は休み。draft=下書き（管理者のみ）/confirmed=公開中）
 create table if not exists shift_assignments (
   id uuid primary key default gen_random_uuid(),
   target_month text not null check (target_month ~ '^\d{4}-\d{2}$'),
@@ -234,6 +237,9 @@ create table if not exists shift_assignments (
   store_id uuid not null references stores(id),
   shift_type text not null check (shift_type in ('early', 'late')),
   status text not null default 'draft' check (status in ('draft', 'confirmed')),
+  start_time text not null default '',   -- 勤務時間 "10:00"（空文字は指定なし。自動作成では基本パターンの時間）
+  end_time text not null default '',
+  note text not null default '',         -- 管理者のメモ（研修・時短など）
   created_at timestamptz not null default now(),
   unique (staff_id, date)
 );
@@ -665,6 +671,16 @@ alter table dayoff_requests add column if not exists paid_leave boolean not null
 alter table shift_requests add column if not exists reason text not null default '';
 alter table shift_requests add column if not exists paid_leave boolean not null default false;
 
+-- シフトの一本化（2026-10）：シフト表に時間とメモ
+alter table shift_assignments add column if not exists start_time text not null default '';
+alter table shift_assignments add column if not exists end_time text not null default '';
+alter table shift_assignments add column if not exists note text not null default '';
+-- 旧「シフト希望」で出された休みを、希望休（dayoff_requests）へ移す。
+-- 何度実行しても重複しない（同じ人・同じ日がすでにあれば何もしない）
+insert into dayoff_requests (staff_id, date, reason, paid_leave)
+select staff_id, date, reason, paid_leave from shift_requests where preference = 'off'
+on conflict (staff_id, date) do nothing;
+
 -- 発注・購入申請：発注先URL
 alter table order_requests add column if not exists supplier_url text not null default '';
 
@@ -797,7 +813,7 @@ from (values
 ) as v(name, address, lat, lng, gps_radius_m, attendance_enabled)
 where not exists (select 1 from stores);
 
--- シフトルールの初期値（連勤上限5日・各店舗2名・締切は前月25日）
+-- シフトルールの初期値（連勤上限5日・各店舗2名・3ヶ月先の分を5日締切）
 insert into shift_rules (id) values (1)
 on conflict (id) do nothing;
 

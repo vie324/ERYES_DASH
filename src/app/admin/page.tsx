@@ -190,8 +190,8 @@ async function EyesAdminDashboard() {
       <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/admin/reports" icon="barChart" accent="gold" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
-        <BigMenuLink href="/admin/schedule" icon="calendar" accent="sage" title="出勤スケジュール"
-          description="基本パターン＋希望休でシフトを管理" />
+        <BigMenuLink href="/admin/schedule" icon="calendar" accent="sage" title="シフト"
+          description="希望休の確認・シフト表の自動作成・調整・公開" />
         <BigMenuLink href="/admin/counseling" icon="clipboard" accent="sky" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
         <BigMenuLink href="/admin/customers" icon="user" accent="teal" title="顧客一覧"
@@ -261,8 +261,8 @@ async function EniAdminDashboard() {
         <BigMenuLink href="/staff/orders" icon="banknote" accent="clay" title="発注・購入申請の管理"
           description="ウィッグ・社販・商材の申請と発注状況"
           badge={requestedOrders} />
-        <BigMenuLink href="/admin/schedule" icon="calendar" accent="lavender" title="出勤スケジュール"
-          description="基本パターン＋希望休でシフトを管理" />
+        <BigMenuLink href="/admin/schedule" icon="calendar" accent="lavender" title="シフト"
+          description="希望休の確認・シフト表の自動作成・調整・公開" />
         <BigMenuLink href="/admin/settings" icon="sliders" accent="indigo" title="マスタ設定"
           description="スタッフの職種・幹部・店舗の設定" />
       </div>

@@ -178,7 +178,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
       {
         label: "勤務",
         items: [
-          { href: "/staff/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
+          { href: "/staff/schedule", label: "シフト・希望休", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
           ...(ctx.attendanceEnabled
             ? [{ href: "/staff/attendance", label: "出勤・退勤の打刻", short: "打刻", icon: "mapPin" as IconName }]
             : []),
@@ -248,7 +248,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
     {
       label: "勤務・申請",
       items: [
-        { href: "/staff/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
+        { href: "/staff/schedule", label: "シフト・希望休", short: "シフト", icon: "calendar", badge: b.shift ? "！" : null },
         // 欠勤・早退の報告は幹部以上が対応するので、一般スタッフには出さない
         ...(ctx.isExecutive
           ? [{ href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" as IconName }]
@@ -328,7 +328,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       {
         label: "勤務",
         items: [
-          { href: "/admin/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar" },
+          { href: "/admin/schedule", label: "シフト（作成・調整）", short: "シフト", icon: "calendar" },
           ...(ctx.attendanceEnabled
             ? [{ href: "/admin/attendance", label: "勤怠管理", icon: "clock" as IconName }]
             : []),
@@ -370,7 +370,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
     {
       label: "勤務・申請",
       items: [
-        { href: "/admin/schedule", label: "出勤スケジュール", short: "シフト", icon: "calendar" },
+        { href: "/admin/schedule", label: "シフト（作成・調整）", short: "シフト", icon: "calendar" },
         { href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" },
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote", badge: badge(b.orders) },
       ],

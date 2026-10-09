@@ -7,7 +7,7 @@ import { getBrand, BRAND_INFO, type Brand } from "@/lib/brand";
 import { getBrandName, getLogoSrc } from "@/lib/logo";
 import { buildMenuShortcuts, buildMobileTabs, buildNav, homeNavItem, type NavContext } from "@/lib/nav";
 import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
-import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
+import { getDayoffNotice } from "@/lib/shift/requests";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary, hasExecNotice } from "@/lib/tasks";
 import { getAppLinks } from "@/lib/settings";
@@ -34,27 +34,24 @@ export async function AppFrame({
   const jobType = me?.jobType ?? "";
   const isExecutive = isAdmin || (me?.isExecutive ?? false);
 
-  // 希望休の未提出（申請期間中のみ）
-  const dayoffTarget = defaultDayoffTargetMonth(today);
-  const dayoffEditable = isDayoffEditable(dayoffTarget, today);
+  // 希望休の未提出（募集のお知らせの期間だけ。ホームのお知らせ・タスクと同じ判定）
+  const dayoffNotice = isAdmin ? Promise.resolve(null) : getDayoffNotice(db, session.staffId, today);
 
   const badges: NavContext["badges"] = {};
   let attendanceEnabled = false;
 
   if (brand === "eyes") {
-    const [pending, stores, myReport, myDayoffs] = await Promise.all([
+    const [pending, stores, myReport, notice] = await Promise.all([
       db.listCounselingResponses({ status: "pending" }),
       db.listStores(),
       isAdmin ? Promise.resolve(null) : db.getDailyReport(session.staffId, today),
-      dayoffEditable && !isAdmin
-        ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
-        : Promise.resolve([]),
+      dayoffNotice,
     ]);
     attendanceEnabled = stores.some((s) => s.attendanceEnabled);
     badges.counseling = pending.length;
     if (!isAdmin) {
       badges.report = myReport ? 0 : 1;
-      badges.shift = dayoffEditable && myDayoffs.length === 0 ? 1 : 0;
+      badges.shift = notice ? 1 : 0;
     }
     if (isAdmin) {
       const appointments = await db.listNextAppointments({ from: new Date() });
@@ -64,7 +61,7 @@ export async function AppFrame({
     }
   } else {
     const weekStart = weekStartOf(today);
-    const [missingMinutes, myPlan, myStylist, myWeekly, myDayoffs] = await Promise.all([
+    const [missingMinutes, myPlan, myStylist, myWeekly, notice] = await Promise.all([
       db.listMeetingsMissingMinutes(today),
       isAdmin
         ? Promise.resolve(null)
@@ -75,9 +72,7 @@ export async function AppFrame({
       !isAdmin && jobType !== "stylist"
         ? db.getEniReport("weekly", session.staffId, weekStart)
         : Promise.resolve(null),
-      dayoffEditable && !isAdmin
-        ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
-        : Promise.resolve([]),
+      dayoffNotice,
     ]);
     if (isAdmin) {
       badges.minutes = missingMinutes.length;
@@ -94,7 +89,7 @@ export async function AppFrame({
       badges.plan = myPlan ? 0 : 1;
       if (jobType !== "assistant") badges.eniReport = myStylist ? 0 : 1;
       if (jobType !== "stylist") badges.weeklyReport = myWeekly ? 0 : 1;
-      badges.shift = dayoffEditable && myDayoffs.length === 0 ? 1 : 0;
+      badges.shift = notice ? 1 : 0;
     }
   }
 

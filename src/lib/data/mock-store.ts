@@ -4,8 +4,10 @@
 
 import { randomBytes, randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
-import { addDays, addMonths, datesOfMonth, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
+import { addDays, addMonths, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
+import { currentTargetMonth } from "@/lib/shift/period";
+import { buildMonthSchedule, workingDatesOf } from "@/lib/shift/month";
 import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
@@ -63,7 +65,6 @@ import type {
   SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
-  ShiftDayRequest,
   ShiftRequest,
   ShiftRequestMonth,
   ShiftRules,
@@ -154,6 +155,24 @@ function jstAt(dateStr: string, hour: number, minute = 0): Date {
   return new Date(start.getTime() + (hour * 60 + minute) * 60 * 1000);
 }
 
+/** シフト表の1マス（時間・メモの省略を空文字で埋める） */
+function toMockAssignment(
+  input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
+): ShiftAssignment {
+  return {
+    id: randomUUID(),
+    targetMonth: input.targetMonth,
+    date: input.date,
+    staffId: input.staffId,
+    storeId: input.storeId,
+    shiftType: input.shiftType,
+    status: input.status,
+    startTime: input.startTime ?? "",
+    endTime: input.endTime ?? "",
+    note: input.note ?? "",
+  };
+}
+
 function seed(): MockDb {
   const today = todayJst();
   const month = thisMonthJst();
@@ -185,6 +204,16 @@ function seed(): MockDb {
       address: "東京都渋谷区恵比寿1-6-7（仮）",
       lat: 35.646691,
       lng: 139.710106,
+      gpsRadiusM: 100,
+      attendanceEnabled: true,
+    },
+    // ENi（ヘアサロン）の店舗。ENiのスタッフはここに所属（シフトの店舗の絞り込みの確認用）
+    {
+      id: "store-4",
+      name: "ENi 自由が丘店",
+      address: "東京都目黒区自由が丘1-14-14（仮）",
+      lat: 35.608614,
+      lng: 139.670152,
       gpsRadiusM: 100,
       attendanceEnabled: true,
     },
@@ -283,7 +312,7 @@ function seed(): MockDb {
     ).map(
       ([id, name, loginId, jobType, rank, isExecutive, mission, tiers]): StaffWithSecret => ({
         id,
-        storeId: store.id,
+        storeId: "store-4",
         name,
         loginId,
         role: "staff",
@@ -488,45 +517,58 @@ function seed(): MockDb {
     },
   ];
 
-  // ---- 出勤スケジュール（基本パターン＋希望休）のデモデータ ----
-  // 例：staff-1=フル出勤（月曜定休）、staff-2=平日のみ 10:00-16:30（金曜は12:00-16:30）
+  // ---- 出勤予定のもと（基本パターン＋希望休）のデモデータ ----
+  // EREYS：staff-1=火〜日 10:00-19:00（月曜定休）、staff-2=火〜金 10:00-16:30（金曜は12:00-16:30）
+  // ENi  ：スタイリスト＝火〜日 10:00-20:00、アシスタント＝火〜日 9:30-19:30（月曜定休）
+  // 管理者（相川）はパターンなし＝シフトの自動作成の対象外（表には出るが、作成には入らない）
   const workPatterns: WorkPatternDay[] = [];
-  for (let wd = 0; wd <= 6; wd++) {
-    workPatterns.push({
-      staffId: "staff-1",
-      weekday: wd,
-      isWorking: wd !== 1, // 月曜定休
-      startTime: wd !== 1 ? "10:00" : "",
-      endTime: wd !== 1 ? "19:00" : "",
-    });
-    const isWeekday = wd >= 2 && wd <= 5; // 火〜金
-    workPatterns.push({
-      staffId: "staff-2",
-      weekday: wd,
-      isWorking: isWeekday,
-      startTime: isWeekday ? (wd === 5 ? "12:00" : "10:00") : "",
-      endTime: isWeekday ? "16:30" : "",
-    });
-  }
-  const dayoffMonth = addMonths(month, 3); // 3ヶ月後の希望休（募集中の月）
-  const dayoffRequests: DayoffRequest[] = [
-    {
-      id: randomUUID(),
-      staffId: "staff-2",
-      date: `${dayoffMonth}-10`,
-      reason: "友人の結婚式",
-      paidLeave: true,
-      createdAt: jstAt(today, 9),
-    },
-    {
-      id: randomUUID(),
-      staffId: "staff-2",
-      date: `${dayoffMonth}-24`,
-      reason: "",
-      paidLeave: false,
-      createdAt: jstAt(today, 9),
-    },
-  ];
+  const addPattern = (staffId: string, working: (wd: number) => [string, string] | null) => {
+    for (let wd = 0; wd <= 6; wd++) {
+      const t = working(wd);
+      workPatterns.push({ staffId, weekday: wd, isWorking: t !== null, startTime: t?.[0] ?? "", endTime: t?.[1] ?? "" });
+    }
+  };
+  addPattern("staff-1", (wd) => (wd !== 1 ? ["10:00", "19:00"] : null));
+  addPattern("staff-2", (wd) => (wd >= 2 && wd <= 5 ? [wd === 5 ? "12:00" : "10:00", "16:30"] : null));
+  for (const id of ["staff-3", "staff-4"]) addPattern(id, (wd) => (wd !== 1 ? ["10:00", "20:00"] : null));
+  for (const id of ["staff-5", "staff-6"]) addPattern(id, (wd) => (wd !== 1 ? ["09:30", "19:30"] : null));
+
+  // シフトのルール（3ヶ月先の分を、その3ヶ月前の5日までに出す＝9月5日までに12月分）
+  const shiftRules: ShiftRules = {
+    maxConsecutiveDays: 5,
+    minStaffPerStoreDay: 2,
+    requestDeadlineDay: 5,
+    requestLeadMonths: 3,
+  };
+  // 募集中の月（スタッフが今出す月）と、締切を過ぎて今つくる月
+  const openMonth = currentTargetMonth(shiftRules, today);
+  const buildMonth = addMonths(openMonth, -1);
+  const dayIn = (m: string, day: number) => {
+    const last = Number(monthRange(m).to.slice(8));
+    return `${m}-${String(Math.min(day, last)).padStart(2, "0")}`;
+  };
+  /** その月の第n◯曜日（weekday: 0=日〜6=土）。いつも出勤する曜日に希望休を入れるため */
+  const nthWeekday = (m: string, weekday: number, n: number) => {
+    const first = new Date(`${m}-01T00:00:00Z`).getUTCDay();
+    return dayIn(m, 1 + ((weekday - first + 7) % 7) + (n - 1) * 7);
+  };
+
+  // 希望休：今月（公開済みのシフトにも印が出る）・つくる月（4人が提出）・募集中の月（2人が提出）
+  const dayoffRequests: DayoffRequest[] = [];
+  const addDayoff = (staffId: string, date: string, reason = "", paidLeave = false) =>
+    dayoffRequests.push({ id: randomUUID(), staffId, date, reason, paidLeave, createdAt: jstAt(today, 9) });
+  // 曜日は、それぞれのいつもの出勤日に合わせる（田中さんは火〜金、ほかの人は火〜日）
+  addDayoff("staff-2", nthWeekday(month, 3, 2), "通院", false);
+  addDayoff("staff-4", nthWeekday(month, 5, 3), "家族の予定", true);
+  addDayoff("staff-1", nthWeekday(buildMonth, 6, 1), "友人の結婚式", true);
+  addDayoff("staff-1", nthWeekday(buildMonth, 0, 1));
+  addDayoff("staff-2", nthWeekday(buildMonth, 3, 2), "通院");
+  // 同じ日にスタイリスト2人の希望休が重なる例（理由を見て決める）
+  addDayoff("staff-3", nthWeekday(buildMonth, 2, 2), "セミナー参加");
+  addDayoff("staff-4", nthWeekday(buildMonth, 2, 2), "子どもの行事", true);
+  addDayoff("staff-5", nthWeekday(buildMonth, 3, 3));
+  addDayoff("staff-2", nthWeekday(openMonth, 4, 1), "家族旅行", true);
+  addDayoff("staff-2", nthWeekday(openMonth, 5, 1), "家族旅行", true);
 
   // ---- ENi（ヘアサロン）のデモデータ ----
   const eniReports: (EniReport & { kind: "stylist" | "weekly" })[] = [
@@ -971,129 +1013,86 @@ function seed(): MockDb {
     ["退勤", 100],
   ].map(([label, sortOrder]) => ({ id: randomUUID(), label: label as string, sortOrder: sortOrder as number }));
 
-  // ---- シフト管理のデモデータ ----
-  const shiftRules: ShiftRules = {
-    maxConsecutiveDays: 5,
-    minStaffPerStoreDay: 2,
-    // 3ヶ月先の分を、その3ヶ月前の5日までに出す（例：9月5日までに12月分）
-    requestDeadlineDay: 5,
-    requestLeadMonths: 3,
-  };
-  const shiftStaffIds = staff.map((s) => s.id); // 管理者も施術に入る想定で全員を対象にする
-  const storeIds = stores.map((s) => s.id);
-
-  // 当月：全員提出済みの想定で自動割当を実行し、確定済みとして公開しておく
-  const monthDates = datesOfMonth(month);
-  const currentPrefs = new Map<string, Map<string, ShiftPreference>>();
-  const currentAvailable = new Map<string, Set<string>>();
-  shiftStaffIds.forEach((staffId, idx) => {
-    const prefMap = new Map<string, ShiftPreference>();
-    monthDates.forEach((d, i) => {
-      if (i % 7 === idx % 7) prefMap.set(d, "off"); // 週1の休み希望をずらして入れる
+  // ---- シフト表のデモデータ ----
+  // 今月〜つくる月の前月までは「公開中」。つくる月は未作成（締切済み・希望休がそろっている）、
+  // 募集中の月は受付中。自動作成は本番と同じロジック（基本パターン・希望休・連勤上限）で組む。
+  const shiftStaff = staff.filter((s) => workPatterns.some((p) => p.staffId === s.id && p.isWorking));
+  const patternMap = new Map<string, Map<number, { isWorking: boolean; startTime: string; endTime: string }>>();
+  for (const p of workPatterns) {
+    if (!patternMap.has(p.staffId)) patternMap.set(p.staffId, new Map());
+    patternMap.get(p.staffId)!.set(p.weekday, { isWorking: p.isWorking, startTime: p.startTime, endTime: p.endTime });
+  }
+  const shiftAssignments: ShiftAssignment[] = [];
+  // 先月はシフト表が無い（基本パターンどおり）として、月またぎの連勤を数える（本番の自動作成と同じ）
+  const prevSchedule = buildMonthSchedule({
+    month: prevMonth,
+    staff,
+    patterns: workPatterns,
+    dayoffs: [],
+    overrides: [],
+    assignments: [],
+    showDraft: true,
+  });
+  let prevDates = new Map(shiftStaff.map((s) => [s.id, workingDatesOf(prevSchedule, s.id)]));
+  for (let m = month; m < buildMonth; m = addMonths(m, 1)) {
+    const prefs = new Map<string, Map<string, ShiftPreference>>();
+    for (const d of dayoffRequests.filter((r) => r.date.startsWith(`${m}-`))) {
+      if (!prefs.has(d.staffId)) prefs.set(d.staffId, new Map());
+      prefs.get(d.staffId)!.set(d.date, "off");
+    }
+    const generated = generateAssignments({
+      targetMonth: m,
+      storeIds: stores.map((s) => s.id),
+      staffIds: shiftStaff.map((s) => s.id),
+      prefs,
+      availableStores: new Map(shiftStaff.map((s) => [s.id, new Set([s.storeId])])),
+      rules: shiftRules,
+      prevMonthAssignedDates: prevDates,
+      jobTypes: new Map(staff.map((s) => [s.id, s.jobType])),
+      tiers: new Map(staff.map((s) => [s.id, s.tiers])),
+      ranks: new Map(staff.map((s) => [s.id, s.rank])),
+      homeStores: new Map(staff.map((s) => [s.id, s.storeId])),
+      patterns: patternMap,
     });
-    currentPrefs.set(staffId, prefMap);
-    currentAvailable.set(staffId, new Set(storeIds));
-  });
-  const generated = generateAssignments({
-    targetMonth: month,
-    storeIds,
-    staffIds: shiftStaffIds,
-    prefs: currentPrefs,
-    availableStores: currentAvailable,
-    rules: shiftRules,
-    prevMonthAssignedDates: new Map(),
-    jobTypes: new Map(staff.map((s) => [s.id, s.jobType])),
-    tiers: new Map(staff.map((s) => [s.id, s.tiers])),
-    allHandsDates: new Set(),
-  });
-  const shiftAssignments: ShiftAssignment[] = generated.assignments.map((a) => ({
-    id: randomUUID(),
-    targetMonth: month,
-    status: "confirmed",
-    ...a,
-  }));
+    for (const a of generated.assignments) {
+      shiftAssignments.push(toMockAssignment({ ...a, targetMonth: m, status: "confirmed" }));
+    }
+    prevDates = new Map(
+      shiftStaff.map((s) => [s.id, new Set(generated.assignments.filter((a) => a.staffId === s.id).map((a) => a.date))])
+    );
+  }
 
-  // 当月の希望データも保存しておく（管理者画面の希望一覧で見えるように）
+  // 希望休の提出記録（休み0日での提出も「提出済み」）。つくる月は5人が提出し、藤田さんは未提出
+  // （基本パターンどおりで作られる例）。相川さんは基本パターンが無いので自動作成の対象外
   const shiftRequestMonths: ShiftRequestMonth[] = [];
-  const shiftRequests: ShiftRequest[] = [];
-  const shiftAvailableStores: { staffId: string; targetMonth: string; storeId: string }[] = [];
-  shiftStaffIds.forEach((staffId) => {
+  const addRecord = (staffId: string, targetMonth: string, note = "") =>
     shiftRequestMonths.push({
       id: randomUUID(),
       staffId,
-      targetMonth: month,
-      note: "",
-      submittedAt: jstAt(addDays(`${month}-01`, -10), 12),
-      updatedAt: jstAt(addDays(`${month}-01`, -10), 12),
+      targetMonth,
+      note,
+      submittedAt: jstAt(addDays(today, -3), 21),
+      updatedAt: jstAt(addDays(today, -3), 21),
     });
-    for (const [date, preference] of currentPrefs.get(staffId)!) {
-      shiftRequests.push({
-        id: randomUUID(),
-        staffId,
-        targetMonth: month,
-        date,
-        preference,
-        reason: "",
-        paidLeave: false,
-      });
-    }
-    for (const storeId of storeIds) {
-      shiftAvailableStores.push({ staffId, targetMonth: month, storeId });
-    }
-  });
-
-  // 翌月：募集中の状態（3名が提出済み・残りは未提出）
-  const nextMonth = addMonths(month, 1);
-  const nm = (day: number) => `${nextMonth}-${String(day).padStart(2, "0")}`;
-  const nextSubmissions: {
-    staffId: string;
-    days: Record<string, ShiftPreference>;
-    storeIds: string[];
-    note: string;
-  }[] = [
-    {
-      staffId: "staff-1",
-      days: { [nm(3)]: "off", [nm(12)]: "off", [nm(20)]: "off", [nm(21)]: "off" },
-      storeIds: ["store-1", "store-2"],
-      note: "20日・21日は通院のため休み希望です",
-    },
-    {
-      staffId: "staff-2",
-      days: { [nm(7)]: "off", [nm(15)]: "early", [nm(16)]: "early" },
-      storeIds: ["store-1", "store-2", "store-3"],
-      note: "",
-    },
-    {
-      staffId: "staff-3",
-      days: { [nm(5)]: "off", [nm(6)]: "off", [nm(10)]: "late", [nm(24)]: "late" },
-      storeIds: ["store-2", "store-3"],
-      note: "午前は学校送迎があるため遅番が助かります",
-    },
-  ];
-  for (const sub of nextSubmissions) {
-    shiftRequestMonths.push({
-      id: randomUUID(),
-      staffId: sub.staffId,
-      targetMonth: nextMonth,
-      note: sub.note,
-      submittedAt: jstAt(today, 8),
-      updatedAt: jstAt(today, 8),
-    });
-    for (const [date, preference] of Object.entries(sub.days)) {
-      shiftRequests.push({
-        id: randomUUID(),
-        staffId: sub.staffId,
-        targetMonth: nextMonth,
-        date,
-        preference,
-        reason: preference === "off" && date.endsWith("-20") ? "通院のため" : "",
-        paidLeave: false,
-      });
-    }
-    for (const storeId of sub.storeIds) {
-      shiftAvailableStores.push({ staffId: sub.staffId, targetMonth: nextMonth, storeId });
-    }
+  for (let m = month; m < buildMonth; m = addMonths(m, 1)) {
+    for (const s of shiftStaff) addRecord(s.id, m);
   }
+  addRecord("staff-1", buildMonth, "4日は前日の式のあとなので休みたいです");
+  addRecord("staff-2", buildMonth);
+  addRecord("staff-3", buildMonth);
+  addRecord("staff-4", buildMonth, "12日は午後だけなら出られます");
+  addRecord("staff-5", buildMonth);
+  addRecord("staff-2", openMonth);
+  addRecord("staff-3", openMonth); // 休みなしで提出
+
+  // 勤務できる店舗：佐藤さんが受付中の月に2店舗を選んでいる（他の人・他の月は所属店舗）
+  const shiftAvailableStores: { staffId: string; targetMonth: string; storeId: string }[] = [
+    { staffId: "staff-1", targetMonth: openMonth, storeId: "store-1" },
+    { staffId: "staff-1", targetMonth: openMonth, storeId: "store-2" },
+  ];
+  addRecord("staff-1", openMonth, "表参道店の応援にも入れます");
+  // 旧「シフト希望」（早番・遅番）はいまの画面からは作られないのでデモにも入れない
+  const shiftRequests: ShiftRequest[] = [];
 
   return {
     stores,
@@ -1670,11 +1669,11 @@ class MockStore implements DataStore {
     return { ...this.db.shiftRules };
   }
 
-  async saveShiftRequest(input: {
+  async submitDayoffRequest(input: {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftDayRequest>;
+    days: DayoffInput[];
     storeIds: string[];
   }): Promise<void> {
     const now = new Date();
@@ -1694,21 +1693,23 @@ class MockStore implements DataStore {
         updatedAt: now,
       });
     }
-    // 日別希望と勤務可能店舗は総入れ替え
+    // 希望休・勤務可能店舗は総入れ替え。旧「シフト希望」の日別希望はこの月の分を消す（希望休へ一本化）
+    this.db.dayoffRequests = this.db.dayoffRequests.filter(
+      (r) => !(r.staffId === input.staffId && r.date.startsWith(`${input.targetMonth}-`))
+    );
+    for (const d of input.days) {
+      this.db.dayoffRequests.push({
+        id: randomUUID(),
+        staffId: input.staffId,
+        date: d.date,
+        reason: d.reason,
+        paidLeave: d.paidLeave,
+        createdAt: now,
+      });
+    }
     this.db.shiftRequests = this.db.shiftRequests.filter(
       (r) => !(r.staffId === input.staffId && r.targetMonth === input.targetMonth)
     );
-    for (const [date, day] of Object.entries(input.days)) {
-      this.db.shiftRequests.push({
-        id: randomUUID(),
-        staffId: input.staffId,
-        targetMonth: input.targetMonth,
-        date,
-        preference: day.preference,
-        reason: day.reason,
-        paidLeave: day.paidLeave,
-      });
-    }
     this.db.shiftAvailableStores = this.db.shiftAvailableStores.filter(
       (a) => !(a.staffId === input.staffId && a.targetMonth === input.targetMonth)
     );
@@ -1757,48 +1758,48 @@ class MockStore implements DataStore {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
+  async replaceMonthAssignments(
+    targetMonth: string,
+    rows: NewShiftAssignment[],
+    opts: { staffIds?: string[]; status?: AssignmentStatus } = {}
+  ): Promise<void> {
+    const only = opts.staffIds ? new Set(opts.staffIds) : null;
     this.db.shiftAssignments = this.db.shiftAssignments.filter(
-      (a) => a.targetMonth !== targetMonth
+      (a) => !(a.targetMonth === targetMonth && (!only || only.has(a.staffId)))
     );
     for (const row of rows) {
-      this.db.shiftAssignments.push({
-        id: randomUUID(),
-        targetMonth,
-        status: "draft",
-        ...row,
-      });
+      this.db.shiftAssignments.push(toMockAssignment({ ...row, targetMonth, status: opts.status ?? "draft" }));
     }
   }
 
-  async createShiftAssignment(
+  async upsertShiftAssignment(
     input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
-  ): Promise<ShiftAssignment> {
-    const dup = this.db.shiftAssignments.find(
-      (a) => a.staffId === input.staffId && a.date === input.date
+  ): Promise<void> {
+    this.db.shiftAssignments = this.db.shiftAssignments.filter(
+      (a) => !(a.staffId === input.staffId && a.date === input.date)
     );
-    if (dup) throw new Error("このスタッフはこの日すでに割り当てられています");
-    const created: ShiftAssignment = { id: randomUUID(), ...input };
-    this.db.shiftAssignments.push(created);
-    return { ...created };
+    this.db.shiftAssignments.push(toMockAssignment(input));
   }
 
-  async deleteShiftAssignment(id: string): Promise<void> {
-    this.db.shiftAssignments = this.db.shiftAssignments.filter((a) => a.id !== id);
+  async deleteShiftAssignmentAt(staffId: string, date: string): Promise<void> {
+    this.db.shiftAssignments = this.db.shiftAssignments.filter(
+      (a) => !(a.staffId === staffId && a.date === date)
+    );
   }
 
-  async confirmMonthAssignments(targetMonth: string): Promise<number> {
+  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus, staffIds?: string[]): Promise<number> {
+    const only = staffIds ? new Set(staffIds) : null;
     let count = 0;
     for (const a of this.db.shiftAssignments) {
-      if (a.targetMonth === targetMonth) {
-        a.status = "confirmed";
+      if (a.targetMonth === targetMonth && (!only || only.has(a.staffId))) {
+        a.status = status;
         count++;
       }
     }
     return count;
   }
 
-  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+  // ---- 出勤予定のもと（基本パターン＋希望休＋個別調整） ----
 
   async listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]> {
     return this.db.workPatterns
@@ -1826,22 +1827,6 @@ class MockStore implements DataStore {
           (!filter.staffId || r.staffId === filter.staffId)
       )
       .sort((a, b) => a.date.localeCompare(b.date));
-  }
-
-  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
-    this.db.dayoffRequests = this.db.dayoffRequests.filter(
-      (r) => !(r.staffId === staffId && r.date.startsWith(targetMonth))
-    );
-    for (const d of dates) {
-      this.db.dayoffRequests.push({
-        id: randomUUID(),
-        staffId,
-        date: d.date,
-        reason: d.reason,
-        paidLeave: d.paidLeave,
-        createdAt: new Date(),
-      });
-    }
   }
 
   async listScheduleOverrides(filter: {
