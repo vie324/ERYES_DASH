@@ -82,7 +82,7 @@ export default async function AdminSettingsPage({
       <section className="mb-5">
         <h2 className="font-display text-lg font-bold text-ink-900 mb-3">店舗一覧</h2>
         <p className="text-xs text-ink-500 mb-3">
-          シフト管理は全店舗が対象です。GPS打刻は「最寄りの店舗」の座標・許容半径で判定されます。
+          シフトは全店舗が対象です（店舗名に「ENi」「EREYS」が入っていると、シフト画面で業態ごとに絞り込まれます）。GPS打刻は「最寄りの店舗」の座標・許容半径で判定されます。
         </p>
         <div className="space-y-3">
           {stores.map((store, index) => (

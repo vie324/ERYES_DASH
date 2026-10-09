@@ -1,8 +1,8 @@
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { getBrand } from "@/lib/brand";
-import { formatDateJa, monthRange, todayJst, weekStartOf } from "@/lib/date";
-import { defaultDayoffTargetMonth, dayoffDeadline, isDayoffEditable } from "@/lib/schedule";
+import { formatDateJa, todayJst, weekStartOf } from "@/lib/date";
+import { getDayoffNotice } from "@/lib/shift/requests";
 import { getMyTaskSummary, isTaskActionable, isTaskDueOn } from "@/lib/tasks";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -33,15 +33,13 @@ export default async function TasksPage({
   const me = await db.getStaff(session.staffId);
   const jobType = me?.jobType ?? "";
 
-  // 会社のタスク（自動）：ブランドごとの提出物＋議事録
-  const dayoffTarget = defaultDayoffTargetMonth(today);
-  const dayoffEditable = isDayoffEditable(dayoffTarget, today);
+  // 会社のタスク（自動）：ブランドごとの提出物＋議事録＋希望休
   const [
     summary,
     sentRequests,
     openMeetingTasks,
     staffList,
-    myDayoffs,
+    dayoffNotice,
     todayEyesReport,
     todayStylistReport,
     thisWeekReport,
@@ -52,9 +50,8 @@ export default async function TasksPage({
     db.listStaffTasks({ kind: "request", createdBy: session.staffId, includeDone: true }),
     db.listOpenMeetingTasks(),
     db.listStaff(),
-    dayoffEditable
-      ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
-      : Promise.resolve([]),
+    // 管理用アカウントには出さない（メニューの「！」・ホームのお知らせと同じ）
+    session.role === "admin" ? Promise.resolve(null) : getDayoffNotice(db, session.staffId, today),
     brand === "eyes" ? db.getDailyReport(session.staffId, today) : Promise.resolve(null),
     brand === "eni" && jobType !== "assistant"
       ? db.getEniReport("stylist", session.staffId, today)
@@ -104,11 +101,11 @@ export default async function TasksPage({
       detail: "会社のタスク",
     });
   }
-  if (dayoffEditable && myDayoffs.length === 0) {
+  if (dayoffNotice) {
     companyLinks.push({
-      href: "/staff/schedule/dayoff",
-      label: `${Number(dayoffTarget.slice(5))}月の希望休が未提出です`,
-      detail: `締切：${formatDateJa(dayoffDeadline(dayoffTarget), true)}`,
+      href: dayoffNotice.href,
+      label: `${Number(dayoffNotice.month.slice(5))}月分の希望休が未提出です`,
+      detail: `締切：${dayoffNotice.deadlineLabel}（${dayoffNotice.remaining}）`,
     });
   }
 

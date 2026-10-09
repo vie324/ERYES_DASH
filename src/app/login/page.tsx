@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 /** 左側の紹介パネルに並べる機能（PCのみ表示） */
 const HIGHLIGHTS: { icon: "pencil" | "calendar" | "users"; text: string }[] = [
   { icon: "pencil", text: "日報・週報とカウンセリングの記録" },
-  { icon: "calendar", text: "出勤スケジュールと希望休の管理" },
+  { icon: "calendar", text: "シフトと希望休の管理" },
   { icon: "users", text: "ミーティング・議事録・組織図" },
 ];
 

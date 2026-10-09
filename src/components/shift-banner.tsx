@@ -1,42 +1,26 @@
-// シフト希望募集のお知らせバナー（ログイン後のスタッフホームに表示）。
-// 毎月15日の自動通知（モック）とは別に、システム内でも常に提出を促せるようにする。
+// 希望休の募集のお知らせ（スタッフのホームに出す）。
+// 締切の前の月の15日〜締切日に、まだ出していない人にだけ出す（出したら消える）。
+// 以前は旧「シフト希望」の提出を見ていたので、希望休を出してもお知らせが消えなかった。
 
 import Link from "next/link";
-import { getDataStore } from "@/lib/data";
-import { currentTargetMonth, isNoticePeriod, noticeMessage } from "@/lib/shift/period";
+import type { DayoffNotice } from "@/lib/shift/requests";
 import { Icon } from "@/components/icons";
 
-export async function ShiftNoticeBanner({ staffId }: { staffId: string }) {
-  const db = getDataStore();
-  const rules = await db.getShiftRules();
-  const targetMonth = currentTargetMonth(rules);
-  const submitted = await db.getShiftRequestMonth(staffId, targetMonth);
-
-  if (submitted) return null;
-
-  // 15日〜締切の告知期間は強調、それ以外の提出可能期間は控えめに表示
-  const emphasized = isNoticePeriod(targetMonth, rules);
+export function DayoffNoticeBanner({ notice }: { notice: DayoffNotice | null }) {
+  if (!notice) return null;
   return (
     <Link
-      href={`/staff/shift/request?month=${targetMonth}`}
-      className={`flex items-center gap-3 rounded-2xl border p-4 mb-4 transition-all duration-300 hover:shadow-[0_6px_20px_rgba(93,80,58,0.12)] active:scale-[0.99] ${
-        emphasized
-          ? "bg-gradient-to-r from-brand-100 to-brand-50 border-brand-300"
-          : "bg-amber-50 border-amber-200"
-      }`}
+      href={notice.href}
+      className="flex items-center gap-3 rounded-2xl border p-4 mb-4 transition-all duration-300 hover:shadow-[0_6px_20px_rgba(93,80,58,0.12)] active:scale-[0.99] bg-gradient-to-r from-brand-100 to-brand-50 border-brand-300"
     >
-      <span
-        className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 ${
-          emphasized ? "bg-white text-brand-600" : "bg-white text-amber-600"
-        }`}
-      >
+      <span className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 bg-white text-brand-600">
         <Icon name="calendar" className="w-5 h-5" />
       </span>
-      <span className="min-w-0">
-        <span className={`block text-sm font-bold ${emphasized ? "text-brand-800" : "text-amber-800"}`}>
-          {noticeMessage(targetMonth, rules)}
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-brand-800">{notice.message}</span>
+        <span className="block text-xs text-ink-500 mt-0.5">
+          締切 {notice.deadlineLabel}（{notice.remaining}）・タップして入力 ›
         </span>
-        <span className="block text-xs text-ink-500 mt-0.5">タップして希望を入力 ›</span>
       </span>
     </Link>
   );

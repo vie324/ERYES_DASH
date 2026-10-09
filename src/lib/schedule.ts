@@ -1,31 +1,11 @@
-// 出勤スケジュール（基本パターン＋希望休＋個別調整）の解決ロジックと締切ルール。
+// 出勤予定（基本パターン＋希望休＋個別調整）の1日分の解決ロジック。
 //
+// シフト表をまだ作っていない月は、これで「いつもどおりの予定」を出す。
 // 優先順位：個別調整（管理者） ＞ 希望休（スタッフ） ＞ 週の基本パターン
-// 希望休は「3ヶ月後の月」を対象に、当月の5日までに申請する運用。
-// （次回予約を2ヶ月先まで受けるため、3ヶ月先の休みを先に確定させる）
+// シフト表を作った月の扱い・月全体の組み立ては lib/shift/month.ts を参照。
+// 希望休の締切（何ヶ月先・何日まで）は lib/shift/period.ts（ルール設定）で決まる。
 
-import { addMonths } from "@/lib/date";
 import type { DayoffRequest, ScheduleOverride, WorkPatternDay } from "@/lib/data/types";
-
-/** 希望休の申請締切日（対象月の3ヶ月前の◯日まで） */
-export const DAYOFF_DEADLINE_DAY = 5;
-/** 希望休の対象月＝何ヶ月後か */
-export const DAYOFF_MONTHS_AHEAD = 3;
-
-/** いま申請を受け付けている対象月（今日から3ヶ月後の月） */
-export function defaultDayoffTargetMonth(today: string): string {
-  return addMonths(today.slice(0, 7), DAYOFF_MONTHS_AHEAD);
-}
-
-/** 対象月の申請締切日（"YYYY-MM-DD"）＝対象月の3ヶ月前の5日 */
-export function dayoffDeadline(targetMonth: string): string {
-  return `${addMonths(targetMonth, -DAYOFF_MONTHS_AHEAD)}-${String(DAYOFF_DEADLINE_DAY).padStart(2, "0")}`;
-}
-
-/** 対象月の希望休がまだ編集できるか（締切前か） */
-export function isDayoffEditable(targetMonth: string, today: string): boolean {
-  return today <= dayoffDeadline(targetMonth);
-}
 
 /** その日の勤務の解決結果 */
 export interface ResolvedDay {
@@ -81,8 +61,9 @@ export function resolveScheduleDay(
   };
 }
 
-/** "10:00"〜"16:30" → 表示用 "10:00-16:30"（時間未設定なら "出勤"） */
-export function formatWorkTime(day: ResolvedDay): string {
-  if (!day.working) return "休";
-  return day.startTime && day.endTime ? `${day.startTime}-${day.endTime}` : "出勤";
+/** 表のマス用の短い時間表記："10:00","19:00" → "10-19"／"10:30","16:30" → "10:30-16:30" */
+export function compactTimeRange(start: string, end: string): string {
+  if (!start || !end) return "";
+  const short = (t: string) => (t.endsWith(":00") ? String(Number(t.slice(0, 2))) : t.replace(/^0/, ""));
+  return `${short(start)}-${short(end)}`;
 }

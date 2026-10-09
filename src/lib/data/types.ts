@@ -188,7 +188,10 @@ export interface ShiftRules {
   requestLeadMonths: number;
 }
 
-/** シフト希望（月単位の提出情報：備考・勤務可能店舗・提出日時） */
+/**
+ * 希望休の提出記録（月単位：備考・提出日時）。休みが0日でも「提出済み」が分かるように1行持つ。
+ * 勤務できる店舗は staff_available_stores、休みたい日は DayoffRequest に入る。
+ */
 export interface ShiftRequestMonth {
   id: string;
   staffId: string;
@@ -198,7 +201,10 @@ export interface ShiftRequestMonth {
   updatedAt: Date;
 }
 
-/** シフト希望（日単位）。行が無い日は「指定なし（どちらでも可）」 */
+/**
+ * 旧「シフト希望」の日単位の希望（早番・遅番・休み）。いまの入力画面からは作られない。
+ * 休みは希望休（DayoffRequest）へ移した。残っている早番・遅番の希望だけ、自動作成で参考にする。
+ */
 export interface ShiftRequest {
   id: string;
   staffId: string;
@@ -211,14 +217,9 @@ export interface ShiftRequest {
   paidLeave: boolean;
 }
 
-/** 日単位の希望の入力（保存用） */
-export interface ShiftDayRequest {
-  preference: ShiftPreference;
-  reason: string;
-  paidLeave: boolean;
-}
-
-// ---- 出勤スケジュール（基本パターン＋希望休。早番/遅番の旧シフトとは別機能） ----
+// ---- 出勤予定のもと（基本パターン＋希望休＋個別調整）----
+// シフト表（ShiftAssignment）を作っていない月は、これで「いつもどおりの予定」を出す。
+// 希望休はシフト表の自動作成にも使う（以前は旧シフトの「シフト希望」と別々に集めていた）。
 
 /** 週の基本出勤パターン（スタッフ×曜日）。行が無い曜日は「休み」扱い */
 export interface WorkPatternDay {
@@ -229,7 +230,7 @@ export interface WorkPatternDay {
   endTime: string;
 }
 
-/** 希望休（スタッフが3ヶ月前に申請する休み希望日） */
+/** 希望休（スタッフが先の月の分を締切までに出す休み希望日。締切は lib/shift/period.ts） */
 export interface DayoffRequest {
   id: string;
   staffId: string;
@@ -259,7 +260,10 @@ export interface ScheduleOverride {
   note: string;
 }
 
-/** シフト割当（1スタッフ1日1件） */
+/**
+ * シフト表の1マス（1スタッフ1日1件。行が無い日は休み）。
+ * draft=下書き（管理者のみ）／confirmed=公開中。月の中の状態は揃えて使う。
+ */
 export interface ShiftAssignment {
   id: string;
   targetMonth: string;
@@ -268,6 +272,11 @@ export interface ShiftAssignment {
   storeId: string;
   shiftType: ShiftType;
   status: AssignmentStatus;
+  /** 勤務時間（"10:00"。空文字は時間の指定なし）。自動作成では基本パターンの時間が入る */
+  startTime: string;
+  endTime: string;
+  /** 管理者のメモ（例：研修・時短） */
+  note: string;
 }
 
 export interface NewShiftAssignment {
@@ -275,6 +284,9 @@ export interface NewShiftAssignment {
   staffId: string;
   storeId: string;
   shiftType: ShiftType;
+  startTime?: string;
+  endTime?: string;
+  note?: string;
 }
 
 // ============================================================
@@ -896,32 +908,35 @@ export interface DataStore {
   getShiftRules(): Promise<ShiftRules>;
   updateShiftRules(patch: Partial<ShiftRules>): Promise<ShiftRules>;
 
-  /** 希望の提出（同月の再提出は上書き）。days は日付→希望（指定なしの日は含めない） */
-  saveShiftRequest(input: {
+  /**
+   * 希望休の提出（同月の再提出は上書き）。
+   * 休みたい日（希望休）・勤務できる店舗・備考をまとめて入れ替え、提出の記録（0日でも）を残す。
+   * 旧「シフト希望」の日単位の希望（shift_requests）はこの月の分を消す（休みは希望休へ一本化）。
+   */
+  submitDayoffRequest(input: {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftDayRequest>;
+    days: DayoffInput[];
     storeIds: string[];
   }): Promise<void>;
   getShiftRequestMonth(staffId: string, targetMonth: string): Promise<ShiftRequestMonth | null>;
   listShiftRequestMonths(targetMonth: string): Promise<ShiftRequestMonth[]>;
+  /** 旧「シフト希望」の日単位の希望（早番・遅番の参考用） */
   listShiftRequests(targetMonth: string, staffId?: string): Promise<ShiftRequest[]>;
   listAvailableStores(
     targetMonth: string,
     staffId?: string
   ): Promise<{ staffId: string; storeId: string }[]>;
 
-  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+  // ---- 出勤予定のもと（基本パターン＋希望休＋個別調整） ----
   /** 週の基本パターン（staffId指定でそのスタッフ分のみ） */
   listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]>;
   /** スタッフの週パターンを丸ごと保存（7曜日分を入れ替え） */
   saveWorkPattern(staffId: string, days: Omit<WorkPatternDay, "staffId">[]): Promise<void>;
   /** 希望休（from〜to の日付範囲、"YYYY-MM-DD"） */
   listDayoffRequests(filter: { staffId?: string; from: string; to: string }): Promise<DayoffRequest[]>;
-  /** 対象月の希望休を丸ごと入れ替え（再提出は上書き） */
-  replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void>;
-  /** スケジュールの個別上書き（from〜to の日付範囲） */
+  /** スケジュールの個別上書き（from〜to の日付範囲）。シフト表を作っていない月の手動調整 */
   listScheduleOverrides(filter: { staffId?: string; from: string; to: string }): Promise<ScheduleOverride[]>;
   upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void>;
   deleteScheduleOverride(staffId: string, date: string): Promise<void>;
@@ -1167,14 +1182,16 @@ export interface DataStore {
   addSchedulePreset(label: string): Promise<void>;
   deleteSchedulePreset(id: string): Promise<void>;
 
+  // ---- シフト表（自動作成→調整→公開）----
   listShiftAssignments(targetMonth: string, staffId?: string): Promise<ShiftAssignment[]>;
-  /** 自動割当：対象月の割当を全削除して下書き(draft)として入れ直す */
+  /** 自動作成：対象月のシフト表を全削除して下書き(draft)として入れ直す（空配列なら下書きの削除） */
   replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void>;
-  /** 手動追加（同スタッフ・同日の重複はエラー） */
-  createShiftAssignment(
+  /** 1マスの保存（同じスタッフ・同じ日があれば置き換える） */
+  upsertShiftAssignment(
     input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
-  ): Promise<ShiftAssignment>;
-  deleteShiftAssignment(id: string): Promise<void>;
-  /** 対象月の全割当を確定（confirmed）にする。確定した件数を返す */
-  confirmMonthAssignments(targetMonth: string): Promise<number>;
+  ): Promise<void>;
+  /** 1マスを休みにする（その日の割当を消す） */
+  deleteShiftAssignmentAt(staffId: string, date: string): Promise<void>;
+  /** 対象月のシフト表の状態をまとめて変える（公開・下書きに戻す）。変えた件数を返す */
+  setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus): Promise<number>;
 }

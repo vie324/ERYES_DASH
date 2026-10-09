@@ -8,6 +8,7 @@ import { env, isPushConfigured } from "@/lib/env";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
 import { sendPush } from "@/lib/push/notify";
+import { dayoffDeadlineReminder } from "@/lib/shift/notify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,6 +30,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // 購読のある人だけ処理する（無い人の集計はしない）
   const subscribed = new Set((await db.listPushSubscriptions(staffList.map((s) => s.id))).map((p) => p.staffId));
 
+  // 希望休の締切が近い（3日前〜当日）ときは、まだ出していない人に一緒に知らせる
+  const dayoff = await dayoffDeadlineReminder(db, today);
+
   let notified = 0;
   for (const staff of staffList) {
     if (!subscribed.has(staff.id)) continue;
@@ -37,15 +41,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       getChatOverview(db, staff.id, staffList),
     ]);
     const badge = tasks.dueCount + chat.totalUnread;
-    if (tasks.dueCount === 0 && chat.totalUnread === 0) continue;
+    const dayoffDue = dayoff?.staffIds.has(staff.id) ?? false;
+    if (tasks.dueCount === 0 && chat.totalUnread === 0 && !dayoffDue) continue;
     const parts = [
       tasks.dueCount > 0 ? `今日のタスク ${tasks.dueCount}件` : "",
       chat.totalUnread > 0 ? `未読のトーク ${chat.totalUnread}件` : "",
     ].filter(Boolean);
+    const lines = [parts.length > 0 ? `${parts.join("・")}が残っています` : "", dayoffDue ? dayoff!.text : ""].filter(
+      Boolean
+    );
     await sendPush(db, [staff.id], {
       title: "おはようございます",
-      body: `${parts.join("・")}が残っています`,
-      url: tasks.dueCount > 0 ? "/staff/tasks" : "/staff/chat",
+      body: lines.join("。"),
+      url: dayoffDue ? dayoff!.url : tasks.dueCount > 0 ? "/staff/tasks" : "/staff/chat",
       tag: "daily-reminder",
       badge,
     });

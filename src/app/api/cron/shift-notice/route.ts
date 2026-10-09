@@ -1,11 +1,10 @@
-// シフト希望募集の定時通知（毎月15日 10:00 JST に Vercel Cron から実行。vercel.json参照）
-// 募集中の月（既定では3ヶ月先）の希望提出を全スタッフへ通知する（現状はモック＝ログ出力。README参照）。
+// 希望休の募集の定時通知（毎月15日 10:00 JST に Vercel Cron から実行。vercel.json参照）
+// 募集中の月（既定では3ヶ月先）の希望休を、まだ出していない人にアプリの通知（Web Push）で知らせる。
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
-import { currentTargetMonth, noticeMessage } from "@/lib/shift/period";
-import { sendShiftRequestNotice } from "@/lib/shift/notify";
-import { env } from "@/lib/env";
+import { env, isPushConfigured } from "@/lib/env";
+import { sendDayoffRequestNotice } from "@/lib/shift/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -16,15 +15,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "認証エラー" }, { status: 401 });
     }
   }
+  if (!isPushConfigured()) {
+    return NextResponse.json({ ok: true, skipped: "push not configured" });
+  }
 
-  const db = getDataStore();
-  const rules = await db.getShiftRules();
-  // 何ヶ月先を募集するかは設定（既定3ヶ月先）に合わせる
-  const targetMonth = currentTargetMonth(rules);
-  const message = noticeMessage(targetMonth, rules);
-  const staffList = (await db.listStaff()).filter((s) => s.isActive);
-
-  const result = await sendShiftRequestNotice(staffList, message);
-  console.log(`[cron] シフト募集通知: ${result.notified}名へ送信（${result.channel}）`);
-  return NextResponse.json({ ok: true, targetMonth, message, ...result });
+  const result = await sendDayoffRequestNotice(getDataStore());
+  console.log(
+    `[cron] 希望休の募集通知（${result.targetMonth}分）: 未提出 ${result.unsubmitted}名・送信 ${result.sent}端末`
+  );
+  return NextResponse.json({ ok: true, ...result });
 }

@@ -9,7 +9,8 @@ import {
   weekdayJa,
   weekdayOf,
 } from "@/lib/date";
-import { formatWorkTime, resolveScheduleDay } from "@/lib/schedule";
+import { loadDaySchedule } from "@/lib/shift/load";
+import { cellTimeLabel } from "@/lib/shift/month";
 import { PageHeader } from "@/components/ui";
 import { PhotoInput } from "@/components/photo-input";
 import { ScheduleBoard } from "@/components/schedule-board";
@@ -80,13 +81,12 @@ export default async function PlanPage({
     : planScopeOfDate(date);
 
   const db = getDataStore();
-  const [staffList, plans, patterns, dayoffs, overrides, myIdeals, presets, nearbyPlans] =
+  const [staffList, plans, daySchedule, myIdeals, presets, nearbyPlans] =
     await Promise.all([
       db.listStaff(),
       db.listDailyPlans(date),
-      db.listWorkPatterns(),
-      db.listDayoffRequests({ from: date, to: date }),
-      db.listScheduleOverrides({ from: date, to: date }),
+      // その日の出勤（公開中のシフト表があればそれ、無ければ基本パターン＋希望休）
+      loadDaySchedule(db, date),
       db.listIdealSchedules(session.staffId),
       db.listSchedulePresets(),
       // 日付バーの「入力済み」の点を出すため、前後の日も薄く見る
@@ -290,7 +290,7 @@ export default async function PlanPage({
         <section className="space-y-3">
           {members.map((m) => {
             const plan = plans.find((p) => p.staffId === m.id);
-            const work = resolveScheduleDay(m.id, date, weekdayOf(date), patterns, dayoffs, overrides);
+            const work = daySchedule.schedule.cell(m.id, date);
             const canMarkSeen = m.id !== session.staffId && plan && isSenior;
             return (
               <div key={m.id} className="card">
@@ -302,7 +302,7 @@ export default async function PlanPage({
                     </span>
                   </p>
                   <span className={`text-xs font-bold ${work.working ? "text-brand-700" : "text-ink-400"}`}>
-                    {formatWorkTime(work)}
+                    {cellTimeLabel(work)}
                   </span>
                 </div>
 

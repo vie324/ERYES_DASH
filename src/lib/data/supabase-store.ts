@@ -63,7 +63,6 @@ import type {
   SchedulePreset,
   ShiftAssignment,
   ShiftPreference,
-  ShiftDayRequest,
   ShiftRequest,
   ShiftRequestMonth,
   ShiftRules,
@@ -559,12 +558,44 @@ const mapShiftAssignment = (r: Row): ShiftAssignment => ({
   storeId: r.store_id,
   shiftType: r.shift_type,
   status: r.status,
+  // 列が無い（schema.sql を流し直す前の）DBでは時間・メモなしとして扱う
+  startTime: r.start_time ?? "",
+  endTime: r.end_time ?? "",
+  note: r.note ?? "",
 });
 
 function must<T>(data: T | null, error: { message: string } | null, context: string): T {
   if (error) throw new Error(`[supabase] ${context}: ${error.message}`);
   if (data === null) throw new Error(`[supabase] ${context}: データが見つかりません`);
   return data;
+}
+
+/** 列が足りない（schema.sql をまだ流し直していない）DBのエラーか */
+function isMissingColumn(error: { code?: string; message: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    /column .* does not exist|schema cache/i.test(error.message)
+  );
+}
+
+/** シフト表の1マスの行（時間・メモの列は後から足したので、無いDBでは外して入れ直す） */
+function shiftAssignmentRow(
+  input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
+): { full: Row; legacy: Row } {
+  const legacy: Row = {
+    target_month: input.targetMonth,
+    date: input.date,
+    staff_id: input.staffId,
+    store_id: input.storeId,
+    shift_type: input.shiftType,
+    status: input.status,
+  };
+  return {
+    legacy,
+    full: { ...legacy, start_time: input.startTime ?? "", end_time: input.endTime ?? "", note: input.note ?? "" },
+  };
 }
 
 class SupabaseStore implements DataStore {
@@ -1226,72 +1257,90 @@ class SupabaseStore implements DataStore {
     return mapShiftRules(must(data, error, "シフトルール更新"));
   }
 
-  async saveShiftRequest(input: {
+  async submitDayoffRequest(input: {
     staffId: string;
     targetMonth: string;
     note: string;
-    days: Record<string, ShiftDayRequest>;
+    days: DayoffInput[];
     storeIds: string[];
   }): Promise<void> {
-    // 月単位の提出情報をupsert（submitted_atは初回のみ、updated_atは毎回更新）
+    // 提出の記録をupsert（submitted_atは初回のみ、updated_atは毎回更新）。休み0日でも「提出済み」が残る
     const { data: existing, error: e0 } = await this.sb
       .from("shift_request_months")
       .select("id")
       .eq("staff_id", input.staffId)
       .eq("target_month", input.targetMonth)
       .maybeSingle();
-    if (e0) throw new Error(`[supabase] 希望提出確認: ${e0.message}`);
+    if (e0) throw new Error(`[supabase] 希望休の提出確認: ${e0.message}`);
     if (existing) {
       const { error } = await this.sb
         .from("shift_request_months")
         .update({ note: input.note, updated_at: new Date().toISOString() })
         .eq("id", existing.id);
-      if (error) throw new Error(`[supabase] 希望更新: ${error.message}`);
+      if (error) throw new Error(`[supabase] 希望休の提出更新: ${error.message}`);
     } else {
       const { error } = await this.sb.from("shift_request_months").insert({
         staff_id: input.staffId,
         target_month: input.targetMonth,
         note: input.note,
       });
-      if (error) throw new Error(`[supabase] 希望作成: ${error.message}`);
+      if (error) throw new Error(`[supabase] 希望休の提出作成: ${error.message}`);
     }
 
-    // 日別希望・勤務可能店舗は総入れ替え（トランザクションは使わず順次実行。実害は小さい）
+    // 希望休：先に今回の内容を書き込み（upsert）、そのあと外した日だけ消す。
+    // 「全部消してから入れ直す」と、途中で失敗したときに出したはずの希望休が消えてしまうため。
+    // 月末は実際の日付で（「2027-02-31」のような存在しない日付は PostgreSQL がエラーにするため）
+    const { from, to } = monthRange(input.targetMonth);
+    if (input.days.length > 0) {
+      const up = await this.sb.from("dayoff_requests").upsert(
+        input.days.map((d) => ({
+          staff_id: input.staffId,
+          date: d.date,
+          reason: d.reason,
+          paid_leave: d.paidLeave,
+        })),
+        { onConflict: "staff_id,date" }
+      );
+      if (up.error) throw new Error(`[supabase] 希望休保存: ${up.error.message}`);
+    }
+    let del = this.sb
+      .from("dayoff_requests")
+      .delete()
+      .eq("staff_id", input.staffId)
+      .gte("date", from)
+      .lte("date", to);
+    if (input.days.length > 0) del = del.not("date", "in", `(${input.days.map((d) => d.date).join(",")})`);
+    const delRes = await del;
+    if (delRes.error) throw new Error(`[supabase] 希望休削除: ${delRes.error.message}`);
+
+    // 旧「シフト希望」の日別希望はこの月の分を消す（休みは希望休へ一本化したので、残すと二重になる）
     const del1 = await this.sb
       .from("shift_requests")
       .delete()
       .eq("staff_id", input.staffId)
       .eq("target_month", input.targetMonth);
-    if (del1.error) throw new Error(`[supabase] 希望削除: ${del1.error.message}`);
-    const dayRows = Object.entries(input.days).map(([date, day]) => ({
-      staff_id: input.staffId,
-      target_month: input.targetMonth,
-      date,
-      preference: day.preference,
-      reason: day.reason,
-      paid_leave: day.paidLeave,
-    }));
-    if (dayRows.length > 0) {
-      const ins1 = await this.sb.from("shift_requests").insert(dayRows);
-      if (ins1.error) throw new Error(`[supabase] 希望保存: ${ins1.error.message}`);
-    }
+    if (del1.error) throw new Error(`[supabase] 旧シフト希望の削除: ${del1.error.message}`);
 
-    const del2 = await this.sb
-      .from("staff_available_stores")
-      .delete()
-      .eq("staff_id", input.staffId)
-      .eq("target_month", input.targetMonth);
-    if (del2.error) throw new Error(`[supabase] 可能店舗削除: ${del2.error.message}`);
+    // 勤務できる店舗も同じく「書き込み → 外したものを消す」
     if (input.storeIds.length > 0) {
-      const ins2 = await this.sb.from("staff_available_stores").insert(
+      const ins2 = await this.sb.from("staff_available_stores").upsert(
         input.storeIds.map((storeId) => ({
           staff_id: input.staffId,
           target_month: input.targetMonth,
           store_id: storeId,
-        }))
+        })),
+        { onConflict: "staff_id,target_month,store_id", ignoreDuplicates: true }
       );
       if (ins2.error) throw new Error(`[supabase] 可能店舗保存: ${ins2.error.message}`);
     }
+    let del2 = this.sb
+      .from("staff_available_stores")
+      .delete()
+      .eq("staff_id", input.staffId)
+      .eq("target_month", input.targetMonth);
+    if (input.storeIds.length > 0) del2 = del2.not("store_id", "in", `(${input.storeIds.join(",")})`);
+    const del2Res = await del2;
+    if (del2Res.error) throw new Error(`[supabase] 可能店舗削除: ${del2Res.error.message}`);
   }
 
   async getShiftRequestMonth(
@@ -1352,58 +1401,46 @@ class SupabaseStore implements DataStore {
 
   async replaceMonthAssignments(targetMonth: string, rows: NewShiftAssignment[]): Promise<void> {
     const del = await this.sb.from("shift_assignments").delete().eq("target_month", targetMonth);
-    if (del.error) throw new Error(`[supabase] 割当削除: ${del.error.message}`);
-    if (rows.length > 0) {
-      const ins = await this.sb.from("shift_assignments").insert(
-        rows.map((r) => ({
-          target_month: targetMonth,
-          date: r.date,
-          staff_id: r.staffId,
-          store_id: r.storeId,
-          shift_type: r.shiftType,
-          status: "draft",
-        }))
-      );
-      if (ins.error) throw new Error(`[supabase] 割当保存: ${ins.error.message}`);
+    if (del.error) throw new Error(`[supabase] シフト表削除: ${del.error.message}`);
+    if (rows.length === 0) return;
+    const built = rows.map((r) => shiftAssignmentRow({ ...r, targetMonth, status: "draft" }));
+    let ins = await this.sb.from("shift_assignments").insert(built.map((b) => b.full));
+    if (isMissingColumn(ins.error)) {
+      ins = await this.sb.from("shift_assignments").insert(built.map((b) => b.legacy));
     }
+    if (ins.error) throw new Error(`[supabase] シフト表保存: ${ins.error.message}`);
   }
 
-  async createShiftAssignment(
+  async upsertShiftAssignment(
     input: NewShiftAssignment & { targetMonth: string; status: AssignmentStatus }
-  ): Promise<ShiftAssignment> {
-    const { data, error } = await this.sb
-      .from("shift_assignments")
-      .insert({
-        target_month: input.targetMonth,
-        date: input.date,
-        staff_id: input.staffId,
-        store_id: input.storeId,
-        shift_type: input.shiftType,
-        status: input.status,
-      })
-      .select()
-      .single();
-    if (error?.code === "23505") {
-      throw new Error("このスタッフはこの日すでに割り当てられています");
+  ): Promise<void> {
+    const { full, legacy } = shiftAssignmentRow(input);
+    let res = await this.sb.from("shift_assignments").upsert(full, { onConflict: "staff_id,date" });
+    if (isMissingColumn(res.error)) {
+      res = await this.sb.from("shift_assignments").upsert(legacy, { onConflict: "staff_id,date" });
     }
-    return mapShiftAssignment(must(data, error, "割当作成"));
+    if (res.error) throw new Error(`[supabase] シフト保存: ${res.error.message}`);
   }
 
-  async deleteShiftAssignment(id: string): Promise<void> {
-    const { error } = await this.sb.from("shift_assignments").delete().eq("id", id);
-    if (error) throw new Error(`[supabase] 割当削除: ${error.message}`);
+  async deleteShiftAssignmentAt(staffId: string, date: string): Promise<void> {
+    const { error } = await this.sb
+      .from("shift_assignments")
+      .delete()
+      .eq("staff_id", staffId)
+      .eq("date", date);
+    if (error) throw new Error(`[supabase] シフト削除: ${error.message}`);
   }
 
-  async confirmMonthAssignments(targetMonth: string): Promise<number> {
+  async setMonthAssignmentStatus(targetMonth: string, status: AssignmentStatus): Promise<number> {
     const { data, error } = await this.sb
       .from("shift_assignments")
-      .update({ status: "confirmed" })
+      .update({ status })
       .eq("target_month", targetMonth)
       .select("id");
-    return must(data, error, "シフト確定").length;
+    return must(data, error, "シフト表の状態変更").length;
   }
 
-  // ---- 出勤スケジュール（基本パターン＋希望休） ----
+  // ---- 出勤予定のもと（基本パターン＋希望休＋個別調整） ----
 
   async listWorkPatterns(staffId?: string): Promise<WorkPatternDay[]> {
     let query = this.sb.from("work_patterns").select("*").order("weekday");
@@ -1443,26 +1480,6 @@ class SupabaseStore implements DataStore {
     if (filter.staffId) query = query.eq("staff_id", filter.staffId);
     const { data, error } = await query;
     return must(data, error, "希望休一覧").map(mapDayoffRequest);
-  }
-
-  async replaceDayoffRequests(staffId: string, targetMonth: string, dates: DayoffInput[]): Promise<void> {
-    // 月末は実際の日付で（「2027-02-31」のような存在しない日付は PostgreSQL がエラーにするため）
-    const { from, to } = monthRange(targetMonth);
-    const del = await this.sb
-      .from("dayoff_requests")
-      .delete()
-      .eq("staff_id", staffId)
-      .gte("date", from)
-      .lte("date", to);
-    if (del.error) throw new Error(`[supabase] 希望休削除: ${del.error.message}`);
-    if (dates.length > 0) {
-      const ins = await this.sb
-        .from("dayoff_requests")
-        .insert(
-          dates.map((d) => ({ staff_id: staffId, date: d.date, reason: d.reason, paid_leave: d.paidLeave }))
-        );
-      if (ins.error) throw new Error(`[supabase] 希望休保存: ${ins.error.message}`);
-    }
   }
 
   async listScheduleOverrides(filter: {

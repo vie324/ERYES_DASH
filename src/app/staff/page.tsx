@@ -2,15 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { formatDateJa, monthRange, todayJst, weekStartOf } from "@/lib/date";
+import { formatDateJa, todayJst, weekStartOf } from "@/lib/date";
 import { getBrand } from "@/lib/brand";
-import { defaultDayoffTargetMonth, isDayoffEditable } from "@/lib/schedule";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
 import { BigMenuLink, IconMenuLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import type { MenuAccent } from "@/lib/menu-accent";
-import { ShiftNoticeBanner } from "@/components/shift-banner";
+import { DayoffNoticeBanner } from "@/components/shift-banner";
+import { getDayoffNotice } from "@/lib/shift/requests";
 import { Dashboard } from "@/components/dashboard";
 import { AnnouncementBoard } from "@/components/announcement-board";
 import { ThemePicker } from "@/components/theme-picker";
@@ -43,18 +43,14 @@ export default async function StaffHomePage() {
   const jobType = me?.jobType ?? "";
   const isExec = session.role === "admin" || (me?.isExecutive ?? false);
 
-  // 希望休：3ヶ月後の月の申請期間中（毎月5日まで）で、まだ1日も登録がなければ知らせる
-  const dayoffTarget = defaultDayoffTargetMonth(today);
-  const dayoffEditable = isDayoffEditable(dayoffTarget, today);
-  const [myDayoffs, taskSummary, chatOverview, salonBoardUrl] = await Promise.all([
-    dayoffEditable
-      ? db.listDayoffRequests({ staffId: session.staffId, ...monthRange(dayoffTarget) })
-      : Promise.resolve([]),
+  // 希望休：募集のお知らせの期間（締切の前の月の15日〜締切日）に、まだ出していなければ知らせる
+  const [dayoffNotice, taskSummary, chatOverview, salonBoardUrl] = await Promise.all([
+    session.role === "admin" ? Promise.resolve(null) : getDayoffNotice(db, session.staffId, today),
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
     getSalonBoardUrl(db),
   ]);
-  const shiftBadge = dayoffEditable && myDayoffs.length === 0 ? "！" : null;
+  const shiftBadge = dayoffNotice ? "！" : null;
   const taskBadge = taskSummary.dueCount > 0 ? taskSummary.dueCount : null;
   const chatBadge = chatOverview.totalUnread > 0 ? chatOverview.totalUnread : null;
 
@@ -85,7 +81,7 @@ export default async function StaffHomePage() {
       {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
       <AnnouncementBoard />
 
-      <ShiftNoticeBanner staffId={session.staffId} />
+      <DayoffNoticeBanner notice={dayoffNotice} />
 
       {/* スマホもPCも「今の状況」を上に、メニューはその下に */}
       <section>
@@ -251,9 +247,9 @@ async function eyesMenuItems(
       href: "/staff/schedule",
       accent: "sage",
       icon: "calendar",
-      title: "出勤スケジュール",
+      title: "シフト・希望休",
       short: "シフト",
-      description: "自分の予定の確認・希望休の提出",
+      description: "自分のシフトの確認・希望休の提出",
       badge: flags.shiftBadge,
     },
     ...(attendanceAvailable
@@ -410,9 +406,9 @@ async function eniMenuItems(
       href: "/staff/schedule",
       accent: "lavender",
       icon: "calendar",
-      title: "出勤スケジュール",
+      title: "シフト・希望休",
       short: "シフト",
-      description: "自分の予定の確認・希望休の提出",
+      description: "自分のシフトの確認・希望休の提出",
       badge: flags.shiftBadge,
     },
     {
