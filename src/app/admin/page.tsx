@@ -21,6 +21,9 @@ import { AnnouncementBoard } from "@/components/announcement-board";
 import { ThemePicker } from "@/components/theme-picker";
 import { getSalonBoardUrl } from "@/lib/settings";
 import { EniHome } from "@/components/home/eni-home";
+import { InboxBanner } from "@/components/inbox-banner";
+import { countUncommentedReports } from "@/lib/eyes/report-comments";
+import { linkCandidates } from "@/lib/line/appointment-notices";
 
 // 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える。
 // ENi は、スタッフと同じ作り直したホーム（管理者メニュー・ホームの設定への入口つき）。EREYS は今のまま。
@@ -53,11 +56,14 @@ export default async function AdminHomePage() {
       {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
       <AnnouncementBoard />
 
+      {/* 日報への返信など、未読のお知らせ */}
+      <InboxBanner staffId={session.staffId} />
+
       {/* スマホは「アラート・数字・メニュー」を先に、グラフはその下に。
           PCは画面が広いので、これまで通りグラフを上に置く。 */}
       <div className="flex flex-col">
         <div className="order-1 lg:order-2">
-          <EyesAdminDashboard />
+          <EyesAdminDashboard staffId={session.staffId} />
         </div>
         <div className="order-2 lg:order-1 mt-7 lg:mt-0">
           <h2 className="section-title lg:hidden">今の状況</h2>
@@ -99,9 +105,16 @@ export default async function AdminHomePage() {
 }
 
 /** EREYS（アイサロン）の管理ダッシュボード */
-async function EyesAdminDashboard() {
+async function EyesAdminDashboard({ staffId }: { staffId: string }) {
   const db = getDataStore();
   const today = todayJst();
+  const me = await db.getStaff(staffId);
+  const [uncommented, allCustomers] = await Promise.all([
+    me ? countUncommentedReports(db, me, today) : Promise.resolve(0),
+    db.listCustomers(),
+  ]);
+  // 店舗で入れた予約のお客様が、同じ電話番号でLINEに登録した（店舗が確かめて「つなぐ」を押すまでお知らせが届かない）
+  const linkCount = linkCandidates(allCustomers).length;
   const month = thisMonthJst();
   const { from, to } = monthRange(month);
 
@@ -180,7 +193,7 @@ async function EyesAdminDashboard() {
         <StatCard label="今月の売上（全員）" value={formatYen(monthKpi.totalSales)}
           sub={`次回予約率 ${formatPercent(monthKpi.rebookRate)}`} />
         <StatCard label="明日のリマインド予定" value={`${tomorrowAppointments.length}件`}
-          sub="毎日19時に自動送信" />
+          sub="前日の確認（LINE）を自動送信" />
         <StatCard
           label="今月のLINE送信数"
           value={`${pushCount} / ${LINE_FREE_QUOTA}通`}
@@ -193,12 +206,16 @@ async function EyesAdminDashboard() {
       <div className="grid gap-3 sm:grid-cols-2">
         <BigMenuLink href="/admin/reports" icon="barChart" accent="gold" title="成績・日報"
           description="全スタッフの売上・予約率・月次推移" />
+        <BigMenuLink href="/staff/daily-reports" icon="chat" accent="plum" title="日報へのコメント"
+          description={uncommented > 0 ? `まだコメントのない日報が ${uncommented} 件あります` : "スタッフの日報にコメント・返信のやりとり"}
+          badge={uncommented} />
         <BigMenuLink href="/admin/schedule" icon="calendar" accent="sage" title="シフト"
           description="希望休の確認・シフト表の自動作成・調整・公開" />
         <BigMenuLink href="/admin/counseling" icon="clipboard" accent="sky" title="カウンセリング"
           description="回答の閲覧・確認状況" badge={pending.length} />
         <BigMenuLink href="/admin/customers" icon="user" accent="teal" title="顧客一覧"
-          description="LINE登録済みのお客様" />
+          description={linkCount > 0 ? `LINEとつなぐ候補が ${linkCount} 件あります` : "LINE登録済みのお客様"}
+          badge={linkCount} />
         <BigMenuLink href="/admin/appointments" icon="bell" accent="coral" title="次回予約・リマインド"
           description={
             appointmentAttention > 0

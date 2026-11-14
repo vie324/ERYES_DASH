@@ -33,6 +33,7 @@ export function AppShell({
   logoSrc,
   logoAlt,
   helpHref,
+  inbox,
   banner,
   children,
 }: {
@@ -48,6 +49,8 @@ export function AppShell({
   logoAlt: string;
   /** 未指定ならヘッダーの「使い方」ボタンを出さない */
   helpHref?: string;
+  /** お知らせ（ヘッダーのベル）。未読があれば赤い数字を出す */
+  inbox?: { href: string; count: number };
   /** デモモードの注意バナーなど、内容の上に出す帯 */
   banner?: React.ReactNode;
   children: React.ReactNode;
@@ -154,6 +157,20 @@ export function AppShell({
                   <Icon name="swap" className="w-3.5 h-3.5 text-brand-500" />
                   {user.brandLabel}
                 </Link>
+                {inbox && (
+                  <Link
+                    href={inbox.href}
+                    aria-label={inbox.count > 0 ? `お知らせ（未読 ${inbox.count}件）` : "お知らせ"}
+                    className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-brand-300 bg-white/80 text-brand-700 transition-colors hover:bg-white hover:border-brand-400"
+                  >
+                    <Icon name="bell" className="w-4 h-4" />
+                    {inbox.count > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-[18px] text-center ring-2 ring-brand-50">
+                        {inbox.count > 99 ? "99+" : inbox.count}
+                      </span>
+                    )}
+                  </Link>
+                )}
                 {helpHref && (
                   <Link
                     href={helpHref}

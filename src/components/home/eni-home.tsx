@@ -22,6 +22,7 @@ import { accentStyle, type MenuAccent } from "@/lib/menu-accent";
 import type { Session } from "@/lib/auth/session";
 import { AnnouncementBoard } from "@/components/announcement-board";
 import { DayoffNoticeBanner } from "@/components/shift-banner";
+import { InboxBanner } from "@/components/inbox-banner";
 import { Icon, type IconName } from "@/components/icons";
 import { InsightCardView, ReminderTiles, ShortcutGrid, UpcomingEvents } from "@/components/home/parts";
 import { MorningCard, MorningCardButton } from "@/components/home/morning-card";
@@ -83,6 +84,9 @@ export async function EniHome({ session }: { session: Session }) {
       <div className="mt-4 empty:hidden">
         <AnnouncementBoard />
       </div>
+
+      {/* 未読のお知らせ（日報へのコメントなど） */}
+      <InboxBanner staffId={session.staffId} variant="ios" />
 
       <DayoffNoticeBanner notice={dayoffNotice} />
 
