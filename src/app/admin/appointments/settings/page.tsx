@@ -15,7 +15,7 @@ import {
 } from "@/lib/line/appointment-notices";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { ConfirmSubmit } from "@/components/confirm-submit";
-import { resetLineNoticeSettingsAction, saveLineNoticeSettingsAction } from "../../actions";
+import { resetLineNoticeSettingsAction, saveLineNoticeSettingsAction, setCustomerLineAction } from "../../actions";
 
 const STATUS_LABEL = {
   sending: { label: "送信中", tone: "pending" },
@@ -28,7 +28,7 @@ const STATUS_LABEL = {
 export default async function LineNoticeSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; reset?: string }>;
+  searchParams: Promise<{ saved?: string; reset?: string; switched?: string }>;
 }) {
   await requireAdmin();
   const flash = await searchParams;
@@ -56,7 +56,7 @@ export default async function LineNoticeSettingsPage({
         title="LINEのお知らせの設定"
         backHref="/admin/appointments"
         backLabel="次回予約・リマインドへ戻る"
-        description="予約完了・3日前・前日のお知らせの文面と送る時刻、「予約確認」と送られたときの返事を決めます。"
+        description="お客様へのLINEのオン・オフと、予約完了・3日前・前日のお知らせの文面と送る時刻、「予約確認」と送られたときの返事を決めます。"
       />
 
       {flash.saved && (
@@ -65,6 +65,41 @@ export default async function LineNoticeSettingsPage({
       {flash.reset && (
         <p role="status" className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">初期値に戻しました</p>
       )}
+      {flash.switched && (
+        <p role="status" className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
+          {flash.switched === "on" ? "お客様へのLINEをオンにしました" : "お客様へのLINEをオフにしました"}
+        </p>
+      )}
+
+      {/* お客様へのLINE：まとめてオン・オフ（初期値はオフ。ENiに説明してから、管理者がオンにする） */}
+      <section id="switch" className={`card mb-5 scroll-mt-20 border-2 ${settings.enabled ? "!border-emerald-300" : "!border-ink-200"}`}>
+        <div className="flex items-center gap-2">
+          <h2 className="section-title !mb-0 flex-1">お客様へのLINE</h2>
+          {settings.enabled ? <StatusBadge label="オン" tone="ok" /> : <StatusBadge label="オフ" tone="muted" />}
+        </div>
+        <p className="text-sm mt-2">オンにすると、お客様向けに次の3つが動きます。</p>
+        <ul className="text-sm list-disc pl-5 mt-1 space-y-0.5">
+          <li>予約のお知らせ（予約完了・3日前・前日。下の設定で、種類ごとに止めることもできます）</li>
+          <li>「予約確認」と送ると、ご本人のこれからの予約を返す</li>
+          <li>友だち追加でお名前を登録したあと、電話番号をお願いする</li>
+        </ul>
+        <p className="hint">
+          オフの間は、これまでどおり「お名前の登録」と「自動の返信」だけが動き、お知らせは送りません。
+        </p>
+        <form action={setCustomerLineAction} className="mt-3">
+          <input type="hidden" name="enabled" value={settings.enabled ? "off" : "on"} />
+          <ConfirmSubmit
+            message={
+              settings.enabled
+                ? "お客様へのLINEをオフにしますか？（予約のお知らせ・「予約確認」の返事・電話番号のお願いが止まります）"
+                : "お客様へのLINEをオンにしますか？（予約のお知らせなどが、お客様に実際に届くようになります）"
+            }
+            className={settings.enabled ? "btn-secondary w-full" : "btn-primary w-full"}
+          >
+            {settings.enabled ? "オフにする" : "オンにする"}
+          </ConfirmSubmit>
+        </form>
+      </section>
 
       <div className={`note ${live ? "note-info" : "note-warn"} !p-4 mb-4 text-sm`}>
         {live ? (

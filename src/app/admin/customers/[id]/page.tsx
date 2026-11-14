@@ -137,7 +137,7 @@ export default async function AdminCustomerDetailPage({
               </select>
             </div>
             <button type="submit" className="btn-primary w-full">
-              予約を登録する（LINEのお知らせが自動で届きます）
+              予約を登録する
             </button>
           </form>
         </section>

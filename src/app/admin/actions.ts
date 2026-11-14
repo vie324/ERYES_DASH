@@ -185,12 +185,34 @@ export async function saveLineNoticeSettingsAction(formData: FormData): Promise<
   redirect("/admin/appointments/settings?saved=1");
 }
 
-/** LINEのお知らせの設定を初期値に戻す */
+/** LINEのお知らせの設定を初期値に戻す（お客様へのLINEのオン・オフは、今のまま残す） */
 export async function resetLineNoticeSettingsAction(): Promise<void> {
   await requireAdmin();
-  await getDataStore().setAppSetting(LINE_NOTICE_SETTINGS_KEY, "");
+  const db = getDataStore();
+  const current = parseLineNoticeSettings(
+    (await db.listAppSettings()).find((r) => r.key === LINE_NOTICE_SETTINGS_KEY)?.value
+  );
+  await db.setAppSetting(LINE_NOTICE_SETTINGS_KEY, JSON.stringify({ enabled: current.enabled }));
   revalidatePath("/admin/appointments/settings");
   redirect("/admin/appointments/settings?reset=1");
+}
+
+/**
+ * お客様へのLINE（予約のお知らせ・「予約確認」への返事・電話番号のお願い）をまとめてオン・オフする。
+ * 文面の保存とは別のボタンにして、うっかり切り替わらないようにしている。
+ */
+export async function setCustomerLineAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const on = String(formData.get("enabled") ?? "") === "on";
+  const db = getDataStore();
+  const current = parseLineNoticeSettings(
+    (await db.listAppSettings()).find((r) => r.key === LINE_NOTICE_SETTINGS_KEY)?.value
+  );
+  await db.setAppSetting(LINE_NOTICE_SETTINGS_KEY, JSON.stringify({ ...current, enabled: on }));
+  revalidatePath("/admin/appointments/settings");
+  revalidatePath("/admin/appointments");
+  revalidatePath("/admin");
+  redirect(`/admin/appointments/settings?switched=${on ? "on" : "off"}`);
 }
 
 export async function deleteAppointmentAction(formData: FormData): Promise<void> {

@@ -4,6 +4,7 @@
 //  ・予約完了のお知らせ …… 登録から48時間以内で、まだ届いていない分をもう一度
 // 同じお知らせは、送信の記録（appointment_notice_logs）で二重に送らない。
 // LINEのキーが未設定なら実際には送らない（モック。記録に「モック」と残る）。
+// 管理画面の「お客様へのLINE」がオフ（初期値）の間は、何も送らない。
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
@@ -46,6 +47,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ? asked
     : (jstHourFromSchedule(req.headers.get("x-vercel-cron-schedule")) ?? currentJstHour());
 
+  // お客様へのLINEがオフの間は、何も送らない（管理画面の「LINEのお知らせの設定」でオンにしたときだけ送る）
+  if (!settings.enabled) {
+    console.log(`[cron] 予約のお知らせ（${slotHour}時の回）: お客様へのLINEがオフのため送りません`);
+    return NextResponse.json({ ok: true, slotHour, skipped: "customer line is off" });
+  }
   const summary = await runScheduledNotices(db, { today: todayJst(), slotHour, settings });
   console.log(
     `[cron] 予約のお知らせ（${slotHour}時の回）: ` +

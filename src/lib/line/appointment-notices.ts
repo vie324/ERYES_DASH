@@ -5,6 +5,10 @@
 // 文面・送る時刻・合言葉は管理画面（次回予約・リマインド → LINEのお知らせの設定）で変えられる（app_settings の line_notice_settings）。
 // 送った記録は appointment_notice_logs に1回＝1行で残し、同じお知らせは二重に送らない（予約×種類×予約日時で1回）。
 // LINEのキー（LINE_CHANNEL_ACCESS_TOKEN）が未設定なら、実際には送らない（モック。記録には「モック」と残る）。
+//
+// お客様に関わる部分（予約のお知らせ・「予約確認」への返事・電話番号のお願い）は、
+// 「お客様へのLINE」のスイッチ（enabled）でまとめてオン・オフする。初期値はオフ。
+// オフの間は、これまでどおり「お名前の登録」と「自動の返信」だけが動き、お知らせは送らない。
 
 import { pushText, lineMode } from "@/lib/line/client";
 import { env, isLineConfigured } from "@/lib/env";
@@ -43,6 +47,11 @@ export interface ScheduledNoticeSetting {
 }
 
 export interface LineNoticeSettings {
+  /**
+   * お客様へのLINE（予約のお知らせ・「予約確認」への返事・電話番号のお願い）をまとめてオンにするか。
+   * 初期値はオフ（ENiに説明してから、管理者が画面でオンにする）
+   */
+  enabled: boolean;
   completion: { enabled: boolean; template: string };
   three_days: ScheduledNoticeSetting;
   day_before: ScheduledNoticeSetting;
@@ -69,6 +78,7 @@ export const NOTICE_PLACEHOLDERS = [
 ];
 
 export const DEFAULT_LINE_NOTICE_SETTINGS: LineNoticeSettings = {
+  enabled: false,
   completion: {
     enabled: true,
     template:
@@ -132,6 +142,7 @@ export function parseLineNoticeSettings(raw: string | undefined | null): LineNot
     ? normalizeKeywords(p.keywords.map(String))
     : d.keywords;
   return {
+    enabled: typeof p.enabled === "boolean" ? p.enabled : d.enabled,
     completion: {
       enabled: typeof obj("completion").enabled === "boolean" ? (obj("completion").enabled as boolean) : d.completion.enabled,
       template: text(obj("completion").template, d.completion.template),
@@ -145,6 +156,12 @@ export function parseLineNoticeSettings(raw: string | undefined | null): LineNot
     askPhone: text(p.askPhone, d.askPhone),
     phoneSaved: text(p.phoneSaved, d.phoneSaved),
   };
+}
+
+/** 保存されている設定を読む */
+export async function getLineNoticeSettings(db: DataStore): Promise<LineNoticeSettings> {
+  const rows = await db.listAppSettings();
+  return parseLineNoticeSettings(rows.find((r) => r.key === LINE_NOTICE_SETTINGS_KEY)?.value);
 }
 
 /** 合言葉をそろえる（前後の空白を取り、空と重複を捨てる。10個まで） */
@@ -278,7 +295,7 @@ export async function sendCompletionNotice(
   appointment: NextAppointment,
   settings: LineNoticeSettings
 ): Promise<NoticeResult> {
-  if (!settings.completion.enabled) return "off";
+  if (!settings.enabled || !settings.completion.enabled) return "off";
   if (appointment.scheduledAt.getTime() <= Date.now()) return "off";
   const [customer, store] = await Promise.all([db.getCustomer(appointment.customerId), db.getStore()]);
   return sendAppointmentNotice(db, {
@@ -311,6 +328,8 @@ export async function runScheduledNotices(
   input: { today: string; slotHour: number; settings: LineNoticeSettings; now?: Date }
 ): Promise<NoticeRunSummary[]> {
   const { today, slotHour, settings } = input;
+  // お客様へのLINEがオフの間は、何も送らない
+  if (!settings.enabled) return [];
   const now = input.now ?? new Date();
   const store = await db.getStore();
   const customerCache = new Map<string, Customer | null>();
