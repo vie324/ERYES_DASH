@@ -1,7 +1,13 @@
 // ドメインモデルとデータストアのインターフェース定義。
 // 実装は mock-store.ts（デモ用メモリ内）と supabase-store.ts（本番）の2種類。
 
-export type Role = "admin" | "staff";
+/**
+ * ロール。
+ *  ・admin ……… 管理者（すべて見られる）
+ *  ・manager …… 店舗の管理者（担当店舗だけを見る。例：イーリスを見る管理者。判定は名前ではなく、このロールと担当店舗で行う）
+ *  ・staff ……… スタッフ
+ */
+export type Role = "admin" | "manager" | "staff";
 export type PunchType = "in" | "out";
 export type CounselingStatus = "pending" | "confirmed"; // 未確認 / 確認済み
 
@@ -51,6 +57,8 @@ export interface Staff {
   themeColor: string;
   fixedOvertimeHours: number;
   isActive: boolean;
+  /** 担当店舗（店舗の管理者が見る店舗。管理者・スタッフは空でよい） */
+  managedStoreIds: string[];
 }
 
 /** 認証時のみ使用（パスワードハッシュ付き） */
@@ -62,6 +70,8 @@ export interface Customer {
   id: string;
   lineUserId: string | null;
   fullName: string;
+  /** 電話番号（数字だけ。LINEで送ってもらう／店舗が入れる。LINEとのつなぎ込みの照合に使う） */
+  phone: string;
   createdAt: Date;
 }
 
@@ -716,6 +726,56 @@ export interface AiShimonThread {
 }
 
 /**
+ * しもんさんの言葉（代表が書きためた言葉）。管理者が管理画面で登録・並べ替え・停止する。
+ * 朝の画面に1日1つ、全員に同じものを、登録順にくり返さず出す（全部出たら最初に戻る）。AIで作ったり言い換えたりはしない。
+ */
+export interface DailyWord {
+  id: string;
+  body: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+/** その日に出した言葉（1日1行。次の日は、登録順でこの次の言葉を出す） */
+export interface DailyWordShown {
+  date: string;
+  /** 出した言葉（あとで削除された言葉は null） */
+  wordId: string | null;
+}
+
+/** AIの「今日のタスク」の1行 */
+export interface DailyBriefItem {
+  /** やること（短く） */
+  text: string;
+  /** ひとことの理由・補足（空でもよい） */
+  detail: string;
+}
+
+/**
+ * 朝の画面の「今日のタスク」。本人のタスク情報だけから、1人1日1回だけ作って保存する（開くたびには作らない）。
+ * AIが使えなかったときの普通の一覧は ai=false。
+ */
+export interface DailyBrief {
+  staffId: string;
+  date: string;
+  items: DailyBriefItem[];
+  ai: boolean;
+  /** 作ったモデル（普通の一覧は空文字） */
+  model: string;
+  createdAt: Date;
+}
+
+/** トークの投稿の、未読の集計に使う最小限の情報（本文・写真・ファイルは持たない） */
+export interface ChatMessageMeta {
+  id: string;
+  roomId: string;
+  senderId: string;
+  createdAt: Date;
+  deleted: boolean;
+}
+
+/**
  * 閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録などにも使い回せる共通の形。
  * 集計（例：週報を先輩がどれだけ見ているか）は lib/views.ts。見られるのは幹部・管理者だけ。
  */
@@ -845,6 +905,52 @@ export interface StaffInput {
   mission?: string;
   tiers?: number;
   fixedOvertimeHours: number;
+  managedStoreIds?: string[];
+}
+
+/** イーリスの日報（daily_reports）へのコメント・返信（1件＝1行。店舗の管理者・管理者がコメントし、本人が返信する） */
+export interface DailyReportComment {
+  id: string;
+  reportId: string;
+  staffId: string;
+  body: string;
+  createdAt: Date;
+}
+
+/** アプリ内のお知らせ（ホーム・ヘッダーのベル・お知らせ一覧に出る。プッシュ通知とは別に必ず残す） */
+export interface AppNotification {
+  id: string;
+  staffId: string;
+  /** 種類（report_comment など） */
+  kind: string;
+  title: string;
+  body: string;
+  /** タップで開く画面 */
+  href: string;
+  /** 何についてのお知らせか（日報のIDなど。開いたら既読にするのに使う） */
+  refId: string;
+  createdAt: Date;
+  readAt: Date | null;
+}
+
+/** 予約のお知らせ（LINE）の種類 */
+export type AppointmentNoticeKind = "completion" | "three_days" | "day_before" | "week_before";
+
+/** 予約のお知らせの送信記録（いつ・誰に・何を・成功か失敗か）。1回の送信＝1行 */
+export interface AppointmentNoticeLog {
+  id: string;
+  appointmentId: string;
+  customerId: string;
+  kind: AppointmentNoticeKind;
+  /** 送ったときの予約日時（日時が変わったら、新しい日時で送り直せるように） */
+  scheduledFor: Date;
+  /** sending＝送信中（二重送信を防ぐ札）／sent＝送った／failed＝失敗（次の回にもう一度）／skipped＝送らなかった（LINE未連携など） */
+  status: "sending" | "sent" | "failed" | "skipped";
+  /** live＝LINEで送った／mock＝LINEのキーが未設定で、実際には送っていない */
+  mode: "live" | "mock" | "";
+  body: string;
+  error: string;
+  createdAt: Date;
 }
 
 // ---- データストア共通インターフェース ----
@@ -879,6 +985,7 @@ export interface DataStore {
         | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
+        | "managedStoreIds"
       >
     > & {
       passwordHash?: string;
@@ -898,8 +1005,13 @@ export interface DataStore {
   listCustomers(search?: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | null>;
   getCustomerByLineUserId(lineUserId: string): Promise<Customer | null>;
-  createCustomer(input: { lineUserId: string | null; fullName: string }): Promise<Customer>;
-  updateCustomer(id: string, patch: { fullName?: string }): Promise<Customer>;
+  createCustomer(input: { lineUserId: string | null; fullName: string; phone?: string }): Promise<Customer>;
+  updateCustomer(id: string, patch: { fullName?: string; phone?: string }): Promise<Customer>;
+  /**
+   * お客様の記録を1つにまとめる（店舗が先に入れた「LINE未連携」の記録を、LINEのお客様にまとめる）。
+   * removeId の次回予約・カウンセリングの回答を keepId に付け替えて、removeId を消す。
+   */
+  mergeCustomers(keepId: string, removeId: string): Promise<void>;
 
   // カウンセリング
   createCounselingResponse(input: {
@@ -928,6 +1040,17 @@ export interface DataStore {
   upsertDailyReport(input: DailyReportInput): Promise<DailyReport>;
   getDailyReport(staffId: string, reportDate: string): Promise<DailyReport | null>;
   getDailyReportById(id: string): Promise<DailyReport | null>;
+  // イーリスの日報へのコメント・返信
+  listDailyReportComments(reportIds: string[]): Promise<DailyReportComment[]>;
+  addDailyReportComment(reportId: string, staffId: string, body: string): Promise<DailyReportComment>;
+  /** 自分のコメントだけ消せる */
+  deleteDailyReportComment(id: string, staffId: string): Promise<void>;
+  // アプリ内のお知らせ
+  createAppNotifications(rows: Omit<AppNotification, "id" | "createdAt" | "readAt">[]): Promise<void>;
+  listAppNotifications(staffId: string, limit: number): Promise<AppNotification[]>;
+  countUnreadAppNotifications(staffId: string): Promise<number>;
+  /** 既読にする（refId を渡すと、その件のお知らせだけ。省略で全部） */
+  markAppNotificationsRead(staffId: string, refId?: string): Promise<void>;
   /** from〜to（両端含む, "YYYY-MM-DD"）の日報。staffId指定で絞り込み */
   listDailyReports(filter: { staffId?: string; from: string; to: string }): Promise<DailyReport[]>;
   /** 日報を削除（管理者の修正・削除用） */
@@ -962,6 +1085,33 @@ export interface DataStore {
   markReminderSent(id: string, sentAt: Date): Promise<void>;
   /** 1週間前の事前案内が未送信かつ scheduledAt が from〜to の予約（キャンセル済みは除く） */
   listAppointmentsNeedingPreReminder(from: Date, to: Date): Promise<NextAppointment[]>;
+  // 予約のお知らせ（LINE）の送信記録
+  /**
+   * 送信の札を取る（同じ予約・種類・予約日時で「送信中」か「送った」行があれば取れずに null）。
+   * 取れたら sending の行を返す。これで同じお知らせを二重に送らない。
+   */
+  claimAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+  }): Promise<AppointmentNoticeLog | null>;
+  /** 送信の結果を書く（sent・failed・skipped） */
+  finishAppointmentNotice(
+    id: string,
+    result: { status: "sent" | "failed" | "skipped"; mode: "live" | "mock" | ""; body: string; error: string }
+  ): Promise<void>;
+  /** 送らなかった記録（LINE未連携など）を1回だけ残す */
+  logSkippedAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+    error: string;
+  }): Promise<void>;
+  listAppointmentNoticeLogs(filter: { appointmentIds?: string[]; limit?: number }): Promise<AppointmentNoticeLog[]>;
+  /** 期間内に送ったお知らせの数（LINEの送信数の集計用） */
+  countAppointmentNoticesSent(from: Date, to: Date, kinds: AppointmentNoticeKind[]): Promise<number>;
   markPreReminderSent(id: string, sentAt: Date): Promise<void>;
   /** 当月などの期間内に送信済みリマインド数（Push通数カウント用） */
   countRemindersSent(from: Date, to: Date): Promise<number>;
@@ -1189,6 +1339,10 @@ export interface DataStore {
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+  /** 複数のスタッフが入っているトークの参加情報（既読の位置つき）。ホームの未読者の集計に使う */
+  listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]>;
+  /** 期間内の投稿の最小限の情報（本文・写真は読まない）。ホームの未読者の集計に使う */
+  listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]>;
   /** 「確認しました」を付ける（同じ人が何度押しても1件。取り消しはしない） */
   acknowledgeChatMessage(messageId: string, staffId: string): Promise<void>;
   listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]>;
@@ -1243,6 +1397,20 @@ export interface DataStore {
     userAgent: string;
   }): Promise<void>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  // ---- ホームの朝の画面（しもんさんの言葉・AIの今日のタスク） ----
+  /** しもんさんの言葉（並び順→登録順。停止中も含む） */
+  listDailyWords(): Promise<DailyWord[]>;
+  createDailyWord(body: string): Promise<DailyWord>;
+  updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void>;
+  deleteDailyWord(id: string): Promise<void>;
+  /** これまでに出した言葉（新しい日付順） */
+  listDailyWordShown(limit: number): Promise<DailyWordShown[]>;
+  /** その日に出した言葉を記録（同じ日にすでにあれば何もしない＝先に決まった言葉を使う） */
+  recordDailyWordShown(date: string, wordId: string): Promise<void>;
+  getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null>;
+  /** 今日のタスクを保存（同じ人・同じ日にすでにあれば何もしない＝1人1日1回） */
+  saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void>;
+
   /** 通知の受け取り設定（行が無い人は返さない＝すべて受け取る） */
   listPushPreferences(staffIds: string[]): Promise<PushPreference[]>;
   /** 止める通知の種類を丸ごと入れ替える */

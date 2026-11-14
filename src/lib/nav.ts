@@ -45,6 +45,8 @@ export type NavContext = {
   badges?: Record<string, number | null | undefined>;
   /** 外部サービスのURL（マスタ設定）。未指定のときだけ案内ページに逃がす */
   links?: { salonBoardUrl: string; curriculumUrl: string };
+  /** 店舗の管理者（担当店舗のスタッフの日報にコメントできる）。ロールと担当店舗で決める */
+  isReportReviewer?: boolean;
 };
 
 /** 0 と undefined はバッジを出さない */
@@ -123,6 +125,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
   const support: NavGroup = {
     label: "サポート",
     items: [
+      { href: "/staff/inbox", label: "お知らせ", icon: "bell", badge: badge(b.inbox) },
       { href: "/staff/notifications", label: "通知の設定", short: "通知", icon: "bell" },
       { href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" },
     ],
@@ -164,6 +167,18 @@ function staffNav(ctx: NavContext): NavGroup[] {
         items: [
           { href: "/staff/report", label: "日報を入力", short: "日報", icon: "pencil", badge: b.report ? "！" : null },
           { href: "/staff/reports", label: "過去の日報", icon: "book" },
+          // 店舗の管理者（担当店舗のある人）だけ：担当店舗のスタッフの日報へのコメント
+          ...(ctx.isReportReviewer
+            ? [
+                {
+                  href: "/staff/daily-reports",
+                  label: "日報へのコメント（担当店舗）",
+                  short: "日報コメント",
+                  icon: "chat" as IconName,
+                  badge: badge(b.reportReview),
+                },
+              ]
+            : []),
           { href: "/staff/cash", label: "レジ締め・現金管理", icon: "banknote" },
           { href: "/staff/stats", label: "自分の成績", icon: "trendingUp" },
         ],
@@ -271,6 +286,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
   const support: NavGroup = {
     label: "サポート",
     items: [
+      { href: "/staff/inbox", label: "お知らせ", icon: "bell", badge: badge(b.inbox) },
       { href: "/staff/notifications", label: "通知の設定", short: "通知", icon: "bell" },
       { href: "/admin/help", label: "使い方ガイド", short: "使い方", icon: "help" },
       { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
@@ -296,6 +312,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         label: "成績・売上",
         items: [
           { href: "/admin/reports", label: "成績・日報", short: "成績", icon: "barChart" },
+          { href: "/staff/daily-reports", label: "日報へのコメント", short: "日報コメント", icon: "chat", badge: badge(b.reportReview) },
           { href: "/admin/csv", label: "売上CSV出力", icon: "fileText" },
         ],
       },
@@ -380,7 +397,8 @@ function adminNav(ctx: NavContext): NavGroup[] {
       ],
     },
     learningGroup(),
-    support,
+    // ホームの設定（ショートカット・見える化・しもんさんの言葉）は ENi のホームだけに効く
+    { ...support, items: [...support.items, { href: "/admin/home", label: "ホームの設定", icon: "layoutGrid" as IconName }] },
   ]);
 }
 
