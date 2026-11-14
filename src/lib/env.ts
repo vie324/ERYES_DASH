@@ -20,6 +20,9 @@ export const env = {
   anthropicModel: process.env.ANTHROPIC_MODEL || "claude-opus-5",
   // AIしもん（スタッフの壁打ち相談）。しもん側の推奨に合わせて既定は Sonnet（品質と費用のバランス）
   aiShimonModel: process.env.AI_SHIMON_MODEL || "claude-sonnet-5",
+  // ホームの朝の画面「今日のタスク」（1人1日1回だけ作る）。同じ ANTHROPIC_API_KEY を使う。
+  // 未設定なら ANTHROPIC_MODEL（議事録のAI整形と同じモデル）を使う
+  homeBriefModel: process.env.HOME_BRIEF_MODEL || "",
 
   // Web Push（トーク・タスクの通知とアプリアイコンのバッジ）。未設定なら通知機能は出ない
   vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "",

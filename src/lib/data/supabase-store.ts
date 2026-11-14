@@ -83,6 +83,10 @@ import type {
   ThanksPost,
   WorkPatternDay,
   ViewLog,
+  DailyWord,
+  DailyWordShown,
+  DailyBrief,
+  ChatMessageMeta,
 } from "@/lib/data/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -2752,6 +2756,31 @@ class SupabaseStore implements DataStore {
     return must(data, error, "リアクション一覧").map(mapChatReaction);
   }
 
+  async listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]> {
+    if (staffIds.length === 0) return [];
+    const { data, error } = await this.sb.from("chat_members").select("*").in("staff_id", staffIds);
+    return must(data, error, "トークの参加情報").map(mapChatMember);
+  }
+
+  async listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]> {
+    if (roomIds.length === 0) return [];
+    // 本文・写真（データURL）は読まない（重いので、集計に要る列だけ）
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("id, room_id, sender_id, created_at, deleted")
+      .in("room_id", roomIds)
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .limit(5000);
+    return must(data, error, "トークの投稿（集計用）").map((r: Row) => ({
+      id: r.id,
+      roomId: r.room_id,
+      senderId: r.sender_id,
+      createdAt: new Date(r.created_at),
+      deleted: r.deleted ?? false,
+    }));
+  }
+
   async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
     // 2回押しても1件（先に押した時刻を残す）
     const { error } = await this.sb
@@ -3032,6 +3061,96 @@ class SupabaseStore implements DataStore {
   async deletePushSubscription(endpoint: string): Promise<void> {
     const { error } = await this.sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
     if (error) throw new Error(`[supabase] Push購読削除: ${error.message}`);
+  }
+
+  // ---- ホームの朝の画面 ----
+
+  async listDailyWords(): Promise<DailyWord[]> {
+    const { data, error } = await this.sb.from("daily_words").select("*").order("sort_order").order("created_at");
+    if (isMissingTable(error)) return []; // schema.sql を流し直す前のDB（言葉はまだ出さない）
+    return must(data, error, "しもんさんの言葉").map((r: Row) => ({
+      id: r.id,
+      body: r.body ?? "",
+      sortOrder: r.sort_order ?? 0,
+      isActive: r.is_active ?? true,
+      createdAt: new Date(r.created_at),
+    }));
+  }
+
+  async createDailyWord(body: string): Promise<DailyWord> {
+    const words = await this.listDailyWords();
+    const maxOrder = Math.max(0, ...words.map((w) => w.sortOrder));
+    const { data, error } = await this.sb
+      .from("daily_words")
+      .insert({ body, sort_order: maxOrder + 10 })
+      .select()
+      .single();
+    const r = must(data, error, "しもんさんの言葉の登録");
+    return { id: r.id, body: r.body, sortOrder: r.sort_order, isActive: r.is_active, createdAt: new Date(r.created_at) };
+  }
+
+  async updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void> {
+    const row: Row = {};
+    if (patch.body !== undefined) row.body = patch.body;
+    if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+    if (patch.isActive !== undefined) row.is_active = patch.isActive;
+    if (Object.keys(row).length === 0) return;
+    const { error } = await this.sb.from("daily_words").update(row).eq("id", id);
+    if (error) throw new Error(`[supabase] しもんさんの言葉の更新: ${error.message}`);
+  }
+
+  async deleteDailyWord(id: string): Promise<void> {
+    const { error } = await this.sb.from("daily_words").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] しもんさんの言葉の削除: ${error.message}`);
+  }
+
+  async listDailyWordShown(limit: number): Promise<DailyWordShown[]> {
+    const { data, error } = await this.sb
+      .from("daily_word_log")
+      .select("*")
+      .order("shown_on", { ascending: false })
+      .limit(limit);
+    if (isMissingTable(error)) return [];
+    return must(data, error, "出した言葉").map((r: Row) => ({ date: r.shown_on, wordId: r.word_id ?? null }));
+  }
+
+  async recordDailyWordShown(date: string, wordId: string): Promise<void> {
+    const { error } = await this.sb
+      .from("daily_word_log")
+      .upsert({ shown_on: date, word_id: wordId }, { onConflict: "shown_on", ignoreDuplicates: true });
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] 出した言葉の記録: ${error.message}`);
+  }
+
+  async getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null> {
+    const { data, error } = await this.sb
+      .from("ai_daily_briefs")
+      .select("*")
+      .eq("staff_id", staffId)
+      .eq("brief_date", date)
+      .maybeSingle();
+    if (isMissingTable(error)) return null;
+    if (error) throw new Error(`[supabase] 今日のタスクの取得: ${error.message}`);
+    if (!data) return null;
+    return {
+      staffId: data.staff_id,
+      date: data.brief_date,
+      items: Array.isArray(data.items)
+        ? data.items.map((i: Row) => ({ text: String(i.text ?? ""), detail: String(i.detail ?? "") }))
+        : [],
+      ai: data.ai ?? false,
+      model: data.model ?? "",
+      createdAt: new Date(data.created_at),
+    };
+  }
+
+  async saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void> {
+    const { error } = await this.sb.from("ai_daily_briefs").upsert(
+      { staff_id: input.staffId, brief_date: input.date, items: input.items, ai: input.ai, model: input.model },
+      { onConflict: "staff_id,brief_date", ignoreDuplicates: true }
+    );
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] 今日のタスクの保存: ${error.message}`);
   }
 
   async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {

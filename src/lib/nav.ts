@@ -380,7 +380,8 @@ function adminNav(ctx: NavContext): NavGroup[] {
       ],
     },
     learningGroup(),
-    support,
+    // ホームの設定（ショートカット・見える化・しもんさんの言葉）は ENi のホームだけに効く
+    { ...support, items: [...support.items, { href: "/admin/home", label: "ホームの設定", icon: "layoutGrid" as IconName }] },
   ]);
 }
 

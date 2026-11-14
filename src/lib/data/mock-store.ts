@@ -83,6 +83,10 @@ import type {
   ThanksPost,
   WorkPatternDay,
   ViewLog,
+  DailyWord,
+  DailyWordShown,
+  DailyBrief,
+  ChatMessageMeta,
 } from "@/lib/data/types";
 
 interface MockDb {
@@ -138,6 +142,9 @@ interface MockDb {
   eniReportComments: EniReportComment[];
   companyEvents: CompanyEvent[];
   viewLogs: ViewLog[];
+  dailyWords: DailyWord[];
+  dailyWordShown: DailyWordShown[];
+  dailyBriefs: DailyBrief[];
 }
 
 /**
@@ -1228,6 +1235,13 @@ function seed(): MockDb {
     eniReportComments: [],
     companyEvents: [],
     viewLogs: [],
+    // しもんさんの言葉は、本番では代表から届いたものを管理者が登録する。デモは見本だけ入れておく
+    dailyWords: [
+      { id: randomUUID(), body: "【見本】ここに、しもんさんの言葉が1日1つ出ます。管理者画面の「ホームの設定」で登録・並べ替え・停止できます。", sortOrder: 10, isActive: true, createdAt: jstAt(addDays(today, -3), 9) },
+      { id: randomUUID(), body: "【見本】登録した順に、毎日ひとつずつ全員に同じ言葉が出ます。全部出たら最初に戻ります。", sortOrder: 20, isActive: true, createdAt: jstAt(addDays(today, -3), 9) },
+    ],
+    dailyWordShown: [],
+    dailyBriefs: [],
   };
 }
 
@@ -1420,6 +1434,7 @@ class MockStore implements DataStore {
       d.pushSubscriptions = d.pushSubscriptions.filter((ps) => ps.staffId !== id);
       d.pushPreferences = d.pushPreferences.filter((pp) => pp.staffId !== id);
       d.viewLogs = d.viewLogs.filter((v) => v.viewerStaffId !== id && v.ownerStaffId !== id);
+      d.dailyBriefs = d.dailyBriefs.filter((b) => b.staffId !== id);
       d.staff = d.staff.filter((st) => st.id !== id);
       return;
     }
@@ -2890,6 +2905,18 @@ class MockStore implements DataStore {
       .map((r) => ({ ...r }));
   }
 
+  async listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]> {
+    const ids = new Set(staffIds);
+    return this.db.chatMembers.filter((m) => ids.has(m.staffId)).map((m) => ({ ...m }));
+  }
+
+  async listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]> {
+    const rooms = new Set(roomIds);
+    return this.db.chatMessages
+      .filter((m) => rooms.has(m.roomId) && m.createdAt >= from && m.createdAt <= to)
+      .map((m) => ({ id: m.id, roomId: m.roomId, senderId: m.senderId, createdAt: m.createdAt, deleted: m.deleted }));
+  }
+
   async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
     const exists = this.db.chatAcknowledgements.some((a) => a.messageId === messageId && a.staffId === staffId);
     if (!exists) this.db.chatAcknowledgements.push({ messageId, staffId, acknowledgedAt: new Date() });
@@ -3034,6 +3061,54 @@ class MockStore implements DataStore {
 
   async deletePushSubscription(endpoint: string): Promise<void> {
     this.db.pushSubscriptions = this.db.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
+  }
+
+  // ---- ホームの朝の画面 ----
+
+  async listDailyWords(): Promise<DailyWord[]> {
+    return this.db.dailyWords
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime())
+      .map((w) => ({ ...w }));
+  }
+
+  async createDailyWord(body: string): Promise<DailyWord> {
+    const maxOrder = Math.max(0, ...this.db.dailyWords.map((w) => w.sortOrder));
+    const created: DailyWord = { id: randomUUID(), body, sortOrder: maxOrder + 10, isActive: true, createdAt: new Date() };
+    this.db.dailyWords.push(created);
+    return { ...created };
+  }
+
+  async updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void> {
+    const found = this.db.dailyWords.find((w) => w.id === id);
+    if (found) Object.assign(found, patch);
+  }
+
+  async deleteDailyWord(id: string): Promise<void> {
+    this.db.dailyWords = this.db.dailyWords.filter((w) => w.id !== id);
+    for (const row of this.db.dailyWordShown) if (row.wordId === id) row.wordId = null;
+  }
+
+  async listDailyWordShown(limit: number): Promise<DailyWordShown[]> {
+    return this.db.dailyWordShown
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
+  }
+
+  async recordDailyWordShown(date: string, wordId: string): Promise<void> {
+    if (!this.db.dailyWordShown.some((r) => r.date === date)) this.db.dailyWordShown.push({ date, wordId });
+  }
+
+  async getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null> {
+    const found = this.db.dailyBriefs.find((b) => b.staffId === staffId && b.date === date);
+    return found ? { ...found, items: found.items.map((i) => ({ ...i })) } : null;
+  }
+
+  async saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void> {
+    if (this.db.dailyBriefs.some((b) => b.staffId === input.staffId && b.date === input.date)) return;
+    this.db.dailyBriefs.push({ ...input, createdAt: new Date() });
   }
 
   async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {

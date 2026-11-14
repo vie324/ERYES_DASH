@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { formatDateJa, todayJst, weekStartOf } from "@/lib/date";
+import { formatDateJa, todayJst } from "@/lib/date";
 import { getBrand } from "@/lib/brand";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
@@ -15,6 +15,7 @@ import { Dashboard } from "@/components/dashboard";
 import { AnnouncementBoard } from "@/components/announcement-board";
 import { ThemePicker } from "@/components/theme-picker";
 import { getSalonBoardUrl } from "@/lib/settings";
+import { EniHome } from "@/components/home/eni-home";
 
 /** ホームのメニュー1項目。スマホ＝アイコングリッド／PC＝大きなボタンの両方で使う */
 interface HomeMenuItem {
@@ -29,18 +30,19 @@ interface HomeMenuItem {
   accent: MenuAccent;
 }
 
-// スタッフのホーム：スマホは「今の状況」を上に、メニューはアイコン＋小さな文字の3列グリッドで見せる。
-// ログイン後に選んだ業態（EREYS/ENi）に応じてメニュー（項目）を切り替える。
+// スタッフのホーム。ログイン後に選んだ業態（EREYS/ENi）で切り替える。
+//  ・ENi …… 作り直したホーム（components/home/eni-home.tsx。管理者も同じ画面）
+//  ・EREYS …… 今のまま：スマホは「今の状況」を上に、メニューはアイコン＋小さな文字の3列グリッド
 export default async function StaffHomePage() {
   const session = await requireSession();
   const brand = await getBrand();
   if (!brand) redirect("/select");
+  if (brand === "eni") return <EniHome session={session} />;
 
   const db = getDataStore();
   const today = todayJst();
 
   const me = await db.getStaff(session.staffId);
-  const jobType = me?.jobType ?? "";
   const isExec = session.role === "admin" || (me?.isExecutive ?? false);
 
   // 希望休：募集のお知らせの期間（締切の前の月の15日〜締切日）に、まだ出していなければ知らせる
@@ -54,16 +56,7 @@ export default async function StaffHomePage() {
   const taskBadge = taskSummary.dueCount > 0 ? taskSummary.dueCount : null;
   const chatBadge = chatOverview.totalUnread > 0 ? chatOverview.totalUnread : null;
 
-  const items =
-    brand === "eyes"
-      ? await eyesMenuItems(session.staffId, today, { shiftBadge, taskBadge, chatBadge, isExec })
-      : await eniMenuItems(session.staffId, today, {
-          jobType,
-          isExec,
-          shiftBadge,
-          taskBadge,
-          chatBadge,
-        });
+  const items = await eyesMenuItems(session.staffId, today, { shiftBadge, taskBadge, chatBadge, isExec });
 
   return (
     <div>
@@ -93,7 +86,7 @@ export default async function StaffHomePage() {
           brand={brand}
           viewer={{
             staffId: session.staffId,
-            jobType,
+            jobType: me?.jobType ?? "",
             isExec,
             themeColor: me?.themeColor ?? "",
           }}
@@ -289,170 +282,6 @@ async function eyesMenuItems(
             title: "幹部メニュー",
             short: "幹部",
             description: "幹部タスク・店長/副店長のルーティン・日報の気づき",
-          },
-        ]
-      : []),
-  ];
-}
-
-/** ENi（ヘアサロン）のメニュー項目 */
-async function eniMenuItems(
-  staffId: string,
-  today: string,
-  flags: {
-    jobType: "" | "stylist" | "assistant";
-    isExec: boolean;
-    shiftBadge: string | null;
-    taskBadge: number | null;
-    chatBadge: number | null;
-  }
-): Promise<HomeMenuItem[]> {
-  const db = getDataStore();
-  const weekStart = weekStartOf(today);
-  const showStylist = flags.jobType !== "assistant"; // スタイリスト or 未設定
-  const showWeekly = flags.jobType !== "stylist"; // アシスタント or 未設定
-
-  const [todayPlan, missingMinutes, todayStylistReport, thisWeekReport] = await Promise.all([
-    db.listDailyPlans(today).then((plans) => plans.find((p) => p.staffId === staffId) ?? null),
-    db.listMeetingsMissingMinutes(today),
-    showStylist ? db.getEniReport("stylist", staffId, today) : Promise.resolve(null),
-    showWeekly ? db.getEniReport("weekly", staffId, weekStart) : Promise.resolve(null),
-  ]);
-  const myMissingMinutes = missingMinutes.filter(
-    (m) => m.hostStaffId === staffId || m.createdBy === staffId
-  ).length;
-
-  return [
-    ...(showStylist
-      ? [
-          {
-            href: "/staff/eni-report",
-            accent: "coral" as MenuAccent,
-            icon: "pencil" as IconName,
-            title: "日報を入力（スタイリスト）",
-            short: "日報",
-            description: todayStylistReport
-              ? "本日分は入力済み（修正できます）"
-              : "本日分はまだ未入力です",
-            badge: todayStylistReport ? null : "！",
-          },
-        ]
-      : []),
-    ...(showWeekly
-      ? [
-          {
-            href: "/staff/weekly-report",
-            accent: "rose" as MenuAccent,
-            icon: "pencil" as IconName,
-            title: "週報を入力（アシスタント）",
-            short: "週報",
-            description: thisWeekReport
-              ? "今週分は入力済み（修正できます）"
-              : "今週分はまだ未入力です",
-            badge: thisWeekReport ? null : "！",
-          },
-        ]
-      : []),
-    {
-      href: "/staff/tasks",
-      accent: "sky",
-      icon: "listTodo",
-      title: "タスク",
-      short: "タスク",
-      description: "ルーティン・依頼・会社のタスクを追う",
-      badge: flags.taskBadge,
-    },
-    {
-      href: "/staff/plan",
-      accent: "teal",
-      icon: "calendar",
-      title: "スケジュール",
-      short: "予定",
-      description: todayPlan
-        ? "入力済み（計画と見比べられます）"
-        : "今日の予定をまだ入力していません",
-      badge: todayPlan ? null : "！",
-    },
-    {
-      href: "/staff/chat",
-      accent: "indigo",
-      icon: "chat",
-      title: "トークルーム",
-      short: "トーク",
-      description: "スタッフ同士の連絡（DM・グループ・全体共有）",
-      badge: flags.chatBadge,
-    },
-    {
-      href: "/staff/thanks",
-      accent: "plum",
-      icon: "heart",
-      title: "サンクスカード",
-      short: "サンクス",
-      description: "ありがとうをカードで贈り合う",
-    },
-    {
-      href: "/staff/meetings",
-      accent: "sage",
-      icon: "users",
-      title: "ミーティング・1on1",
-      short: "議事録",
-      description:
-        myMissingMinutes > 0
-          ? `議事録が未提出のミーティングが ${myMissingMinutes} 件あります`
-          : "カレンダーで確認・議事録の提出",
-      badge: myMissingMinutes || null,
-    },
-    {
-      href: "/staff/schedule",
-      accent: "lavender",
-      icon: "calendar",
-      title: "シフト・希望休",
-      short: "シフト",
-      description: "自分のシフトの確認・希望休の提出",
-      badge: flags.shiftBadge,
-    },
-    {
-      href: "/staff/orders",
-      accent: "clay",
-      icon: "banknote",
-      title: "発注・購入申請",
-      short: "発注",
-      description: "ウィッグ・社販・商材の申請",
-    },
-    {
-      href: "/staff/ai-shimon",
-      accent: "gold",
-      icon: "bot",
-      title: "AIしもん（壁打ち相談）",
-      short: "AIしもん",
-      description: "後輩のこと・自分のこと・接客のこと、なんでも相談",
-    },
-    // 組織図・幹部メニュー・欠勤の報告は管理者・幹部のみ
-    ...(flags.isExec
-      ? [
-          {
-            href: "/staff/absence",
-            accent: "rose" as MenuAccent,
-            icon: "alertTriangle" as IconName,
-            title: "欠勤・早退の報告",
-            short: "欠勤報告",
-            description: "報告の送信・全員分の確認（幹部）",
-          },
-          {
-            href: "/staff/exec",
-            accent: "coral" as MenuAccent,
-            icon: "crown" as IconName,
-            title: "幹部メニュー",
-            short: "幹部",
-            description: "幹部タスク・店長/副店長のルーティン・日報の気づき",
-          },
-          {
-            href: "/staff/org",
-            accent: "teal" as MenuAccent,
-            icon: "sparkles" as IconName,
-            title: "組織図（シナジーマップ）",
-            short: "組織図",
-            description: "チームの役割・メンバー・会議体のつながりを見る",
           },
         ]
       : []),

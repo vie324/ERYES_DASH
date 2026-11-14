@@ -1,11 +1,10 @@
-// ホーム上部のダッシュボード。業態ごとに「今の進捗」がひと目で分かるようにする。
+// ホーム上部のダッシュボード（EREYS）。「今の進捗」がひと目で分かるようにする。
 //  ・EREYS（アイサロン）：売上・客数・次回予約率・カウンセリング・日報の提出
-//  ・ENi（ヘアサロン）：週報/日報の提出、練習時間、会議のタスク、議事録
-// データ取得はこのファイル内で完結させ、ホーム側は <Dashboard brand=… /> を置くだけにする。
+// ENi（ヘアサロン）のグラフは、ホームの作り直しで「4つのリマインド数字」と「見える化」に置き換えた
+// （components/home/*）。データ取得はこのファイル内で完結させ、ホーム側は <Dashboard brand=… /> を置くだけにする。
 
 import Link from "next/link";
 import { getDataStore } from "@/lib/data";
-import { practiceHoursOf } from "@/lib/eni/forms";
 import { themeVars } from "@/lib/theme";
 import {
   addDays,
@@ -15,7 +14,6 @@ import {
   monthRange,
   thisMonthJst,
   todayJst,
-  weekStartOf,
 } from "@/lib/date";
 import { formatYen, summarize, summarizeByStaff } from "@/lib/kpi";
 import type { Brand } from "@/lib/brand";
@@ -41,9 +39,11 @@ export interface DashboardViewer {
 }
 
 export async function Dashboard({ brand, viewer }: { brand: Brand; viewer: DashboardViewer }) {
+  // ENi は作り直したホーム（components/home/eni-home.tsx）を使うので、ここでは何も出さない
+  if (brand !== "eyes") return null;
   return (
     <div className="dash-themed" style={themeVars(viewer.themeColor)}>
-      {brand === "eyes" ? <EyesDashboard viewer={viewer} /> : <EniDashboard viewer={viewer} />}
+      <EyesDashboard viewer={viewer} />
     </div>
   );
 }
@@ -214,245 +214,6 @@ async function EyesDashboard({ viewer }: { viewer: DashboardViewer }) {
                 </Link>
               )}
             </div>
-          </div>
-        </div>
-      </ChartCard>
-    </div>
-  );
-}
-
-// ================================================================ ENi
-
-async function EniDashboard({ viewer }: { viewer: DashboardViewer }) {
-  const db = getDataStore();
-  const today = todayJst();
-  const month = thisMonthJst();
-  const { from, to } = monthRange(month);
-  const thisWeek = weekStartOf(today);
-
-  const [staffList, weeklyReports, stylistReports, meetings, openTasks, plans] = await Promise.all([
-    db.listStaff(),
-    // 直近6週ぶんの週報（提出率と練習時間の推移に使う）
-    db.listEniReports("weekly", { from: addDays(thisWeek, -35), to: thisWeek }),
-    db.listEniReports("stylist", { from, to }),
-    db.listMeetings({ from, to }),
-    db.listOpenMeetingTasks(),
-    db.listDailyPlans(today),
-  ]);
-
-  const active = staffList.filter((s) => s.isActive && s.jobType !== "");
-  const assistants = active.filter((s) => s.jobType === "assistant");
-  const stylists = active.filter((s) => s.jobType === "stylist");
-
-  // 練習時間の見せ方は立場で変える。
-  //  ・アシスタント …… 自分の練習時間だけ（週単位）
-  //  ・スタイリスト・幹部・管理者 …… アシスタント一人ひとりの練習時間
-  // スタイリスト以上は練習時間を入力しないので、自分の練習時間は出さない。
-  const seesEveryonePractice = viewer.isExec || viewer.jobType === "stylist";
-  const seesOwnPractice = viewer.jobType === "assistant";
-  // タイルのタップ先：アシスタントは自分の週報、それ以外はみんなの週報一覧
-  const weeklyHref = seesOwnPractice ? "/staff/weekly-report" : "/staff/eni-reports?tab=weekly";
-
-  // 今週の週報の提出状況
-  const thisWeekReports = weeklyReports.filter((r) => r.periodKey === thisWeek);
-  // 今日のスタイリスト日報
-  const todayStylist = stylistReports.filter((r) => r.periodKey === today);
-
-  // 練習時間（週報の 練習／SNS／その他 の合計）の直近6週推移
-  const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, -35 + i * 7));
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-  const round1 = (v: number) => Math.round(v * 10) / 10;
-  const weekLabel = (w: string) => `${Number(w.slice(5, 7))}/${Number(w.slice(8, 10))}`;
-
-  // 全員合計の推移（スタイリスト・幹部向け）
-  const practiceTrend = weeks.map((w) => {
-    const rs = weeklyReports.filter((r) => r.periodKey === w);
-    const hours = rs.reduce((s, r) => s + practiceHoursOf(r.answers), 0);
-    return { label: weekLabel(w), value: round1(hours), hint: `提出 ${rs.length}名` };
-  });
-
-  // 自分だけの推移（アシスタント向け）
-  const myReports = weeklyReports.filter((r) => r.staffId === viewer.staffId);
-  const myPracticeTrend = weeks.map((w) => {
-    const r = myReports.find((x) => x.periodKey === w);
-    return {
-      label: weekLabel(w),
-      value: r ? round1(practiceHoursOf(r.answers)) : 0,
-      hint: r ? "提出済み" : "未提出",
-    };
-  });
-  const myThisWeek = myReports.find((r) => r.periodKey === thisWeek);
-  const myPracticeParts = myThisWeek
-    ? [
-        { label: "練習", value: num(myThisWeek.answers.practice_hours) },
-        { label: "SNS", value: num(myThisWeek.answers.sns_hours) },
-        { label: "その他", value: num(myThisWeek.answers.other_hours) },
-      ]
-    : [];
-
-  // メンバー別の今週の練習時間（スタイリスト・幹部向け）
-  const practiceBars = assistants
-    .map((s) => {
-      const r = thisWeekReports.find((x) => x.staffId === s.id);
-      return { name: s.name.split(" ")[0], value: r ? round1(practiceHoursOf(r.answers)) : 0 };
-    })
-    .sort((a, b) => b.value - a.value);
-
-  // 会議・議事録・タスク
-  const heldMeetings = meetings.filter((m) => m.meetingDate <= today);
-  const minutesDone = heldMeetings.filter((m) => m.minutesDone).length;
-  const overdue = openTasks.filter((t) => t.dueDate && t.dueDate < today).length;
-
-  // 今週の取り組み（モデル・SNSなど）の合計
-  const totals = thisWeekReports.reduce(
-    (acc, r) => {
-      const a = r.answers;
-      acc.model += num(a.model_count);
-      acc.sns += num(a.sns_posts);
-      acc.roleplay += num(a.roleplay_count);
-      return acc;
-    },
-    { model: 0, sns: 0, roleplay: 0 }
-  );
-
-  return (
-    <div className="space-y-3 mb-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <StatTile
-          label="今週の週報（アシスタント）"
-          value={`${thisWeekReports.length}/${assistants.length}`}
-          unit="名"
-          tone={
-            assistants.length > 0 && thisWeekReports.length >= assistants.length ? "good" : "warning"
-          }
-          sub="今週分の提出状況"
-          href={weeklyHref}
-        />
-        {seesOwnPractice ? (
-          <StatTile
-            label="今週の自分の練習時間"
-            value={myPracticeTrend.at(-1)?.value ?? 0}
-            unit="h"
-            spark={myPracticeTrend.map((t) => t.value)}
-            tone="accent"
-            sub="練習・SNS・その他の合計"
-            href="/staff/weekly-report"
-          />
-        ) : (
-          <StatTile
-            label="今週の練習時間（アシスタント合計）"
-            value={practiceTrend.at(-1)?.value ?? 0}
-            unit="h"
-            spark={practiceTrend.map((t) => t.value)}
-            tone="accent"
-            sub="練習・SNS・その他の合計"
-            href="/staff/eni-reports?tab=weekly"
-          />
-        )}
-        <StatTile
-          label="議事録の未提出"
-          value={heldMeetings.length - minutesDone}
-          unit="件"
-          tone={heldMeetings.length - minutesDone > 0 ? "critical" : "good"}
-          sub={`実施 ${heldMeetings.length}件中`}
-          href="/staff/meetings"
-        />
-        <StatTile
-          label="未完了のタスク"
-          value={openTasks.length}
-          unit="件"
-          tone={overdue > 0 ? "critical" : openTasks.length > 0 ? "warning" : "good"}
-          sub={overdue > 0 ? `うち期限切れ ${overdue}件` : "期限内です"}
-          href="/staff/tasks"
-        />
-      </div>
-
-      {/* 練習時間：アシスタントは自分の分だけ、スタイリスト以上は一人ひとりを見る */}
-      {seesOwnPractice && (
-        <>
-          <ChartCard
-            title="自分の練習時間（直近6週）"
-            action={
-              <Link href="/staff/weekly-report" className="text-[11px] font-bold text-brand-700 underline">
-                週報を入力する
-              </Link>
-            }
-          >
-            <ColumnChart data={myPracticeTrend} format="hour" />
-          </ChartCard>
-
-          <ChartCard title="今週の内訳（練習・SNS・その他）">
-            {myPracticeParts.length > 0 ? (
-              <CompositionBar format="hour" parts={myPracticeParts} />
-            ) : (
-              <p className="text-xs text-ink-400">
-                今週の週報がまだ未提出です。週報を出すとここに内訳が出ます。
-              </p>
-            )}
-          </ChartCard>
-        </>
-      )}
-
-      {seesEveryonePractice && (
-        <>
-          <ChartCard
-            title="練習時間の推移（直近6週・アシスタント合計）"
-            action={
-              <Link href="/staff/eni-reports?tab=weekly" className="text-[11px] font-bold text-brand-700 underline">
-                週報を見る
-              </Link>
-            }
-          >
-            <ColumnChart data={practiceTrend} format="hour" />
-          </ChartCard>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            {/* アシスタント一人ひとりの練習時間 */}
-            <ChartCard title="今週の練習時間（アシスタント別）">
-              <HBarList data={practiceBars} format="hour" emptyText="今週の週報がまだありません" />
-            </ChartCard>
-
-            {/* 今週の取り組み */}
-            <ChartCard title="今週の取り組み（全員の合計）">
-              <CompositionBar
-                format="number"
-                parts={[
-                  { label: "モデル（人）", value: totals.model },
-                  { label: "SNS投稿（件）", value: totals.sns },
-                  { label: "ロープレ（回）", value: totals.roleplay },
-                ]}
-              />
-            </ChartCard>
-          </div>
-        </>
-      )}
-
-      {/* 提出・実施の進捗 */}
-      <ChartCard title="提出・実施の状況">
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
-          <ProgressRing
-            value={thisWeekReports.length}
-            total={Math.max(assistants.length, 1)}
-            label="今週の週報"
-            sub="アシスタント"
-          />
-          <div className="flex-1 space-y-3">
-            <Meter
-              value={todayStylist.length}
-              total={Math.max(stylists.length, 1)}
-              label="本日の日報（スタイリスト）"
-            />
-            <Meter
-              value={minutesDone}
-              total={Math.max(heldMeetings.length, 1)}
-              label="議事録の提出（今月の実施分）"
-            />
-            <Meter
-              value={plans.length}
-              total={Math.max(active.length, 1)}
-              label="今日の予定の入力"
-              hint="朝礼で全員が入力できているか（スケジュール画面）"
-            />
           </div>
         </div>
       </ChartCard>

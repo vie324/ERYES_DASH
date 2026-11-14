@@ -20,12 +20,15 @@ import { Dashboard } from "@/components/dashboard";
 import { AnnouncementBoard } from "@/components/announcement-board";
 import { ThemePicker } from "@/components/theme-picker";
 import { getSalonBoardUrl } from "@/lib/settings";
+import { EniHome } from "@/components/home/eni-home";
 
-// 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える
+// 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える。
+// ENi は、スタッフと同じ作り直したホーム（管理者メニュー・ホームの設定への入口つき）。EREYS は今のまま。
 export default async function AdminHomePage() {
   const session = await requireAdmin();
   const brand = await getBrand();
   if (!brand) redirect("/select");
+  if (brand === "eni") return <EniHome session={session} />;
   const today = todayJst();
   const me = await getDataStore().getStaff(session.staffId);
   const salonBoardUrl = await getSalonBoardUrl(getDataStore());
@@ -41,7 +44,7 @@ export default async function AdminHomePage() {
             管理者ダッシュボード
           </h1>
           <span className="inline-flex items-center rounded-full border border-brand-300 bg-white px-2.5 py-0.5 font-display text-xs font-bold text-brand-700">
-            {brand === "eyes" ? "EREYS" : "ENi"}
+            EREYS
           </span>
         </div>
         <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
@@ -54,7 +57,7 @@ export default async function AdminHomePage() {
           PCは画面が広いので、これまで通りグラフを上に置く。 */}
       <div className="flex flex-col">
         <div className="order-1 lg:order-2">
-          {brand === "eyes" ? <EyesAdminDashboard /> : <EniAdminDashboard />}
+          <EyesAdminDashboard />
         </div>
         <div className="order-2 lg:order-1 mt-7 lg:mt-0">
           <h2 className="section-title lg:hidden">今の状況</h2>
@@ -213,58 +216,6 @@ async function EyesAdminDashboard() {
         )}
         <BigMenuLink href="/admin/settings" icon="sliders" accent="clay" title="マスタ設定"
           description="店舗・スタッフ（職種・幹部）・勤怠運用の設定" />
-      </div>
-    </>
-  );
-}
-
-/** ENi（ヘアサロン）の管理ダッシュボード */
-async function EniAdminDashboard() {
-  const db = getDataStore();
-  const today = todayJst();
-  const month = thisMonthJst();
-  const { from, to } = monthRange(month);
-
-  const [missingMinutes, orders] = await Promise.all([
-    db.listMeetingsMissingMinutes(today),
-    db.listOrderRequests({ from: jstDayBoundsUtc(from).start, to: jstDayBoundsUtc(to).end }),
-  ]);
-  const requestedOrders = orders.filter((o) => o.status === "requested").length;
-
-  return (
-    <>
-      <h2 className="section-title mt-6">対応が必要なもの</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <StatCard
-          label="議事録 未提出"
-          value={`${missingMinutes.length}件`}
-          tone={missingMinutes.length > 0 ? "warning" : "default"}
-          sub="実施日を過ぎたミーティング"
-        />
-        <StatCard
-          label="発注 申請中"
-          value={`${requestedOrders}件`}
-          tone={requestedOrders > 0 ? "accent" : "default"}
-          sub="ウィッグ・社販・商材"
-        />
-      </div>
-
-      <h2 className="section-title mt-6">メニュー</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <BigMenuLink href="/staff/eni-reports" icon="fileText" accent="coral" title="日報・週報を見る"
-          description="スタイリスト日報・アシスタント週報の閲覧＋コメント" />
-        <BigMenuLink href="/staff/meetings" icon="user" accent="sage" title="ミーティング・議事録"
-          description="カレンダーで予定確認・議事録の提出状況"
-          badge={missingMinutes.length} />
-        <BigMenuLink href="/staff/absence" icon="alertTriangle" accent="rose" title="欠勤・早退の報告一覧"
-          description="誰が・何時間・どんな理由か（幹部・管理者のみ）" />
-        <BigMenuLink href="/staff/orders" icon="banknote" accent="clay" title="発注・購入申請の管理"
-          description="ウィッグ・社販・商材の申請と発注状況"
-          badge={requestedOrders} />
-        <BigMenuLink href="/admin/schedule" icon="calendar" accent="lavender" title="シフト"
-          description="希望休の確認・シフト表の自動作成・調整・公開" />
-        <BigMenuLink href="/admin/settings" icon="sliders" accent="indigo" title="マスタ設定"
-          description="スタッフの職種・幹部・店舗の設定" />
       </div>
     </>
   );

@@ -6,13 +6,12 @@ import { getDataStore, isDemoMode } from "@/lib/data";
 import { getBrand, BRAND_INFO, type Brand } from "@/lib/brand";
 import { getBrandName, getLogoSrc } from "@/lib/logo";
 import { buildMenuShortcuts, buildMobileTabs, buildNav, homeNavItem, type NavContext } from "@/lib/nav";
-import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
+import { jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { getDayoffNotice } from "@/lib/shift/requests";
 import { getChatOverview } from "@/lib/chat";
-import { getMyTaskSummary, hasExecNotice, isTaskOverdue } from "@/lib/tasks";
+import { getMyTaskSummary } from "@/lib/tasks";
+import { countExecAttention } from "@/lib/home/badges";
 import { getAppLinks } from "@/lib/settings";
-import { buildRoutineStatuses, countUndone, currentPeriodKeys, defaultRoutineStoreId } from "@/lib/eni/routines";
-import { brandStoreIds } from "@/lib/shift/month";
 import { AppShell } from "@/components/app-shell";
 import { PushSetup } from "@/components/push-setup";
 import { DemoBanner } from "@/components/ui";
@@ -103,28 +102,10 @@ export async function AppFrame({
   badges.tasks = taskSummary.dueCount;
   badges.chat = chatOverview.totalUnread;
 
-  // 幹部バッジ：未確認の「日報の気づき」＋期限切れの幹部タスク
+  // 幹部バッジ：未確認の「日報の気づき」＋期限切れの幹部タスク＋自分の店舗のルーティンの未完了
+  // （ホームのショートカットと同じ数え方。lib/home/badges.ts）
   if (isExecutive) {
-    const noticeReports = (
-      await db.listEniReports("stylist", { from: addDays(today, -30), to: today })
-    ).filter((r) => hasExecNotice(r.answers));
-    const checks = await db.listExecNoticeChecks(noticeReports.map((r) => r.id));
-    const checkedIds = new Set(checks.map((c) => c.reportId));
-    const uncheckedNotices = noticeReports.filter((r) => !checkedIds.has(r.id)).length;
-    const overdueExecTasks = (await db.listStaffTasks({ kind: "exec" })).filter((t) => isTaskOverdue(t, today)).length;
-    // 店長・副店長のルーティンの未完了も幹部バッジに足す（毎日の抜けに気づけるように）。
-    // 記録は店舗ごとなので、幹部メニューで最初に開く店舗（自分の店舗）の分を数える
-    const [routines, routineChecks, stores] = await Promise.all([
-      db.listManagerRoutines(),
-      db.listManagerRoutineChecks(currentPeriodKeys(today)),
-      db.listStores(),
-    ]);
-    const brandIds = new Set(brandStoreIds(stores, BRAND_INFO[brand].label));
-    const routineStoreId = defaultRoutineStoreId(me, stores.filter((st) => brandIds.has(st.id)));
-    const undoneRoutines = countUndone(
-      buildRoutineStatuses(routines, routineChecks, today, { audience: "exec", subjectKey: routineStoreId })
-    );
-    badges.exec = uncheckedNotices + overdueExecTasks + undoneRoutines;
+    badges.exec = await countExecAttention(db, me, brand, today);
   }
 
   const navContext: NavContext = {

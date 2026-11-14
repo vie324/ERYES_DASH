@@ -653,6 +653,34 @@ create table if not exists view_logs (
   viewed_at timestamptz not null default now()
 );
 
+-- 2026-11 依頼4：ホームの朝の画面
+-- しもんさんの言葉（代表が書きためた言葉。管理者が登録・並べ替え・停止する。AIで作ったり言い換えたりはしない）
+create table if not exists daily_words (
+  id uuid primary key default gen_random_uuid(),
+  body text not null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- その日に出した言葉（1日1行・全員同じ。次の日は登録順でこの次の言葉。全部出たら最初に戻る）
+create table if not exists daily_word_log (
+  shown_on date primary key,
+  word_id uuid references daily_words(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- AIの「今日のタスク」（本人のタスク情報だけから、1人1日1回だけ作って保存。開くたびには作らない）
+create table if not exists ai_daily_briefs (
+  staff_id uuid not null references staff(id) on delete cascade,
+  brief_date date not null,
+  items jsonb not null default '[]',
+  ai boolean not null default false,
+  model text not null default '',
+  created_at timestamptz not null default now(),
+  primary key (staff_id, brief_date)
+);
+
 -- AIしもんへの相談の記録（相談した人の発言とAIしもんの返答を1件ずつ）。
 -- アプリで読めるのは代表（staff.is_owner）だけ。スタッフを削除すると本人の相談も消える。
 create table if not exists ai_shimon_messages (
@@ -824,6 +852,7 @@ create index if not exists idx_chat_acknowledgements_staff on chat_acknowledgeme
 create index if not exists idx_view_logs_period on view_logs (target_type, period_key);
 create index if not exists idx_view_logs_target on view_logs (target_type, target_id, viewer_staff_id, viewed_at desc);
 create index if not exists idx_view_logs_viewer on view_logs (viewer_staff_id, viewed_at desc);
+create index if not exists idx_daily_words_sort on daily_words (sort_order, created_at);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
@@ -882,6 +911,9 @@ alter table push_subscriptions enable row level security;
 alter table chat_acknowledgements enable row level security;
 alter table push_preferences enable row level security;
 alter table view_logs enable row level security;
+alter table daily_words enable row level security;
+alter table daily_word_log enable row level security;
+alter table ai_daily_briefs enable row level security;
 alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----

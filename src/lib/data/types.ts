@@ -716,6 +716,56 @@ export interface AiShimonThread {
 }
 
 /**
+ * しもんさんの言葉（代表が書きためた言葉）。管理者が管理画面で登録・並べ替え・停止する。
+ * 朝の画面に1日1つ、全員に同じものを、登録順にくり返さず出す（全部出たら最初に戻る）。AIで作ったり言い換えたりはしない。
+ */
+export interface DailyWord {
+  id: string;
+  body: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+/** その日に出した言葉（1日1行。次の日は、登録順でこの次の言葉を出す） */
+export interface DailyWordShown {
+  date: string;
+  /** 出した言葉（あとで削除された言葉は null） */
+  wordId: string | null;
+}
+
+/** AIの「今日のタスク」の1行 */
+export interface DailyBriefItem {
+  /** やること（短く） */
+  text: string;
+  /** ひとことの理由・補足（空でもよい） */
+  detail: string;
+}
+
+/**
+ * 朝の画面の「今日のタスク」。本人のタスク情報だけから、1人1日1回だけ作って保存する（開くたびには作らない）。
+ * AIが使えなかったときの普通の一覧は ai=false。
+ */
+export interface DailyBrief {
+  staffId: string;
+  date: string;
+  items: DailyBriefItem[];
+  ai: boolean;
+  /** 作ったモデル（普通の一覧は空文字） */
+  model: string;
+  createdAt: Date;
+}
+
+/** トークの投稿の、未読の集計に使う最小限の情報（本文・写真・ファイルは持たない） */
+export interface ChatMessageMeta {
+  id: string;
+  roomId: string;
+  senderId: string;
+  createdAt: Date;
+  deleted: boolean;
+}
+
+/**
  * 閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録などにも使い回せる共通の形。
  * 集計（例：週報を先輩がどれだけ見ているか）は lib/views.ts。見られるのは幹部・管理者だけ。
  */
@@ -1189,6 +1239,10 @@ export interface DataStore {
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+  /** 複数のスタッフが入っているトークの参加情報（既読の位置つき）。ホームの未読者の集計に使う */
+  listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]>;
+  /** 期間内の投稿の最小限の情報（本文・写真は読まない）。ホームの未読者の集計に使う */
+  listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]>;
   /** 「確認しました」を付ける（同じ人が何度押しても1件。取り消しはしない） */
   acknowledgeChatMessage(messageId: string, staffId: string): Promise<void>;
   listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]>;
@@ -1243,6 +1297,20 @@ export interface DataStore {
     userAgent: string;
   }): Promise<void>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  // ---- ホームの朝の画面（しもんさんの言葉・AIの今日のタスク） ----
+  /** しもんさんの言葉（並び順→登録順。停止中も含む） */
+  listDailyWords(): Promise<DailyWord[]>;
+  createDailyWord(body: string): Promise<DailyWord>;
+  updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void>;
+  deleteDailyWord(id: string): Promise<void>;
+  /** これまでに出した言葉（新しい日付順） */
+  listDailyWordShown(limit: number): Promise<DailyWordShown[]>;
+  /** その日に出した言葉を記録（同じ日にすでにあれば何もしない＝先に決まった言葉を使う） */
+  recordDailyWordShown(date: string, wordId: string): Promise<void>;
+  getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null>;
+  /** 今日のタスクを保存（同じ人・同じ日にすでにあれば何もしない＝1人1日1回） */
+  saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void>;
+
   /** 通知の受け取り設定（行が無い人は返さない＝すべて受け取る） */
   listPushPreferences(staffIds: string[]): Promise<PushPreference[]>;
   /** 止める通知の種類を丸ごと入れ替える */
