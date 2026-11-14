@@ -29,7 +29,9 @@ import {
   planScopeOfDate,
   totalMinutes,
 } from "@/lib/eni/schedule-blocks";
-import type { DailyPlan, ScheduleBlock } from "@/lib/data/types";
+import type { CompanyEvent, DailyPlan, ScheduleBlock } from "@/lib/data/types";
+import { CompanyEventsPanel, EventFlash } from "@/components/company-events";
+import { eventsOnDate } from "@/lib/company-events";
 import { DateStrip, type StripDay } from "./date-strip";
 import {
   addSchedulePresetAction,
@@ -68,20 +70,29 @@ function planBlocks(plan: DailyPlan | null | undefined): ScheduleBlock[] {
 export default async function PlanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; tab?: string; week?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    tab?: string;
+    week?: string;
+    month?: string;
+    edit?: string;
+    saved?: string;
+    error?: string;
+  }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
   const today = todayJst();
   const date = normalizePlanDate(params.date, today);
   const bounds = planDateBounds(today);
-  const tab = params.tab === "plan" ? "plan" : params.tab === "team" ? "team" : "day";
+  const tab =
+    params.tab === "plan" ? "plan" : params.tab === "team" ? "team" : params.tab === "all" ? "all" : "day";
   const week = PLAN_WEEK_SCOPES.includes((params.week ?? "") as never)
     ? params.week!
     : planScopeOfDate(date);
 
   const db = getDataStore();
-  const [staffList, plans, daySchedule, myIdeals, presets, nearbyPlans] =
+  const [staffList, plans, daySchedule, myIdeals, presets, nearbyPlans, dayEvents] =
     await Promise.all([
       db.listStaff(),
       db.listDailyPlans(date),
@@ -98,6 +109,8 @@ export default async function PlanPage({
           }))
         )
       ),
+      // その日にかかっている全体スケジュール（全体ミーティング・研修など）
+      db.listCompanyEvents({ from: date, to: date }).then((events) => eventsOnDate(events, date)),
     ]);
 
   const members = staffList.filter((s) => s.isActive && s.jobType !== "");
@@ -147,17 +160,23 @@ export default async function PlanPage({
                 ? "よくある項目を更新しました"
                 : "";
   const errorMsg =
-    params.error === "empty"
+    tab === "all"
+      ? ""
+      : params.error === "empty"
       ? "コピー元の週にまだ予定が入っていません"
       : params.error
         ? "入力内容を確認してください"
         : "";
 
+  // 全体＝全体スケジュール（全員にかかわるイベント。登録・編集は管理者と幹部）
   const tabs = [
-    { key: "day", label: "その日の予定", icon: "clock" as const },
-    { key: "plan", label: "計画スケジュール", icon: "sparkles" as const },
-    { key: "team", label: "みんなの予定", icon: "users" as const },
+    { key: "day", label: "その日の予定", short: "その日", icon: "clock" as const },
+    { key: "plan", label: "計画スケジュール", short: "計画", icon: "sparkles" as const },
+    { key: "team", label: "みんなの予定", short: "みんな", icon: "users" as const },
+    { key: "all", label: "全体スケジュール", short: "全体", icon: "megaphone" as const },
   ];
+  // 全体タブは月ごと（日付バーの日の月から始める）
+  const eventMonth = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : date.slice(0, 7);
 
   return (
     <div className="page-narrow">
@@ -177,30 +196,49 @@ export default async function PlanPage({
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">{errorMsg}</p>
       )}
 
-      {/* タブ（スマホでも指で押しやすい高さ） */}
-      <div className="flex gap-1.5 mb-4">
+      {/* タブ（スマホでも指で押しやすい高さ。スマホは短い呼び名） */}
+      <div className="segmented mb-4" role="tablist">
         {tabs.map((t) => (
           <a
             key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            aria-label={t.label}
             href={`/staff/plan?date=${date}&tab=${t.key}`}
-            className={`chip flex-1 justify-center !text-xs sm:!text-sm !py-2.5 ${
-              tab === t.key ? "chip-active" : ""
+            className={`segmented-item !py-2 inline-flex flex-col items-center justify-center gap-0.5 ${
+              tab === t.key ? "segmented-item-active" : ""
             }`}
           >
-            <Icon name={t.icon} className="w-3.5 h-3.5" />
-            {t.label}
+            <Icon name={t.icon} className="w-4 h-4" />
+            <span className="text-[11px] sm:text-xs font-bold">
+              <span className="sm:hidden">{t.short}</span>
+              <span className="hidden sm:inline">{t.label}</span>
+            </span>
           </a>
         ))}
       </div>
 
-      {goalMonth && tab !== "plan" && (
+      {/* ---------------- 全体スケジュール ---------------- */}
+      {tab === "all" && (
+        <>
+          <EventFlash saved={params.saved} error={params.error} />
+          <CompanyEventsPanel
+            month={eventMonth}
+            editId={params.edit}
+            canEdit={isExec}
+            basePath="/staff/plan?tab=all"
+          />
+        </>
+      )}
+
+      {goalMonth && tab !== "plan" && tab !== "all" && (
         <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 mb-4">
           <p className="text-xs font-bold text-brand-700 mb-1">今月の目標</p>
           <p className="text-sm whitespace-pre-wrap text-ink-800">{goalMonth}</p>
         </div>
       )}
 
-      {tab !== "plan" && (
+      {(tab === "day" || tab === "team") && (
         <>
           <DateStrip
             days={stripDays}
@@ -216,6 +254,7 @@ export default async function PlanPage({
               <span className="text-ink-400 ml-1">（{daysBetween(today, date)}日後の予定）</span>
             )}
           </p>
+          <DayEventsBanner events={dayEvents} href={`/staff/plan?date=${date}&tab=all&month=${date.slice(0, 7)}`} />
         </>
       )}
 
@@ -649,5 +688,31 @@ function PlanView({ plan }: { plan: DailyPlan }) {
       )}
       {!hasFields && !plan.photo && <p className="text-xs text-ink-400">（内容なし）</p>}
     </div>
+  );
+}
+
+/** その日にかかっている全体スケジュール（全体ミーティング・研修など）を、予定の上に目立たせて出す */
+function DayEventsBanner({ events, href }: { events: CompanyEvent[]; href: string }) {
+  if (events.length === 0) return null;
+  return (
+    <a href={href} className="block rounded-2xl border border-brand-300 bg-brand-50 p-3.5 mb-4">
+      <p className="text-[11px] font-bold text-brand-700 flex items-center gap-1">
+        <Icon name="megaphone" className="w-3.5 h-3.5" />
+        この日の全体スケジュール
+      </p>
+      <ul className="mt-1.5 space-y-1">
+        {events.map((e) => (
+          <li key={e.id} className="flex items-center gap-2 text-sm">
+            <span className="shrink-0 text-xs font-bold text-brand-800 w-12">{e.startTime || "終日"}</span>
+            <span className="flex-1 min-w-0 font-bold text-ink-900 truncate">{e.title}</span>
+            {e.required && (
+              <span className="shrink-0 rounded-full border border-brand-400 bg-white px-2 py-0.5 text-[10px] font-bold text-brand-800">
+                全員参加
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </a>
   );
 }

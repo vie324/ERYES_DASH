@@ -366,6 +366,31 @@ html {
       hover:text-white hover:border-brand-600 hover:brightness-105;
   }
 
+  /* ---- セグメント（iPhoneの切り替えボタン。「ルーティン／タスク」などの二択・三択）---- */
+  .segmented {
+    @apply grid grid-flow-col auto-cols-fr gap-1 rounded-xl bg-ink-100/80 p-1;
+  }
+  .segmented-item {
+    @apply rounded-lg px-2 py-2.5 text-center text-ink-600 transition-all duration-200 min-h-11
+      hover:text-ink-900 active:scale-[0.98];
+  }
+  .segmented-item-active {
+    @apply bg-white text-ink-900 shadow-[0_1px_3px_rgba(41,38,33,0.14)];
+  }
+
+  /* ---- iPhoneのようなスイッチ（チェックボックスをそのまま見た目だけ変える。JSなしで動く）---- */
+  .toggle {
+    @apply relative h-[31px] w-[51px] cursor-pointer appearance-none rounded-full bg-ink-200 transition-colors duration-200
+      checked:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/70;
+  }
+  .toggle::after {
+    content: "";
+    @apply absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.2)] transition-transform duration-200;
+  }
+  .toggle:checked::after {
+    transform: translateX(20px);
+  }
+
   /* ---- 通知・お知らせ ---- */
   .note {
     @apply rounded-xl px-4 py-3 text-sm font-bold border;
@@ -407,6 +432,21 @@ html {
   .nav-group-label {
     @apply px-3 pb-1.5 pt-4 text-[10px] font-bold tracking-[0.18em] text-sidebar-muted/80 uppercase;
   }
+}
+
+/* ---- トーク：アナウンスから開いたときの「元の投稿」の目印（少しのあいだ色を付ける）---- */
+@keyframes chat-focus {
+  0%,
+  45% {
+    background-color: rgba(255, 214, 102, 0.6);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.chat-focus {
+  border-radius: 14px;
+  animation: chat-focus 2.6s ease-out;
 }
 
 /* ---- 全体共有のアナウンス（ダッシュボード最上部）---- */
@@ -734,4 +774,194 @@ html {
   .card {
     box-shadow: none !important;
   }
+}
+
+/* ============================================================
+   ホーム（ENi）：iPhone純正アプリ風の見た目。
+   色・余白・角丸の値はこの :root の変数だけで決めている（あとで変えるときはここだけ直す）。
+   画面は src/components/home/*。.ios-home を付けた画面だけ、背景が薄いグレーになる。
+   ============================================================ */
+:root {
+  --ios-bg: #f2f2f7; /* 画面の地（薄いグレー） */
+  --ios-card: #ffffff; /* カード */
+  --ios-text: #1c1c1e; /* 文字 */
+  --ios-secondary: #6c6c70; /* 補足の文字（白の上で 4.5:1 以上） */
+  --ios-separator: rgba(60, 60, 67, 0.14); /* 細い区切り線 */
+  --ios-accent: #8a7550; /* リンク・強調（ブランドのゴールドを少し濃く） */
+  --ios-ok: #1f8a43; /* よい（白の上で読める緑） */
+  --ios-warning: #b25e00; /* 注意（白の上で読めるオレンジ） */
+  --ios-danger: #d70015; /* 要対応（白の上で読める赤） */
+  --ios-badge: #ff3b30; /* アイコンの赤い数字 */
+  --ios-radius: 14px; /* カードの角丸 */
+  --ios-radius-sm: 10px; /* 小さな部品の角丸 */
+  --ios-icon-radius: 14px; /* ショートカットのアイコンの角丸 */
+  --ios-icon-size: 58px; /* ショートカットのアイコンの大きさ */
+  --ios-pad: 16px; /* カードの内側の余白 */
+  --ios-gap: 10px; /* カードとカードの間 */
+  --ios-section-gap: 26px; /* 見出しのまとまりの間 */
+  --ios-title-size: 30px; /* 大きい見出し */
+}
+
+body:has(.ios-home) {
+  background: var(--ios-bg);
+}
+
+.ios-home {
+  color: var(--ios-text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", system-ui, sans-serif;
+}
+.ios-large-title {
+  font-size: var(--ios-title-size);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ios-secondary {
+  color: var(--ios-secondary);
+}
+.ios-section {
+  margin-top: var(--ios-section-gap);
+}
+.ios-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ios-text);
+}
+.ios-section-header a {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-accent);
+}
+.ios-card {
+  background: var(--ios-card);
+  border-radius: var(--ios-radius);
+  padding: var(--ios-pad);
+}
+.ios-list {
+  background: var(--ios-card);
+  border-radius: var(--ios-radius);
+  overflow: hidden;
+}
+.ios-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px var(--ios-pad);
+  min-height: 48px;
+}
+.ios-row + .ios-row {
+  border-top: 0.5px solid var(--ios-separator);
+}
+a.ios-row:active,
+a.ios-card:active {
+  background: #e9e9ee;
+}
+.ios-app-icon {
+  position: relative;
+  width: var(--ios-icon-size);
+  height: var(--ios-icon-size);
+  border-radius: var(--ios-icon-radius);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.ios-badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--ios-badge);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  border: 2px solid var(--ios-card);
+}
+.ios-tone-ok {
+  color: var(--ios-ok);
+}
+.ios-tone-warning {
+  color: var(--ios-warning);
+}
+.ios-tone-danger {
+  color: var(--ios-danger);
+}
+.ios-tone-muted {
+  color: var(--ios-secondary);
+}
+.ios-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f2f2f7;
+  color: var(--ios-text);
+}
+
+/* 朝のカード：下から出るシート（PCでは中央のカード） */
+.ios-sheet {
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+  animation: ios-sheet-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 640px) {
+  .ios-sheet {
+    border-radius: 22px;
+  }
+}
+@keyframes ios-sheet-up {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ios-sheet {
+    animation: none;
+  }
+}
+
+/* 一覧の行の小さな色つきアイコン（iPhoneの「設定」アプリのような） */
+.ios-row-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--accent, var(--ios-accent));
+}
+/* 一覧の行の右端の件数 */
+.ios-count {
+  flex-shrink: 0;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--ios-badge);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
 }

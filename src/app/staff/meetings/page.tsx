@@ -12,7 +12,7 @@ import {
   todayJst,
   weekdayOf,
 } from "@/lib/date";
-import { canEditMinutes, canViewMinutes, isExecutive } from "@/lib/eni/access";
+import { canEditMinutes, canViewMinutes, isExecutive, visibleCommittees } from "@/lib/eni/access";
 import { committeeToTemplate, findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingTemplate } from "@/lib/eni/meetings-templates";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
@@ -49,14 +49,22 @@ export default async function MeetingsPage({
     db.listCommittees(),
   ]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
-  // 会議体は管理者が編集できるマスタから引く（削除済みの会議体は初期テンプレにフォールバック）
-  const templates: MeetingTemplate[] = committees.filter((c) => c.isActive).map(committeeToTemplate);
-  const findTemplate = (key: string) => findCommitteeTemplate(committees, key);
+  // 会議体は管理者が編集できるマスタから引く（削除済みの会議体は初期テンプレにフォールバック）。
+  // 登録フォームの選択肢は、自分が参加している会議体だけ（管理者はすべて。会議体の一覧と同じ判定）
   const activeStaff = staffList.filter((s) => s.isActive);
-  // 組織図のチーム所属（会議体を選んだときの参加者の初期選択に使う）
+  const myCommittees = visibleCommittees(
+    committees,
+    { staffId: session.staffId, isAdmin: session.role === "admin" },
+    { orgMembers, activeStaff, meetings }
+  ).filter((row) => row.committee.isActive);
+  const templates: MeetingTemplate[] = myCommittees.map((row) => committeeToTemplate(row.committee));
+  const findTemplate = (key: string) => findCommitteeTemplate(committees, key);
+  // 組織図のチーム所属（会議体を選んだときの参加者の初期選択に使う）。
+  // 組織図は幹部以上なので、渡すのは選べる会議体のチームの分だけにする
+  const usedTeams = new Set(templates.flatMap((t) => t.orgTeams));
   const teamMembers: Record<string, string[]> = {};
   for (const m of orgMembers) {
-    if (!staffMap.get(m.staffId)?.isActive) continue;
+    if (!staffMap.get(m.staffId)?.isActive || !usedTeams.has(m.teamKey)) continue;
     (teamMembers[m.teamKey] ??= []).push(m.staffId);
   }
   const allTasks = await db.listMeetingTasks(meetings.map((m) => m.id));
@@ -113,9 +121,12 @@ export default async function MeetingsPage({
         <Link href="/staff/meetings/committees" className="chip flex-1 justify-center !text-sm !py-2">
           会議体の一覧を見る
         </Link>
-        <Link href="/staff/org" className="chip flex-1 justify-center !text-sm !py-2">
-          組織図（シナジーマップ）
-        </Link>
+        {/* 組織図は幹部以上（それ以外の人にはリンクも出さない） */}
+        {isExec && (
+          <Link href="/staff/org" className="chip flex-1 justify-center !text-sm !py-2">
+            組織図（シナジーマップ）
+          </Link>
+        )}
       </div>
 
       {savedMsg && (

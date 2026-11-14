@@ -22,14 +22,11 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/staff" },
   };
   const jobs = [self.registration.showNotification(title, options)];
-  // アプリアイコンのバッジ（対応端末のみ）。件数が来なければ「点」だけ付ける
+  // アプリアイコンのバッジ（対応端末のみ）。
+  // 件数が通知に入っていればそれを、入っていなければサーバーに聞き直して数字を合わせる
+  // （未読のトーク＋今日の未完了のタスク・ルーティン。聞けなかったときは「点」だけ付ける）
   if (self.navigator && typeof self.navigator.setAppBadge === "function") {
-    jobs.push(
-      (typeof data.badge === "number"
-        ? self.navigator.setAppBadge(data.badge)
-        : self.navigator.setAppBadge()
-      ).catch(() => {})
-    );
+    jobs.push(updateBadge(typeof data.badge === "number" ? data.badge : null));
   }
   event.waitUntil(Promise.all(jobs));
 });
@@ -49,3 +46,23 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+/** バッジの数字を付ける（null ならサーバーの /api/push/badge に聞く） */
+async function updateBadge(count) {
+  try {
+    let n = count;
+    if (n === null) {
+      const res = await fetch("/api/push/badge", { credentials: "same-origin", cache: "no-store" });
+      n = res.ok ? Number((await res.json()).count) : NaN;
+    }
+    if (Number.isFinite(n) && n > 0) await self.navigator.setAppBadge(n);
+    else if (Number.isFinite(n) && n <= 0 && typeof self.navigator.clearAppBadge === "function") await self.navigator.clearAppBadge();
+    else await self.navigator.setAppBadge();
+  } catch {
+    try {
+      await self.navigator.setAppBadge();
+    } catch {
+      // 未対応の端末
+    }
+  }
+}

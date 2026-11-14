@@ -1,7 +1,13 @@
 // ドメインモデルとデータストアのインターフェース定義。
 // 実装は mock-store.ts（デモ用メモリ内）と supabase-store.ts（本番）の2種類。
 
-export type Role = "admin" | "staff";
+/**
+ * ロール。
+ *  ・admin ……… 管理者（すべて見られる）
+ *  ・manager …… 店舗の管理者（担当店舗だけを見る。例：イーリスを見る管理者。判定は名前ではなく、このロールと担当店舗で行う）
+ *  ・staff ……… スタッフ
+ */
+export type Role = "admin" | "manager" | "staff";
 export type PunchType = "in" | "out";
 export type CounselingStatus = "pending" | "confirmed"; // 未確認 / 確認済み
 
@@ -51,6 +57,8 @@ export interface Staff {
   themeColor: string;
   fixedOvertimeHours: number;
   isActive: boolean;
+  /** 担当店舗（店舗の管理者が見る店舗。管理者・スタッフは空でよい） */
+  managedStoreIds: string[];
 }
 
 /** 認証時のみ使用（パスワードハッシュ付き） */
@@ -62,6 +70,8 @@ export interface Customer {
   id: string;
   lineUserId: string | null;
   fullName: string;
+  /** 電話番号（数字だけ。LINEで送ってもらう／店舗が入れる。LINEとのつなぎ込みの照合に使う） */
+  phone: string;
   createdAt: Date;
 }
 
@@ -439,10 +449,24 @@ export interface OrderRequest {
 }
 
 // ============================================================
-// タスク管理（ルーティン／依頼／幹部タスク）
+// タスク管理（ルーティン／タスク × 自分・依頼・幹部）
 // ============================================================
 
-// routine=自分で決めたルーティン / request=誰かからお願いされたタスク / exec=幹部タスク
+/**
+ * 種類（登録画面の最初に選ぶ）。
+ *  ・routine＝ルーティン …… くり返し（毎日／毎週◯曜日／毎月◯日）。該当日に「今日やること」に出て、日ごとに完了をつける
+ *  ・task＝タスク ………… 1回きり。期限と担当者を決め、完了したら終わり
+ * 以前は種類の列が無く、くり返しの有無だけで見分けていた（DBの移行は supabase/schema.sql）。
+ */
+export type TaskType = "routine" | "task";
+
+/**
+ * 誰が決めたか（8月に決めた3分類「ルーティン・依頼・会社ルール」のうち、手で登録する2つ＋幹部）。
+ *  ・routine＝自分で登録したもの（DBの値は旧名の routine のまま。くり返しかどうかは TaskType で見る）
+ *  ・request＝人から依頼されたもの
+ *  ・exec＝幹部タスク（幹部メニューで、幹部どうしで進捗を見合う）
+ * 会社ルール（日報・週報・議事録・希望休など）は登録せず、提出状況から自動で出す（タスク画面）。
+ */
 export type TaskKind = "routine" | "request" | "exec";
 // 単発タスクの進捗。繰り返しタスクは task_completions（日別）で管理する
 export type TaskStatus = "open" | "in_progress" | "done";
@@ -451,6 +475,8 @@ export type TaskRepeat = "" | "daily" | "weekly" | "monthly";
 
 export interface StaffTask {
   id: string;
+  /** ルーティン（くり返し）か、タスク（1回きり）か */
+  taskType: TaskType;
   kind: TaskKind;
   title: string;
   note: string;
@@ -542,6 +568,16 @@ export interface ChatReaction {
   emoji: string;
 }
 
+/**
+ * 全体共有の投稿への「確認しました」（1投稿×1人で1件）。
+ * 押した人・まだの人の一覧は幹部と管理者が見られる。本人には自分が押したかどうかが分かる。
+ */
+export interface ChatAcknowledgement {
+  messageId: string;
+  staffId: string;
+  acknowledgedAt: Date;
+}
+
 // ============================================================
 // 会議体マスタ（管理者が画面から編集できる）
 // ============================================================
@@ -564,12 +600,20 @@ export interface Committee {
 }
 
 // ============================================================
-// 店長・副店長のルーティン業務（デイリー／ウィークリー／マンスリー）
+// 毎日の業務（幹部＝店長・副店長のルーティン業務／スタイリストの毎日の業務）
+// デイリー／ウィークリー／マンスリーで、マスタと実施記録を同じ仕組みで持つ
 // ============================================================
 
 export type RoutineCycle = "daily" | "weekly" | "monthly";
 
-/** ルーティン業務のマスタ（幹部が追加・編集できる） */
+/**
+ * 誰の業務か。
+ *  ・exec＝幹部（店長・副店長）…… 店舗ごとに1つチェックする（その店舗の誰かがやればよい）
+ *  ・stylist＝スタイリスト ……… 一人ひとりがチェックする
+ */
+export type RoutineAudience = "exec" | "stylist";
+
+/** 業務のマスタ（管理者・幹部が追加・編集・停止できる。全店舗に共通） */
 export interface ManagerRoutine {
   id: string;
   title: string;
@@ -577,14 +621,24 @@ export interface ManagerRoutine {
   note: string;
   sortOrder: number;
   isActive: boolean;
+  audience: RoutineAudience;
 }
 
-/** ルーティン業務の実施記録。periodKey は daily=日付 / weekly=週の月曜 / monthly="YYYY-MM" */
+/**
+ * 業務の実施記録。periodKey は daily=日付 / weekly=週の月曜 / monthly="YYYY-MM"。
+ * subjectKey は「何の分か」：幹部の業務＝店舗ID／スタイリストの業務＝スタッフID。
+ * 以前は店舗の区別が無く（1業務×1期間で1件）、移行した記録には付けた人の所属店舗が入っている。
+ */
 export interface ManagerRoutineCheck {
   id: string;
   routineId: string;
   periodKey: string;
+  /** チェックした人 */
   staffId: string;
+  /** 幹部の業務＝店舗ID／スタイリストの業務＝スタッフID（店舗ごと・人ごとの集計に使う） */
+  subjectKey: string;
+  /** 集計用の店舗（幹部の業務＝その店舗／スタイリストの業務＝チェックした時点の所属店舗） */
+  storeId: string | null;
   checkedAt: Date;
 }
 
@@ -606,6 +660,16 @@ export interface PushSubscriptionRow {
 export interface AppSetting {
   key: string;
   value: string;
+}
+
+/**
+ * 通知の受け取り設定（1人1行）。止めている通知の種類だけを持つ（初期値＝すべて受け取る）。
+ * 種類の定義は lib/push/kinds.ts。端末ごとではなく本人ごとの設定。
+ */
+export interface PushPreference {
+  staffId: string;
+  disabledKinds: string[];
+  updatedAt: Date;
 }
 
 // ============================================================
@@ -659,6 +723,75 @@ export interface AiShimonThread {
   firstMessage: string;
   /** 相談した回数（相談した人の発言の数） */
   turns: number;
+}
+
+/**
+ * しもんさんの言葉（代表が書きためた言葉）。管理者が管理画面で登録・並べ替え・停止する。
+ * 朝の画面に1日1つ、全員に同じものを、登録順にくり返さず出す（全部出たら最初に戻る）。AIで作ったり言い換えたりはしない。
+ */
+export interface DailyWord {
+  id: string;
+  body: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+/** その日に出した言葉（1日1行。次の日は、登録順でこの次の言葉を出す） */
+export interface DailyWordShown {
+  date: string;
+  /** 出した言葉（あとで削除された言葉は null） */
+  wordId: string | null;
+}
+
+/** AIの「今日のタスク」の1行 */
+export interface DailyBriefItem {
+  /** やること（短く） */
+  text: string;
+  /** ひとことの理由・補足（空でもよい） */
+  detail: string;
+}
+
+/**
+ * 朝の画面の「今日のタスク」。本人のタスク情報だけから、1人1日1回だけ作って保存する（開くたびには作らない）。
+ * AIが使えなかったときの普通の一覧は ai=false。
+ */
+export interface DailyBrief {
+  staffId: string;
+  date: string;
+  items: DailyBriefItem[];
+  ai: boolean;
+  /** 作ったモデル（普通の一覧は空文字） */
+  model: string;
+  createdAt: Date;
+}
+
+/** トークの投稿の、未読の集計に使う最小限の情報（本文・写真・ファイルは持たない） */
+export interface ChatMessageMeta {
+  id: string;
+  roomId: string;
+  senderId: string;
+  createdAt: Date;
+  deleted: boolean;
+}
+
+/**
+ * 閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録などにも使い回せる共通の形。
+ * 集計（例：週報を先輩がどれだけ見ているか）は lib/views.ts。見られるのは幹部・管理者だけ。
+ */
+export interface ViewLog {
+  id: string;
+  /** 何を見たか（"weekly_report" など。lib/views.ts の VIEW_TARGETS） */
+  targetType: string;
+  /** 見たもののID（週報＝eni_reports.id） */
+  targetId: string;
+  /** 見たものの持ち主（週報を書いた人）。持ち主の無いものは null */
+  ownerStaffId: string | null;
+  /** 集計用の期間（週報＝その週の月曜。無ければ空文字） */
+  periodKey: string;
+  /** 見た人 */
+  viewerStaffId: string;
+  viewedAt: Date;
 }
 
 /**
@@ -772,6 +905,52 @@ export interface StaffInput {
   mission?: string;
   tiers?: number;
   fixedOvertimeHours: number;
+  managedStoreIds?: string[];
+}
+
+/** イーリスの日報（daily_reports）へのコメント・返信（1件＝1行。店舗の管理者・管理者がコメントし、本人が返信する） */
+export interface DailyReportComment {
+  id: string;
+  reportId: string;
+  staffId: string;
+  body: string;
+  createdAt: Date;
+}
+
+/** アプリ内のお知らせ（ホーム・ヘッダーのベル・お知らせ一覧に出る。プッシュ通知とは別に必ず残す） */
+export interface AppNotification {
+  id: string;
+  staffId: string;
+  /** 種類（report_comment など） */
+  kind: string;
+  title: string;
+  body: string;
+  /** タップで開く画面 */
+  href: string;
+  /** 何についてのお知らせか（日報のIDなど。開いたら既読にするのに使う） */
+  refId: string;
+  createdAt: Date;
+  readAt: Date | null;
+}
+
+/** 予約のお知らせ（LINE）の種類 */
+export type AppointmentNoticeKind = "completion" | "three_days" | "day_before" | "week_before";
+
+/** 予約のお知らせの送信記録（いつ・誰に・何を・成功か失敗か）。1回の送信＝1行 */
+export interface AppointmentNoticeLog {
+  id: string;
+  appointmentId: string;
+  customerId: string;
+  kind: AppointmentNoticeKind;
+  /** 送ったときの予約日時（日時が変わったら、新しい日時で送り直せるように） */
+  scheduledFor: Date;
+  /** sending＝送信中（二重送信を防ぐ札）／sent＝送った／failed＝失敗（次の回にもう一度）／skipped＝送らなかった（LINE未連携など） */
+  status: "sending" | "sent" | "failed" | "skipped";
+  /** live＝LINEで送った／mock＝LINEのキーが未設定で、実際には送っていない */
+  mode: "live" | "mock" | "";
+  body: string;
+  error: string;
+  createdAt: Date;
 }
 
 // ---- データストア共通インターフェース ----
@@ -796,6 +975,7 @@ export interface DataStore {
       Pick<
         Staff,
         | "name"
+        | "storeId"
         | "role"
         | "jobType"
         | "rank"
@@ -805,6 +985,7 @@ export interface DataStore {
         | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
+        | "managedStoreIds"
       >
     > & {
       passwordHash?: string;
@@ -824,8 +1005,13 @@ export interface DataStore {
   listCustomers(search?: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | null>;
   getCustomerByLineUserId(lineUserId: string): Promise<Customer | null>;
-  createCustomer(input: { lineUserId: string | null; fullName: string }): Promise<Customer>;
-  updateCustomer(id: string, patch: { fullName?: string }): Promise<Customer>;
+  createCustomer(input: { lineUserId: string | null; fullName: string; phone?: string }): Promise<Customer>;
+  updateCustomer(id: string, patch: { fullName?: string; phone?: string }): Promise<Customer>;
+  /**
+   * お客様の記録を1つにまとめる（店舗が先に入れた「LINE未連携」の記録を、LINEのお客様にまとめる）。
+   * removeId の次回予約・カウンセリングの回答を keepId に付け替えて、removeId を消す。
+   */
+  mergeCustomers(keepId: string, removeId: string): Promise<void>;
 
   // カウンセリング
   createCounselingResponse(input: {
@@ -854,6 +1040,17 @@ export interface DataStore {
   upsertDailyReport(input: DailyReportInput): Promise<DailyReport>;
   getDailyReport(staffId: string, reportDate: string): Promise<DailyReport | null>;
   getDailyReportById(id: string): Promise<DailyReport | null>;
+  // イーリスの日報へのコメント・返信
+  listDailyReportComments(reportIds: string[]): Promise<DailyReportComment[]>;
+  addDailyReportComment(reportId: string, staffId: string, body: string): Promise<DailyReportComment>;
+  /** 自分のコメントだけ消せる */
+  deleteDailyReportComment(id: string, staffId: string): Promise<void>;
+  // アプリ内のお知らせ
+  createAppNotifications(rows: Omit<AppNotification, "id" | "createdAt" | "readAt">[]): Promise<void>;
+  listAppNotifications(staffId: string, limit: number): Promise<AppNotification[]>;
+  countUnreadAppNotifications(staffId: string): Promise<number>;
+  /** 既読にする（refId を渡すと、その件のお知らせだけ。省略で全部） */
+  markAppNotificationsRead(staffId: string, refId?: string): Promise<void>;
   /** from〜to（両端含む, "YYYY-MM-DD"）の日報。staffId指定で絞り込み */
   listDailyReports(filter: { staffId?: string; from: string; to: string }): Promise<DailyReport[]>;
   /** 日報を削除（管理者の修正・削除用） */
@@ -888,6 +1085,33 @@ export interface DataStore {
   markReminderSent(id: string, sentAt: Date): Promise<void>;
   /** 1週間前の事前案内が未送信かつ scheduledAt が from〜to の予約（キャンセル済みは除く） */
   listAppointmentsNeedingPreReminder(from: Date, to: Date): Promise<NextAppointment[]>;
+  // 予約のお知らせ（LINE）の送信記録
+  /**
+   * 送信の札を取る（同じ予約・種類・予約日時で「送信中」か「送った」行があれば取れずに null）。
+   * 取れたら sending の行を返す。これで同じお知らせを二重に送らない。
+   */
+  claimAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+  }): Promise<AppointmentNoticeLog | null>;
+  /** 送信の結果を書く（sent・failed・skipped） */
+  finishAppointmentNotice(
+    id: string,
+    result: { status: "sent" | "failed" | "skipped"; mode: "live" | "mock" | ""; body: string; error: string }
+  ): Promise<void>;
+  /** 送らなかった記録（LINE未連携など）を1回だけ残す */
+  logSkippedAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+    error: string;
+  }): Promise<void>;
+  listAppointmentNoticeLogs(filter: { appointmentIds?: string[]; limit?: number }): Promise<AppointmentNoticeLog[]>;
+  /** 期間内に送ったお知らせの数（LINEの送信数の集計用） */
+  countAppointmentNoticesSent(from: Date, to: Date, kinds: AppointmentNoticeKind[]): Promise<number>;
   markPreReminderSent(id: string, sentAt: Date): Promise<void>;
   /** 当月などの期間内に送信済みリマインド数（Push通数カウント用） */
   countRemindersSent(from: Date, to: Date): Promise<number>;
@@ -965,6 +1189,18 @@ export interface DataStore {
   deleteCompanyEvent(id: string): Promise<void>;
 
   commentEniReport(id: string, comment: string, commentedBy: string): Promise<void>;
+  /**
+   * 閲覧を記録する。同じ人が同じものを dedupeMinutes 分以内に見直した分は数えない（再読み込みで増えないように）。
+   * 記録したら true。
+   */
+  recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean>;
+  /** 閲覧の記録（種類で絞り、期間・持ち主・見た人でさらに絞れる。新しい順） */
+  listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]>;
   /** 日報・週報のコメント（複数人が書ける。古い順） */
   listEniReportComments(reportIds: string[]): Promise<EniReportComment[]>;
   addEniReportComment(reportId: string, staffId: string, body: string): Promise<EniReportComment>;
@@ -1051,6 +1287,7 @@ export interface DataStore {
   /** includeDone=false なら未完了（open/in_progress と繰り返し）のみ */
   listStaffTasks(filter?: {
     kind?: TaskKind;
+    taskType?: TaskType;
     assigneeStaffId?: string;
     createdBy?: string;
     includeDone?: boolean;
@@ -1102,6 +1339,13 @@ export interface DataStore {
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+  /** 複数のスタッフが入っているトークの参加情報（既読の位置つき）。ホームの未読者の集計に使う */
+  listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]>;
+  /** 期間内の投稿の最小限の情報（本文・写真は読まない）。ホームの未読者の集計に使う */
+  listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]>;
+  /** 「確認しました」を付ける（同じ人が何度押しても1件。取り消しはしない） */
+  acknowledgeChatMessage(messageId: string, staffId: string): Promise<void>;
+  listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]>;
 
   // ---- AIしもん（相談の記録。アプリで読めるのは代表だけ） ----
   /** 相談と返答を記録する */
@@ -1118,7 +1362,7 @@ export interface DataStore {
   upsertCommittee(input: Omit<Committee, "id">): Promise<void>;
   deleteCommittee(committeeKey: string): Promise<void>;
 
-  // ---- 店長・副店長のルーティン業務 ----
+  // ---- 毎日の業務（幹部のルーティン業務／スタイリストの毎日の業務） ----
   listManagerRoutines(): Promise<ManagerRoutine[]>;
   createManagerRoutine(input: Omit<ManagerRoutine, "id">): Promise<ManagerRoutine>;
   updateManagerRoutine(
@@ -1126,13 +1370,16 @@ export interface DataStore {
     patch: Partial<Omit<ManagerRoutine, "id">>
   ): Promise<void>;
   deleteManagerRoutine(id: string): Promise<void>;
-  /** 実施記録の付け外し（ルーティン×期間×担当者） */
-  setManagerRoutineChecked(
-    routineId: string,
-    periodKey: string,
-    staffId: string,
-    checked: boolean
-  ): Promise<void>;
+  /** 実施記録の付け外し（業務×期間×対象。対象は幹部の業務＝店舗／スタイリストの業務＝本人） */
+  setManagerRoutineChecked(input: {
+    routineId: string;
+    periodKey: string;
+    subjectKey: string;
+    storeId: string | null;
+    /** チェックした人 */
+    staffId: string;
+    checked: boolean;
+  }): Promise<void>;
   listManagerRoutineChecks(periodKeys: string[]): Promise<ManagerRoutineCheck[]>;
 
   // ---- アプリ設定（サロンボードURLなど） ----
@@ -1150,6 +1397,24 @@ export interface DataStore {
     userAgent: string;
   }): Promise<void>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  // ---- ホームの朝の画面（しもんさんの言葉・AIの今日のタスク） ----
+  /** しもんさんの言葉（並び順→登録順。停止中も含む） */
+  listDailyWords(): Promise<DailyWord[]>;
+  createDailyWord(body: string): Promise<DailyWord>;
+  updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void>;
+  deleteDailyWord(id: string): Promise<void>;
+  /** これまでに出した言葉（新しい日付順） */
+  listDailyWordShown(limit: number): Promise<DailyWordShown[]>;
+  /** その日に出した言葉を記録（同じ日にすでにあれば何もしない＝先に決まった言葉を使う） */
+  recordDailyWordShown(date: string, wordId: string): Promise<void>;
+  getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null>;
+  /** 今日のタスクを保存（同じ人・同じ日にすでにあれば何もしない＝1人1日1回） */
+  saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void>;
+
+  /** 通知の受け取り設定（行が無い人は返さない＝すべて受け取る） */
+  listPushPreferences(staffIds: string[]): Promise<PushPreference[]>;
+  /** 止める通知の種類を丸ごと入れ替える */
+  setPushPreference(staffId: string, disabledKinds: string[]): Promise<void>;
 
   // ---- 社内SNS（サンクスカード） ----
   createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost>;

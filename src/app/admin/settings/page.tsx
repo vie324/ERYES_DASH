@@ -8,10 +8,19 @@ import {
   deleteStaffAction,
   deleteStoreAction,
   saveAppSettingsAction,
+  saveChoiceSettingAction,
+  saveTextSettingAction,
   updateStaffAction,
   updateStoreAction,
 } from "../actions";
-import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
+import {
+  APP_SETTING_DEFS,
+  CHOICE_SETTING_DEFS,
+  TEXT_SETTING_DEFS,
+  choiceSettingOf,
+  settingsMap,
+  textSettingOf,
+} from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
 import { findOwner } from "@/lib/ai-shimon/access";
@@ -196,8 +205,13 @@ export default async function AdminSettingsPage({
                 </span>
                 {s.role === "admin" ? (
                   <StatusBadge label="管理者" tone="pending" />
+                ) : s.role === "manager" ? (
+                  <StatusBadge label="店舗の管理者" tone="pending" />
                 ) : (
                   <StatusBadge label="スタッフ" tone="muted" />
+                )}
+                {stores.length > 1 && (
+                  <StatusBadge label={stores.find((st) => st.id === s.storeId)?.name ?? "店舗不明"} tone="muted" />
                 )}
                 {s.isExecutive && <StatusBadge label="幹部" tone="warning" />}
                 {s.jobType === "stylist" && <StatusBadge label="スタイリスト" tone="ok" />}
@@ -208,9 +222,21 @@ export default async function AdminSettingsPage({
               </summary>
               <form action={updateStaffAction} className="space-y-3 mt-4 pt-4 border-t border-ink-100">
                 <input type="hidden" name="id" value={s.id} />
-                <div>
-                  <label className="label">氏名</label>
-                  <input name="name" defaultValue={s.name} className="input" required />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">氏名</label>
+                    <input name="name" defaultValue={s.name} className="input" required />
+                  </div>
+                  <div>
+                    <label className="label">所属店舗</label>
+                    <select name="store_id" defaultValue={s.storeId} className="input">
+                      {stores.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -222,6 +248,7 @@ export default async function AdminSettingsPage({
                       disabled={s.id === session.staffId}
                     >
                       <option value="staff">スタッフ</option>
+                      <option value="manager">店舗の管理者（担当店舗だけ）</option>
                       <option value="admin">管理者</option>
                     </select>
                   </div>
@@ -236,6 +263,24 @@ export default async function AdminSettingsPage({
                     />
                   </div>
                 </div>
+                <fieldset>
+                  <legend className="label">担当店舗（店舗の管理者が見る店舗）</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {stores.map((st) => (
+                      <label key={st.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="managed_store_ids"
+                          value={st.id}
+                          defaultChecked={s.managedStoreIds.includes(st.id)}
+                          className="h-5 w-5 accent-brand-500"
+                        />
+                        {st.name}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="hint">「店舗の管理者」にした人は、ここで選んだ店舗のスタッフの日報を見てコメントできます（例：イーリスを見る管理者はEREYSの店舗）。管理者・スタッフは空のままで構いません。</p>
+                </fieldset>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">職種（ENiのヘアスタッフのみ）</label>
@@ -384,10 +429,33 @@ export default async function AdminSettingsPage({
               <label className="label" htmlFor="new_role">権限</label>
               <select id="new_role" name="role" className="input" defaultValue="staff">
                 <option value="staff">スタッフ</option>
+                <option value="manager">店舗の管理者（担当店舗だけ）</option>
                 <option value="admin">管理者</option>
               </select>
             </div>
           </div>
+          <div>
+            <label className="label" htmlFor="new_store">所属店舗</label>
+            <select id="new_store" name="store_id" className="input" defaultValue={stores[0]?.id ?? ""}>
+              {stores.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+            <p className="hint">幹部のルーティン業務（店舗ごと）や、店舗ごとの集計に使います。</p>
+          </div>
+          <fieldset>
+            <legend className="label">担当店舗（店舗の管理者にする人だけ）</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {stores.map((st) => (
+                <label key={st.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="managed_store_ids" value={st.id} className="h-5 w-5 accent-brand-500" />
+                  {st.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="new_password2">初期パスワード（8文字以上）</label>
@@ -471,6 +539,57 @@ export default async function AdminSettingsPage({
           </p>
         </form>
       </section>
+
+      {/* 選ぶ設定（全体共有に投稿できる人・毎朝のリマインドの時刻）。1項目＝1フォーム */}
+      <section className="card mt-5">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">全体共有・通知</h2>
+        <div className="space-y-5">
+          {CHOICE_SETTING_DEFS.map((def) => (
+            <form key={def.key} id={def.key} action={saveChoiceSettingAction} className="space-y-2 scroll-mt-20">
+              <input type="hidden" name="key" value={def.key} />
+              <label className="label" htmlFor={`${def.key}-value`}>
+                {def.label}
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id={`${def.key}-value`}
+                  name="value"
+                  defaultValue={choiceSettingOf(appSettings, def.key)}
+                  className="input flex-1"
+                >
+                  {def.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-secondary shrink-0 !px-4">保存</button>
+              </div>
+              <p className="hint">{def.note}</p>
+            </form>
+          ))}
+        </div>
+      </section>
+
+      {/* 文章の設定（幹部メニューの「大切にすること」など）。1項目＝1フォーム */}
+      {TEXT_SETTING_DEFS.map((def) => (
+        <section key={def.key} id={def.key} className="card mt-5 scroll-mt-20">
+          <h2 className="font-display text-lg font-bold text-ink-900 mb-1">{def.label}</h2>
+          <p className="hint !mt-0 mb-3">{def.note}</p>
+          <form action={saveTextSettingAction} className="space-y-3">
+            <input type="hidden" name="key" value={def.key} />
+            <textarea
+              name="value"
+              rows={def.rows}
+              maxLength={def.maxLength}
+              defaultValue={textSettingOf(appSettings, def.key)}
+              className="input leading-relaxed"
+              aria-label={def.label}
+            />
+            <button type="submit" className="btn-secondary w-full">この文面で保存</button>
+          </form>
+        </section>
+      ))}
 
       {/* AIしもん：準備状況の確認（設定そのものは環境変数とファイル配置で行う） */}
       <section className="card mt-5">

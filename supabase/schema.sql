@@ -26,7 +26,7 @@ create table if not exists staff (
   name text not null,
   login_id text not null unique,
   password_hash text not null,
-  role text not null default 'staff' check (role in ('admin', 'staff')),
+  role text not null default 'staff' check (role in ('admin', 'manager', 'staff')),  -- manager＝店舗の管理者（担当店舗だけ）
   job_type text not null default '' check (job_type in ('', 'stylist', 'assistant')),
   rank text not null default '' check (rank in ('', 'first', 'middle', 'final')),  -- アシスタントのランク
   is_executive boolean not null default false,
@@ -35,6 +35,7 @@ create table if not exists staff (
   theme_color text not null default '',               -- ダッシュボードの配色キー（空文字はブランド既定）
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
+  managed_store_ids uuid[] not null default '{}',      -- 担当店舗（店舗の管理者が見る店舗）
   created_at timestamptz not null default now()
 );
 
@@ -43,6 +44,7 @@ create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
   line_user_id text unique,
   full_name text not null,
+  phone text not null default '',                     -- 電話番号（数字だけ。LINEとのつなぎ込みの照合に使う）
   created_at timestamptz not null default now()
 );
 
@@ -381,14 +383,17 @@ create table if not exists order_requests (
 );
 
 -- ============================================================
--- タスク管理（ルーティン／依頼／幹部タスク）
+-- タスク管理（ルーティン／タスク × 自分・依頼・幹部）
 -- ============================================================
 
--- kind: routine=自分で決めたルーティン / request=依頼されたタスク / exec=幹部タスク
+-- task_type: routine=ルーティン（くり返し。該当日に「今日やること」に出て日ごとに完了）
+--            task=タスク（1回きり。期限と担当者を決め、完了したら終わり）
+-- kind: 誰が決めたか。routine=自分で登録（旧名のまま）/ request=依頼されたタスク / exec=幹部タスク
 -- repeat_rule: ''=単発 / daily=毎日 / weekly=毎週（repeat_days=曜日0-6）/ monthly=毎月（repeat_days=日1-31）
--- status は単発タスクの進捗。繰り返しタスクの完了は task_completions（日別）で持つ
+-- status はタスク（1回きり）の進捗。ルーティンの完了は task_completions（日別）で持つ
 create table if not exists staff_tasks (
   id uuid primary key default gen_random_uuid(),
+  task_type text not null default 'task' check (task_type in ('routine', 'task')),
   kind text not null check (kind in ('routine', 'request', 'exec')),
   title text not null,
   note text not null default '',
@@ -466,6 +471,15 @@ create table if not exists chat_reactions (
   staff_id uuid not null references staff(id) on delete cascade,
   emoji text not null,
   primary key (message_id, staff_id, emoji)
+);
+
+-- 2026-11 依頼2：全体共有の投稿への「確認しました」（1投稿×1人で1件。取り消しはしない）
+-- 押した人・まだの人の一覧は幹部と管理者が見る（画面とサーバーアクションで制限）
+create table if not exists chat_acknowledgements (
+  message_id uuid not null references chat_messages(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  acknowledged_at timestamptz not null default now(),
+  primary key (message_id, staff_id)
 );
 
 -- ============================================================
@@ -574,7 +588,8 @@ create table if not exists committees (
   is_active boolean not null default true
 );
 
--- 店長・副店長のルーティン業務マスタ（デイリー／ウィークリー／マンスリー）
+-- 毎日の業務のマスタ（デイリー／ウィークリー／マンスリー）。全店舗に共通
+-- audience: exec=幹部（店長・副店長）の業務（店舗ごとに1つチェック）/ stylist=スタイリストの毎日の業務（一人ひとりがチェック）
 create table if not exists manager_routines (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -582,17 +597,21 @@ create table if not exists manager_routines (
   note text not null default '',
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  audience text not null default 'exec' check (audience in ('exec', 'stylist')),
   created_at timestamptz not null default now()
 );
 
--- ルーティン業務の実施記録。period_key は daily=日付 / weekly=週の月曜 / monthly='YYYY-MM'
+-- 業務の実施記録。period_key は daily=日付 / weekly=週の月曜 / monthly='YYYY-MM'
+-- subject_key は「何の分か」：幹部の業務＝店舗ID／スタイリストの業務＝スタッフID（業務×期間×対象で1件）
+-- store_id は集計用（幹部の業務＝その店舗／スタイリストの業務＝チェックした時点の所属店舗）
 create table if not exists manager_routine_checks (
   id uuid primary key default gen_random_uuid(),
   routine_id uuid not null references manager_routines(id) on delete cascade,
   period_key text not null,
   staff_id uuid not null references staff(id) on delete cascade,
-  checked_at timestamptz not null default now(),
-  unique (routine_id, period_key)
+  subject_key text not null default '',
+  store_id uuid references stores(id) on delete cascade,
+  checked_at timestamptz not null default now()
 );
 
 -- アプリ設定（サロンボードのURLなど、管理者が画面から変えられる値）
@@ -614,6 +633,56 @@ create table if not exists push_subscriptions (
   updated_at timestamptz not null default now()
 );
 
+-- 2026-11 依頼2：通知の受け取り設定（1人1行。止めている通知の種類だけを持つ。行が無い人はすべて受け取る）
+-- 種類のキーは src/lib/push/kinds.ts（chat / mention / announce / morning / task / thanks / shift / absence）
+create table if not exists push_preferences (
+  staff_id uuid primary key references staff(id) on delete cascade,
+  disabled_kinds jsonb not null default '[]',
+  updated_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼3：閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録にも使い回せる共通の形。
+-- target_type: 'weekly_report'（週報）など ／ target_id: 見たもののID（週報＝eni_reports.id）
+-- owner_staff_id: 見たものの持ち主（週報を書いた人）／ period_key: 集計用（週報＝その週の月曜）
+-- 自分の週報を見た分は記録しない。集計を見られるのは幹部・管理者だけ（画面・サーバーアクションで制限）
+create table if not exists view_logs (
+  id uuid primary key default gen_random_uuid(),
+  target_type text not null,
+  target_id text not null,
+  owner_staff_id uuid references staff(id) on delete cascade,
+  period_key text not null default '',
+  viewer_staff_id uuid not null references staff(id) on delete cascade,
+  viewed_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼4：ホームの朝の画面
+-- しもんさんの言葉（代表が書きためた言葉。管理者が登録・並べ替え・停止する。AIで作ったり言い換えたりはしない）
+create table if not exists daily_words (
+  id uuid primary key default gen_random_uuid(),
+  body text not null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- その日に出した言葉（1日1行・全員同じ。次の日は登録順でこの次の言葉。全部出たら最初に戻る）
+create table if not exists daily_word_log (
+  shown_on date primary key,
+  word_id uuid references daily_words(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- AIの「今日のタスク」（本人のタスク情報だけから、1人1日1回だけ作って保存。開くたびには作らない）
+create table if not exists ai_daily_briefs (
+  staff_id uuid not null references staff(id) on delete cascade,
+  brief_date date not null,
+  items jsonb not null default '[]',
+  ai boolean not null default false,
+  model text not null default '',
+  created_at timestamptz not null default now(),
+  primary key (staff_id, brief_date)
+);
+
 -- AIしもんへの相談の記録（相談した人の発言とAIしもんの返答を1件ずつ）。
 -- アプリで読めるのは代表（staff.is_owner）だけ。スタッフを削除すると本人の相談も消える。
 create table if not exists ai_shimon_messages (
@@ -623,6 +692,44 @@ create table if not exists ai_shimon_messages (
   role text not null check (role in ('user', 'assistant')),
   content text not null,
   created_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼5：イーリスの日報へのコメント・返信（店舗の管理者・管理者がコメントし、本人が返信する）
+create table if not exists daily_report_comments (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references daily_reports(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+-- アプリ内のお知らせ（ホーム・ヘッダーのベル・お知らせ一覧に出す。プッシュ通知とは別に必ず残す）
+create table if not exists app_notifications (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  kind text not null default '',
+  title text not null default '',
+  body text not null default '',
+  href text not null default '',
+  ref_id text not null default '',                    -- 何についてのお知らせか（日報のIDなど）
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+
+-- 予約のお知らせ（LINE）の送信記録：いつ・誰に・何を・成功か失敗か（1回の送信＝1行）
+-- 「送信中・送った」の行は、予約×種類×予約日時で1つだけ（下の部分ユニーク索引）＝同じお知らせを二重に送らない
+create table if not exists appointment_notice_logs (
+  id uuid primary key default gen_random_uuid(),
+  appointment_id uuid not null references next_appointments(id) on delete cascade,
+  customer_id uuid not null references customers(id) on delete cascade,
+  kind text not null check (kind in ('completion', 'three_days', 'day_before', 'week_before')),
+  scheduled_for timestamptz not null,                  -- 送ったときの予約日時（日時が変わったら送り直せる）
+  status text not null check (status in ('sending', 'sent', 'failed', 'skipped')),
+  mode text not null default '',                       -- live＝LINEで送った／mock＝キー未設定で実際には送っていない
+  body text not null default '',
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- ---- 既存DBへの追従（あとから足した列・制約）----
@@ -691,6 +798,39 @@ alter table ideal_schedules drop constraint if exists ideal_schedules_scope_chec
 -- トークルーム：全体共有の識別キー
 alter table chat_rooms add column if not exists room_key text not null default '';
 
+-- ---- 2026-11 依頼1：タスクとルーティンを分ける／毎日の業務を店舗ごと・スタイリストにも ----
+-- タスクの種類（ルーティン／タスク）。既存のタスクは消さずに振り分ける：
+-- くり返しがあるもの＝ルーティン、それ以外（判断できないものを含む）＝タスク。
+-- 列を足した直後の行だけを振り分ける（task_type が空の行）ので、何度実行しても結果は変わらない。
+alter table staff_tasks add column if not exists task_type text;
+update staff_tasks
+  set task_type = case when repeat_rule in ('daily', 'weekly', 'monthly') then 'routine' else 'task' end
+  where task_type is null;
+alter table staff_tasks alter column task_type set default 'task';
+alter table staff_tasks alter column task_type set not null;
+alter table staff_tasks drop constraint if exists staff_tasks_task_type_check;
+alter table staff_tasks add constraint staff_tasks_task_type_check check (task_type in ('routine', 'task'));
+-- 入れ替えの途中（古い画面のまま）に作られた、くり返し付きの行はルーティンに直す
+-- （新しい画面ではタスク＝1回きりなので、くり返しの付いたタスクは作られない）
+update staff_tasks set task_type = 'routine'
+  where task_type = 'task' and repeat_rule in ('daily', 'weekly', 'monthly');
+
+-- 毎日の業務の対象（幹部／スタイリスト）。これまでの業務はすべて幹部（店長・副店長）の業務
+alter table manager_routines add column if not exists audience text not null default 'exec';
+alter table manager_routines drop constraint if exists manager_routines_audience_check;
+alter table manager_routines add constraint manager_routines_audience_check check (audience in ('exec', 'stylist'));
+
+-- 実施記録を「店舗ごと（幹部）・人ごと（スタイリスト）」に。
+-- これまでの記録は店舗の区別が無かったので、チェックした人の所属店舗の分として移す（記録は消さない）
+alter table manager_routine_checks add column if not exists subject_key text not null default '';
+alter table manager_routine_checks add column if not exists store_id uuid references stores(id) on delete cascade;
+update manager_routine_checks c
+  set subject_key = s.store_id::text, store_id = s.store_id
+  from staff s
+  where c.staff_id = s.id and c.subject_key = '';
+-- 「1業務×1期間で1件」の制約を外し、下のインデックスで「業務×期間×対象で1件」にする
+alter table manager_routine_checks drop constraint if exists manager_routine_checks_routine_id_period_key_key;
+
 -- トークルーム：PDF添付・返信・メンション・ノート・アナウンス
 alter table chat_messages add column if not exists file text not null default '';
 alter table chat_messages add column if not exists file_name text not null default '';
@@ -699,6 +839,13 @@ alter table chat_messages add column if not exists mentions jsonb not null defau
 alter table chat_messages add column if not exists pinned boolean not null default false;
 alter table chat_messages add column if not exists announced_at timestamptz;
 alter table chat_messages add column if not exists announced_by uuid references staff(id);
+
+-- 2026-11 依頼5：店舗の管理者（manager）と担当店舗・お客様の電話番号
+-- ロールの選択肢を広げるだけ（今の admin / staff の行はそのまま）
+alter table staff drop constraint if exists staff_role_check;
+alter table staff add constraint staff_role_check check (role in ('admin', 'manager', 'staff'));
+alter table staff add column if not exists managed_store_ids uuid[] not null default '{}';
+alter table customers add column if not exists phone text not null default '';
 
 -- ---- インデックス ----
 -- DMの重複防止と、全体共有ルームが1つだけになるようにする（上で列を足したあとに作る）
@@ -745,6 +892,22 @@ create index if not exists idx_chat_messages_announced on chat_messages (announc
 create index if not exists idx_committees_sort on committees (sort_order);
 create index if not exists idx_manager_routines_sort on manager_routines (cycle, sort_order);
 create index if not exists idx_manager_routine_checks_period on manager_routine_checks (period_key);
+create unique index if not exists idx_manager_routine_checks_subject on manager_routine_checks (routine_id, period_key, subject_key);
+create index if not exists idx_manager_routine_checks_store on manager_routine_checks (store_id, period_key);
+create index if not exists idx_staff_tasks_type on staff_tasks (task_type, status);
+create index if not exists idx_chat_acknowledgements_staff on chat_acknowledgements (staff_id);
+create index if not exists idx_view_logs_period on view_logs (target_type, period_key);
+create index if not exists idx_view_logs_target on view_logs (target_type, target_id, viewer_staff_id, viewed_at desc);
+create index if not exists idx_view_logs_viewer on view_logs (viewer_staff_id, viewed_at desc);
+create index if not exists idx_daily_words_sort on daily_words (sort_order, created_at);
+create index if not exists idx_daily_report_comments_report on daily_report_comments (report_id, created_at);
+create index if not exists idx_app_notifications_staff on app_notifications (staff_id, created_at desc);
+create index if not exists idx_app_notifications_unread on app_notifications (staff_id) where read_at is null;
+create unique index if not exists idx_appointment_notice_logs_claim
+  on appointment_notice_logs (appointment_id, kind, scheduled_for) where status in ('sending', 'sent');
+create index if not exists idx_appointment_notice_logs_created on appointment_notice_logs (created_at desc);
+create index if not exists idx_appointment_notice_logs_appointment on appointment_notice_logs (appointment_id);
+create index if not exists idx_customers_phone on customers (phone) where phone <> '';
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
@@ -800,6 +963,15 @@ alter table manager_routines enable row level security;
 alter table manager_routine_checks enable row level security;
 alter table app_settings enable row level security;
 alter table push_subscriptions enable row level security;
+alter table chat_acknowledgements enable row level security;
+alter table push_preferences enable row level security;
+alter table view_logs enable row level security;
+alter table daily_words enable row level security;
+alter table daily_word_log enable row level security;
+alter table ai_daily_briefs enable row level security;
+alter table daily_report_comments enable row level security;
+alter table app_notifications enable row level security;
+alter table appointment_notice_logs enable row level security;
 alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----
@@ -833,6 +1005,23 @@ from (values
   ('日報・週報の入力・確認', '全員の提出状況を見て、未提出には声をかける', 40)
 ) as v(title, note, sort_order)
 where not exists (select 1 from manager_routines);
+
+-- 2026-11 依頼1：幹部の毎日の業務に「口コミ返信チェック」「カルテ記入チェック」、
+-- スタイリストの毎日の業務に「カルテ記入チェック」「営業フィードバック」を足す。
+-- マスタは全店舗共通なので、ここに入れると全店舗に出る（記録は店舗ごと・人ごと）。
+-- 1回だけ入れる（app_settings の印で判定）。あとから管理者が消した・名前を変えた項目は、再実行しても戻さない。
+insert into manager_routines (title, cycle, note, sort_order, audience)
+select v.title, 'daily', v.note, v.sort_order, v.audience
+from (values
+  ('口コミ返信チェック', '新しい口コミに返信もれがないか', 50, 'exec'),
+  ('カルテ記入チェック', 'その日のお客様のカルテが全員ぶん記入されているか', 60, 'exec'),
+  ('カルテ記入チェック', '担当したお客様のカルテを記入したか', 10, 'stylist'),
+  ('営業フィードバック', '営業後のフィードバック（良かったこと・次に活かすこと）をしたか', 20, 'stylist')
+) as v(title, note, sort_order, audience)
+where not exists (select 1 from app_settings where key = '_seed_routines_2026_11')
+  and not exists (select 1 from manager_routines m where m.title = v.title and m.audience = v.audience);
+insert into app_settings (key, value) values ('_seed_routines_2026_11', 'done')
+on conflict (key) do nothing;
 
 -- 初期管理者アカウント
 --   ログインID: admin ／ パスワード: admin1234

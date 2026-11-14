@@ -1,8 +1,9 @@
 "use client";
 
-// ダッシュボード最上部の「全体共有」。
-// トークルームの全体共有でアナウンスにした投稿だけが、ここに大きく出る。
+// ダッシュボード最上部の「全体共有」（アナウンス欄）。
+// トークルームの全体共有でアナウンスに固定した投稿だけが、ここに大きく出る（複数でもよい）。
 // 複数あるときは数秒ごとに切り替わり、点（インジケータ）で手動でも送れる。
+// 本文をタップすると、全体共有の「元の投稿」の位置が開く。
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -50,20 +51,21 @@ export function Announcements({ items }: { items: AnnouncementItem[] }) {
                 </span>
               )}
             </p>
-            {/* 切り替えのたびにふわっと出す（key を変えてアニメーションを流し直す） */}
-            <p
+            {/* 切り替えのたびにふわっと出す（key を変えてアニメーションを流し直す）。タップで元の投稿へ */}
+            <Link
               key={current.id}
-              className="announce-body font-display text-lg sm:text-xl font-bold text-white leading-snug mt-0.5 whitespace-pre-wrap break-words"
+              href={`/staff/chat/${current.roomId}?focus=${current.id}`}
+              className="announce-body block font-display text-lg sm:text-xl font-bold text-white leading-snug mt-0.5 whitespace-pre-wrap break-words line-clamp-6"
             >
               {current.body}
-            </p>
+            </Link>
             <p className="text-[11px] text-white/70 mt-1.5">
               {current.senderName}／{current.when}
               <Link
-                href={`/staff/chat/${current.roomId}`}
+                href={`/staff/chat/${current.roomId}?focus=${current.id}`}
                 className="ml-2 font-bold text-white underline underline-offset-2"
               >
-                全体共有を開く
+                元の投稿を見る
               </Link>
             </p>
           </div>

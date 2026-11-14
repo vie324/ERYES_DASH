@@ -48,7 +48,8 @@ export type IconName =
   | "search"
   | "reply"
   | "copy"
-  | "trash";
+  | "trash"
+  | "sun";
 
 const PATHS: Record<IconName, JSX.Element> = {
   clipboard: (
@@ -291,6 +292,13 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <rect x="4" y="3" width="16" height="18" rx="2.5" />
       <path d="M9.5 16.5v-9l5 9v-9" />
+    </>
+  ),
+  // 朝のカード（ホーム）
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
     </>
   ),
   // ENi／EREYS共通のサークルマーク（正式ロゴの比率に合わせている。点は斜線の延長上に離して置く）

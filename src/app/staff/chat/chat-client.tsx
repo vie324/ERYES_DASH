@@ -208,12 +208,15 @@ const NEAR_BOTTOM_PX = 80;
 export function ChatScroller({
   lastKey,
   lastMine,
+  focusId = "",
   children,
 }: {
   /** いちばん新しいメッセージのID（変わったら新着） */
   lastKey: string;
   /** いちばん新しいメッセージが自分のものか */
   lastMine: boolean;
+  /** 開いたときにこの投稿の位置を出す（ホームのアナウンスから来たとき）。空なら最新へ */
+  focusId?: string;
   children: React.ReactNode;
 }) {
   const { registerScroller } = useChatRoom();
@@ -230,10 +233,22 @@ export function ChatScroller({
     box.scrollTo({ top: box.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  // 開いたとき：描画前に最新まで送っておく（一瞬先頭が見えてしまわないように）
+  // 開いたとき：描画前に最新まで送っておく（一瞬先頭が見えてしまわないように）。
+  // アナウンスから来たとき（focusId あり）は、その投稿を真ん中に出して少しのあいだ色を付ける
   useLayoutEffect(() => {
     const box = boxRef.current;
-    if (box) box.scrollTop = box.scrollHeight;
+    if (!box) return;
+    const target = focusId ? document.getElementById(`m-${focusId}`) : null;
+    if (target && box.contains(target)) {
+      atBottomRef.current = false;
+      target.scrollIntoView({ block: "center" });
+      target.classList.add("chat-focus");
+      const timer = window.setTimeout(() => target.classList.remove("chat-focus"), 2600);
+      return () => window.clearTimeout(timer);
+    }
+    box.scrollTop = box.scrollHeight;
+    // 開いたときだけ（自動更新のたびに動かさない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

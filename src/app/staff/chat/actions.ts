@@ -5,8 +5,18 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { canViewMinutes, isExecutive } from "@/lib/eni/access";
-import { ALL_ROOM_KEY, ALL_ROOM_NAME, extractMentions } from "@/lib/chat";
+import { ALL_ROOM_KEY, ALL_ROOM_NAME, canPostToAllRoom, extractMentions } from "@/lib/chat";
 import { notifyQuietly, pushPreview, shortName } from "@/lib/push/notify";
+import { ALL_ROOM_POSTERS_KEY, getChoiceSetting } from "@/lib/settings";
+import type { Session } from "@/lib/auth/session";
+import type { DataStore } from "@/lib/data/types";
+
+/** 全体共有に投稿できるか（マスタ設定の「全体共有ルームに投稿できる人」。初期値は全員） */
+async function mayPostToAllRoom(db: DataStore, session: Session): Promise<boolean> {
+  const posters = await getChoiceSetting(db, ALL_ROOM_POSTERS_KEY);
+  if (posters === "all") return true;
+  return canPostToAllRoom(posters, { isAdmin: session.role === "admin", isExec: await isExecutive(session) });
+}
 
 /** そのルームのメンバーか（メンバー以外は読めない・送れない） */
 async function requireMembership(roomId: string, staffId: string): Promise<void> {
@@ -89,6 +99,9 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
 
   await requireMembership(roomId, session.staffId);
   const db = getDataStore();
+  const room = await db.getChatRoom(roomId);
+  // 全体共有は、マスタ設定で投稿できる人を絞れる（画面でも入力欄を出さないが、ここでも必ず確かめる）
+  if (room?.roomKey === ALL_ROOM_KEY && !(await mayPostToAllRoom(db, session))) return;
   // @名前 を拾って、そのルームのメンバーだけをメンション先にする
   const [members, staffList] = await Promise.all([db.listChatMembers([roomId]), db.listStaff()]);
   const memberIds = new Set(members.map((m) => m.staffId));
@@ -109,7 +122,6 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
   revalidatePath("/staff/chat");
 
   // 通知：ルームの他のメンバーへ（メンションされた人には「自分あて」と分かる件名で）
-  const room = await db.getChatRoom(roomId);
   const senderName = shortName(staffList.find((s) => s.id === session.staffId)?.name ?? session.name);
   const roomLabel =
     room?.roomKey === ALL_ROOM_KEY ? ALL_ROOM_NAME : room?.isGroup ? room.name || "グループ" : "";
@@ -120,12 +132,24 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
     notifyQuietly(
       db,
       others.filter((id) => mentions.includes(id)),
-      { title: `${senderName}さんからメンション${roomLabel ? `（${roomLabel}）` : ""}`, body: preview, url, tag: `chat-${roomId}` }
+      {
+        title: `${senderName}さんからメンション${roomLabel ? `（${roomLabel}）` : ""}`,
+        body: preview,
+        url,
+        tag: `chat-${roomId}`,
+        kind: "mention",
+      }
     ),
     notifyQuietly(
       db,
       others.filter((id) => !mentions.includes(id)),
-      { title: roomLabel ? `${roomLabel}：${senderName}` : senderName, body: preview, url, tag: `chat-${roomId}` }
+      {
+        title: roomLabel ? `${roomLabel}：${senderName}` : senderName,
+        body: preview,
+        url,
+        tag: `chat-${roomId}`,
+        kind: "chat",
+      }
     ),
   ]);
 }
@@ -154,6 +178,28 @@ export async function toggleReactionAction(formData: FormData): Promise<void> {
   await requireMembership(roomId, session.staffId);
   await getDataStore().toggleChatReaction(messageId, session.staffId, emoji);
   revalidatePath(`/staff/chat/${roomId}`);
+}
+
+/**
+ * 全体共有の投稿に「確認しました」を付ける（取り消しはしない）。
+ * 押せるのは全体共有のメンバー（＝在籍者全員）で、自分の投稿には付けない。
+ */
+export async function acknowledgeMessageAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const messageId = String(formData.get("message_id") ?? "");
+  const roomId = String(formData.get("room_id") ?? "");
+  if (!messageId || !roomId) return;
+
+  const db = getDataStore();
+  const room = await db.getChatRoom(roomId);
+  if (!room || room.roomKey !== ALL_ROOM_KEY) redirect(`/staff/chat/${roomId}?error=forbidden`);
+  await requireMembership(roomId, session.staffId);
+  const [message] = await db.listChatMessagesByIds([messageId]);
+  if (!message || message.roomId !== roomId || message.deleted || message.senderId === session.staffId) return;
+
+  await db.acknowledgeChatMessage(messageId, session.staffId);
+  revalidatePath(`/staff/chat/${roomId}`);
+  revalidatePath("/staff");
 }
 
 /** ノートへの固定・解除（あとから読み返したい連絡をルームの上部にためる） */
@@ -202,6 +248,7 @@ export async function toggleAnnounceAction(formData: FormData): Promise<void> {
         body: pushPreview(message?.body || "新しいアナウンスがあります"),
         url: "/staff",
         tag: "announce",
+        kind: "announce",
       }
     );
   }
@@ -219,6 +266,10 @@ export async function forwardMinutesAction(formData: FormData): Promise<void> {
   const meeting = await db.getMeeting(meetingId);
   if (!meeting) redirect(`${back}?error=input`);
   await requireMembership(roomId, session.staffId);
+  const targetRoom = await db.getChatRoom(roomId);
+  if (targetRoom?.roomKey === ALL_ROOM_KEY && !(await mayPostToAllRoom(db, session))) {
+    redirect(`${back}?error=forbidden`);
+  }
   // 見られない議事録を転送で持ち出せないようにする（ミーティング画面と同じ判定）
   const [isExec, committees] = await Promise.all([isExecutive(session), db.listCommittees()]);
   if (!canViewMinutes(meeting, session.staffId, { isExec, committees })) {

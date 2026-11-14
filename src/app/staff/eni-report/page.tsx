@@ -7,6 +7,8 @@ import { EniFormFields } from "@/components/eni-form-fields";
 import { PyramidPanel } from "@/components/assistant-settings";
 import { PageHeader } from "@/components/ui";
 import { ReportComments } from "@/components/report-comments";
+import { DailyItemRow } from "@/components/task-ui";
+import { buildRoutineStatuses, currentPeriodKeys } from "@/lib/eni/routines";
 import { StylistTimeSummary } from "./stylist-time";
 import { saveStylistReportAction } from "./actions";
 
@@ -23,12 +25,19 @@ export default async function StylistReportPage({
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : today;
 
   const db = getDataStore();
-  const [existing, recent, me, settings] = await Promise.all([
+  const [existing, recent, me, settings, routines, routineChecks] = await Promise.all([
     db.getEniReport("stylist", session.staffId, date),
     db.listEniReports("stylist", { staffId: session.staffId, from: addDays(today, -14), to: today }),
     db.getStaff(session.staffId),
     db.listAssistantSettings(session.staffId),
+    db.listManagerRoutines(),
+    db.listManagerRoutineChecks(currentPeriodKeys(today)),
   ]);
+  // スタイリストの毎日の業務（カルテ記入チェック・営業フィードバックなど）。今日の分を日報の上に出す
+  const dailyItems =
+    me?.jobType === "stylist"
+      ? buildRoutineStatuses(routines, routineChecks, today, { audience: "stylist", subjectKey: me.id })
+      : [];
   // ついたコメント（先輩・幹部が何人でも書ける）
   const [reportComments, staffList] = await Promise.all([
     existing ? db.listEniReportComments([existing.id]) : Promise.resolve([]),
@@ -88,6 +97,23 @@ export default async function StylistReportPage({
           back="/staff/eni-report"
         />
       </div>
+
+      {dailyItems.length > 0 && (
+        <section className="card mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="section-title !mb-0 flex-1">今日の毎日の業務</h2>
+            <span className="text-xs font-bold text-ink-500">
+              {dailyItems.filter((s) => s.done).length}/{dailyItems.length} 完了
+            </span>
+          </div>
+          <p className="hint !mt-0 mb-3">終わったらチェックしてください（タスク画面の「今日やること」と同じものです）。</p>
+          <div className="space-y-2">
+            {dailyItems.map((status) => (
+              <DailyItemRow key={status.routine.id} status={status} back="/staff/eni-report" />
+            ))}
+          </div>
+        </section>
+      )}
 
       <ReportComments
         comments={reportComments}

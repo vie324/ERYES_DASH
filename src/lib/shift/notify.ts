@@ -36,6 +36,7 @@ export async function sendDayoffRequestNotice(db: DataStore, today = todayJst())
     body: `締切は${deadlineLabel(month, rules)}です。休みが要らない月も「休みなしで提出」を押してください。`,
     url: `/staff/schedule/dayoff?month=${month}`,
     tag: `dayoff-${month}`,
+    kind: "shift",
   });
   return { targetMonth: month, unsubmitted: targets.length, sent };
 }
