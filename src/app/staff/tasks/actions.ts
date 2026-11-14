@@ -82,6 +82,7 @@ export async function createTaskAction(formData: FormData): Promise<void> {
       body: `${form.title}（〜${formatDateJa(form.dueDate)}）`,
       url: "/staff/tasks",
       tag: "task",
+      kind: "task",
     });
   }
   refresh();
@@ -120,6 +121,7 @@ export async function createExecTaskAction(formData: FormData): Promise<void> {
       body: `${form.title}${form.dueDate ? `（〜${formatDateJa(form.dueDate)}）` : ""}`,
       url: "/staff/exec",
       tag: "task",
+      kind: "task",
     });
   }
   refresh();

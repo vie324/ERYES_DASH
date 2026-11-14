@@ -54,15 +54,15 @@ export default async function AdminCustomerDetailPage({
       )}
       {flash.error && (
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
-          入力内容を確認してください
+          {flash.error === "phone" ? "電話番号を確認してください（例：090-1234-5678）" : "入力内容を確認してください"}
         </p>
       )}
 
       <div className="space-y-4">
         <section className="card">
-          <form action={updateCustomerNameAction} className="flex items-end gap-2">
+          <form action={updateCustomerNameAction} className="space-y-3">
             <input type="hidden" name="id" value={customer.id} />
-            <div className="flex-1">
+            <div>
               <label className="label" htmlFor="full_name">
                 お名前（LINE登録時の入力を修正できます）
               </label>
@@ -74,8 +74,22 @@ export default async function AdminCustomerDetailPage({
                 required
               />
             </div>
-            <button type="submit" className="btn-secondary shrink-0">
-              変更
+            <div>
+              <label className="label" htmlFor="phone">
+                電話番号（LINEとつなぐ候補を探すのに使います）
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                defaultValue={customer.phone}
+                className="input"
+                placeholder="例）090-1234-5678"
+              />
+            </div>
+            <button type="submit" className="btn-secondary w-full">
+              保存
             </button>
           </form>
           <div className="flex items-center gap-2 mt-3 text-xs text-ink-500">
@@ -123,7 +137,7 @@ export default async function AdminCustomerDetailPage({
               </select>
             </div>
             <button type="submit" className="btn-primary w-full">
-              予約を登録する（前日19時に自動リマインド）
+              予約を登録する（LINEのお知らせが自動で届きます）
             </button>
           </form>
         </section>

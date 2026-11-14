@@ -33,6 +33,7 @@ export async function createThanksAction(formData: FormData): Promise<void> {
     body: `${shortName(session.name)}さんから：${pushPreview(body, 60)}`,
     url: "/staff/thanks",
     tag: "thanks",
+    kind: "thanks",
   });
   revalidatePath("/staff/thanks");
   redirect("/staff/thanks?saved=1");

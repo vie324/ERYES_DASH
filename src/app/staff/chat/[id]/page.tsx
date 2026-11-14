@@ -6,12 +6,17 @@ import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatDateTimeJa, formatTimeJa, jstDateOf } from "@/lib/date";
 import {
   ALL_ROOM_KEY,
+  ALL_ROOM_POSTERS_LABEL,
+  acknowledgementStatus,
   avatarColor,
+  canPostToAllRoom,
   mediaMessages,
   messagePreview,
   roomDisplayName,
   splitMentionParts,
+  type AllRoomPosters,
 } from "@/lib/chat";
+import { ALL_ROOM_POSTERS_KEY, getChoiceSetting } from "@/lib/settings";
 import { isExecutive } from "@/lib/eni/access";
 import { Icon } from "@/components/icons";
 import {
@@ -25,7 +30,7 @@ import {
   MessageActions,
   RoomMenu,
 } from "../chat-client";
-import { togglePinAction, toggleReactionAction, updateGroupAction } from "../actions";
+import { acknowledgeMessageAction, togglePinAction, toggleReactionAction, updateGroupAction } from "../actions";
 import type { ChatMessage, ChatReaction, Staff } from "@/lib/data/types";
 
 const TAB_LABELS: Record<string, string> = {
@@ -52,11 +57,13 @@ export default async function ChatRoomPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string; error?: string; focus?: string }>;
 }) {
   const session = await requireSession();
   const { id: roomId } = await params;
   const query = await searchParams;
+  // ホームのアナウンスから来たときは、その投稿の位置を開く
+  const focusId = typeof query.focus === "string" ? query.focus.slice(0, 64) : "";
   const tab = query.tab && query.tab in TAB_LABELS ? query.tab : "talk";
   const db = getDataStore();
 
@@ -71,7 +78,8 @@ export default async function ChatRoomPage({
   await db.markChatRead(roomId, session.staffId);
 
   const [messages, staffList, pinned, isExec] = await Promise.all([
-    db.listChatMessages(roomId, 200),
+    // 元の投稿へ移動するときは、少し古い投稿まで読む
+    db.listChatMessages(roomId, focusId ? 500 : 200),
     db.listStaff(),
     db.listPinnedChatMessages(roomId),
     isExecutive(session),
@@ -85,6 +93,14 @@ export default async function ChatRoomPage({
     .filter((s): s is Staff => Boolean(s));
   const others = members.filter((m) => m.staffId !== session.staffId);
   const isAllRoom = room.roomKey === ALL_ROOM_KEY;
+  // 全体共有：投稿できる人（マスタ設定）と「確認しました」
+  const [posters, acknowledgements] = isAllRoom
+    ? await Promise.all([
+        getChoiceSetting(db, ALL_ROOM_POSTERS_KEY),
+        db.listChatAcknowledgements(messages.map((m) => m.id)),
+      ])
+    : ["all", []];
+  const canPost = !isAllRoom || canPostToAllRoom(posters, { isAdmin: session.role === "admin", isExec });
   const title = roomDisplayName(
     room,
     others.map((m) => ({ name: nameOf(m.staffId) }))
@@ -118,6 +134,17 @@ export default async function ChatRoomPage({
       map.set(r.emoji, list);
     }
     return map;
+  };
+
+  /** 全体共有の1投稿の「確認しました」（自分が押したか・押した人数／対象の人数） */
+  const ackOf = (message: ChatMessage) => {
+    if (!isAllRoom || message.deleted) return null;
+    const status = acknowledgementStatus(message, memberStaff, acknowledgements);
+    return {
+      mine: status.done.some((d) => d.staff.id === session.staffId),
+      done: status.done.length,
+      total: status.done.length + status.pending.length,
+    };
   };
 
   const media = mediaMessages(messages);
@@ -195,7 +222,11 @@ export default async function ChatRoomPage({
             </div>
           )}
 
-          <ChatScroller lastKey={lastMessage?.id ?? ""} lastMine={lastMessage?.senderId === session.staffId}>
+          <ChatScroller
+            lastKey={lastMessage?.id ?? ""}
+            lastMine={lastMessage?.senderId === session.staffId}
+            focusId={focusId}
+          >
             <div className="mx-auto max-w-3xl pt-1 pb-4">
               {messages.length === 0 && (
                 <p className="mt-10 text-center">
@@ -235,6 +266,8 @@ export default async function ChatRoomPage({
                         reactionNames={(list) => list.map((r) => nameOf(r.staffId)).join("、")}
                         memberNames={memberNames}
                         canAnnounce={isAllRoom && isExec}
+                        ack={ackOf(message)}
+                        canSeeAckList={isAllRoom && isExec}
                       />
                     );
                   })}
@@ -243,12 +276,19 @@ export default async function ChatRoomPage({
             </div>
           </ChatScroller>
 
-          <ChatComposer
-            roomId={roomId}
-            members={memberStaff
-              .filter((s) => s.id !== session.staffId)
-              .map((s) => ({ id: s.id, name: s.name }))}
-          />
+          {canPost ? (
+            <ChatComposer
+              roomId={roomId}
+              members={memberStaff
+                .filter((s) => s.id !== session.staffId)
+                .map((s) => ({ id: s.id, name: s.name }))}
+            />
+          ) : (
+            <p className="shrink-0 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-center text-xs font-bold text-[#555] border-t border-black/5">
+              全体共有に投稿できるのは{ALL_ROOM_POSTERS_LABEL[posters as AllRoomPosters] ?? "一部の人"}です。
+              読むこと・「確認しました」を押すことはできます。
+            </p>
+          )}
         </ChatRoomProvider>
       )}
 
@@ -422,6 +462,8 @@ function MessageRow({
   reactionNames,
   memberNames,
   canAnnounce,
+  ack,
+  canSeeAckList,
 }: {
   message: ChatMessage;
   roomId: string;
@@ -441,11 +483,16 @@ function MessageRow({
   reactionNames: (list: ChatReaction[]) => string;
   memberNames: string[];
   canAnnounce: boolean;
+  /** 全体共有の「確認しました」（全体共有以外・取り消した投稿は null） */
+  ack: { mine: boolean; done: number; total: number } | null;
+  /** 押した人・まだの人の一覧を開けるか（幹部・管理者） */
+  canSeeAckList: boolean;
 }) {
+  const anchorId = `m-${message.id}`;
   // 送信取消はLINEと同じく、真ん中のお知らせとして出す
   if (message.deleted) {
     return (
-      <p className="my-2 px-4 text-center">
+      <p id={anchorId} className="my-2 px-4 text-center">
         <span className="line-pill">
           {mine ? "メッセージの送信を取り消しました" : `${senderName}がメッセージの送信を取り消しました`}
         </span>
@@ -550,9 +597,42 @@ function MessageRow({
       </div>
     ) : null;
 
+  // 全体共有の「確認しました」：自分以外の投稿には押すボタン、幹部・管理者には人数（タップで一覧）
+  const ackRow = ack ? (
+    <div className={`mt-1 flex flex-wrap items-center gap-2 ${mine ? "justify-end" : ""}`}>
+      {!mine &&
+        (ack.mine ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-bold text-[#0b7a3b] shadow-sm">
+            <Icon name="checkCircle" className="w-3.5 h-3.5" />
+            確認済み
+          </span>
+        ) : (
+          <form action={acknowledgeMessageAction}>
+            <input type="hidden" name="message_id" value={message.id} />
+            <input type="hidden" name="room_id" value={roomId} />
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--line-green)] bg-white px-3 py-1.5 text-[12px] font-bold text-[#0b7a3b] shadow-sm active:bg-emerald-50"
+            >
+              確認しました
+            </button>
+          </form>
+        ))}
+      {canSeeAckList && (
+        <Link
+          href={`/staff/chat/${roomId}/ack/${message.id}`}
+          className="inline-flex items-center gap-0.5 rounded-full bg-white/80 px-2 py-1 text-[11px] font-bold text-[#555]"
+        >
+          確認 {ack.done}/{ack.total}
+          <Icon name="chevronRight" className="w-3 h-3" />
+        </Link>
+      )}
+    </div>
+  ) : null;
+
   if (mine) {
     return (
-      <div className={`flex justify-end pl-14 pr-3 ${first ? "mt-3" : "mt-1"}`}>
+      <div id={anchorId} className={`flex justify-end pl-14 pr-3 ${first ? "mt-3" : "mt-1"}`}>
         <div className="flex min-w-0 flex-1 flex-col items-end">
           {/* 行は幅いっぱいにしておく（吹き出しの最大幅＝行の幅−時刻の欄。行を中身の幅にすると短い文でも折り返してしまう） */}
           <div className="flex w-full items-end justify-end gap-1.5">
@@ -565,13 +645,14 @@ function MessageRow({
             {actions}
           </div>
           {reactionRow}
+          {ackRow}
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`flex items-start gap-2 pl-2.5 pr-12 ${first ? "mt-3" : "mt-1"}`}>
+    <div id={anchorId} className={`flex items-start gap-2 pl-2.5 pr-12 ${first ? "mt-3" : "mt-1"}`}>
       <div className="w-9 shrink-0">{first && <Avatar name={senderName} id={message.senderId} />}</div>
       <div className="flex min-w-0 flex-1 flex-col items-start">
         {first && showName && <p className="line-meta mb-1 max-w-full truncate px-0.5 text-[11px]">{senderName}</p>}
@@ -583,6 +664,7 @@ function MessageRow({
           </div>
         </div>
         {reactionRow}
+        {ackRow}
       </div>
     </div>
   );

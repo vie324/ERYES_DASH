@@ -7,6 +7,7 @@
 // サーバーの購読情報は /api/push/subscribe に保存し、以後はサーバー側から通知が届く。
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/icons";
 
 const DISMISS_KEY = "push-setup-dismissed-until";
@@ -14,17 +15,17 @@ const SYNC_KEY = "push-subscription-synced-at";
 
 type State = "idle" | "ask" | "ios-hint" | "working" | "done" | "denied";
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+export function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const raw = atob((base64 + padding).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-function isIos(): boolean {
+export function isIos(): boolean {
   return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
-function isStandalone(): boolean {
+export function isStandalone(): boolean {
   return (
     window.matchMedia?.("(display-mode: standalone)").matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true
@@ -111,13 +112,22 @@ export function PushSetup({ publicKey, badgeCount }: { publicKey: string; badgeC
         {state === "ios-hint" ? (
           <>
             <p className="font-bold text-ink-800">通知を受け取るには「ホーム画面に追加」</p>
-            <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-              iPhoneは、Safariの共有ボタン → 「ホーム画面に追加」で入れたアプリからだけ通知をオンにできます。
-              追加したアプリを開くと、ここに「通知をオンにする」が出ます。
-            </p>
+            <ol className="text-xs text-ink-600 mt-1 leading-relaxed list-decimal pl-4 space-y-0.5">
+              <li>画面下の共有ボタン（□に↑）を押す</li>
+              <li>「ホーム画面に追加」→ 右上の「追加」</li>
+              <li>ホーム画面にできたアイコンから開き、「通知をオンにする」を押す</li>
+            </ol>
+            <Link href="/staff/notifications" className="mt-1 inline-block text-xs font-bold text-brand-700 underline">
+              くわしい手順・通知の設定
+            </Link>
           </>
         ) : state === "done" ? (
-          <p className="font-bold text-emerald-700">通知をオンにしました。トークやタスクのお知らせが届きます。</p>
+          <p className="font-bold text-emerald-700">
+            通知をオンにしました。トークやタスクのお知らせが届きます。
+            <Link href="/staff/notifications" className="ml-1 text-xs underline">
+              受け取る通知を選ぶ
+            </Link>
+          </p>
         ) : state === "denied" ? (
           <p className="text-xs text-ink-600">
             通知が許可されませんでした。端末の設定でこのアプリの通知を許可すると受け取れます。
@@ -164,7 +174,7 @@ export function PushSetup({ publicKey, badgeCount }: { publicKey: string; badgeC
  * 購読をサーバーに登録する。すでに許可済みの端末では、1日1回だけ再送して最新に保つ
  * （ブラウザ側で購読が更新されることがあるため）。
  */
-async function syncSubscription(publicKey: string, force = false): Promise<void> {
+export async function syncSubscription(publicKey: string, force = false): Promise<void> {
   try {
     if (!force) {
       const last = Number(localStorage.getItem(SYNC_KEY) ?? 0);

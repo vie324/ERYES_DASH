@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { addMonths, formatDateJa, formatMonthJa, monthRange, thisMonthJst, todayJst } from "@/lib/date";
-import { isAllHands, joinsCommittee, participantsOf } from "@/lib/eni/committees";
+import { isAllHands } from "@/lib/eni/committees";
+import { isExecutive, visibleCommittees } from "@/lib/eni/access";
 import { MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { MemberPicker } from "@/app/staff/chat/chat-client";
@@ -10,7 +11,8 @@ import type { Committee } from "@/lib/data/types";
 import { deleteCommitteeAction, saveCommitteeAction } from "./actions";
 
 // 会議体の整理：どんな会議体があって、誰が出て、何を話すのかを一枚で見る。
-// 既定では「自分が参加する会議体」だけを出し、全部を見たいときは切り替えられる。
+// 一覧に出るのは、その会議体の参加者だけ（管理者はすべて見られ、「自分が出る／すべて」を切り替えられる）。
+// URL（?all=1）を直接開いても、管理者以外には参加している会議体しか出さない（lib/eni/access.ts）。
 // 内容（名前・目的・アジェンダ・参加者など）は管理者アカウントがこの画面から編集できる。
 export default async function CommitteesPage({
   searchParams,
@@ -23,7 +25,9 @@ export default async function CommitteesPage({
   const { from, to } = monthRange(month);
   const today = todayJst();
   const isAdmin = session.role === "admin";
-  const showAll = params.all === "1";
+  // 「すべて見る」は管理者だけ（それ以外の人は参加している会議体だけ）
+  const showAll = isAdmin && params.all === "1";
+  const isExec = await isExecutive(session);
 
   const db = getDataStore();
   const [committees, meetings, staffList, orgMembers, orgUnits] = await Promise.all([
@@ -37,18 +41,15 @@ export default async function CommitteesPage({
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
   const unitNameOf = (key: string) => orgUnits.find((u) => u.unitKey === key)?.name ?? key;
 
-  // 会議体ごとに「参加者」と「自分が出るか」を先に出しておく
-  const rows = committees
-    .filter((c) => c.isActive || isAdmin)
-    .map((c) => {
-      const participants = participantsOf(c, orgMembers, activeStaff);
-      return {
-        committee: c,
-        participants,
-        mine: joinsCommittee(c, session.staffId, participants, meetings),
-        held: meetings.filter((m) => m.committee === c.committeeKey),
-      };
-    });
+  // 会議体ごとに「参加者」と「自分が出るか」を先に出しておく（管理者以外は参加している会議体だけ）
+  const rows = visibleCommittees(
+    committees,
+    { staffId: session.staffId, isAdmin },
+    { orgMembers, activeStaff, meetings }
+  ).map((row) => ({
+    ...row,
+    held: meetings.filter((m) => m.committee === row.committee.committeeKey),
+  }));
   const mineCount = rows.filter((r) => r.mine).length;
   const shown = showAll ? rows : rows.filter((r) => r.mine);
 
@@ -93,29 +94,33 @@ export default async function CommitteesPage({
         nextHref={`/staff/meetings/committees?month=${addMonths(month, 1)}${showAll ? "&all=1" : ""}`}
       />
 
-      {/* 自分の会議体 ⇄ すべて */}
-      <div className="flex gap-1.5 mb-4">
-        <a
-          href={`/staff/meetings/committees?month=${month}`}
-          className={`chip flex-1 justify-center !text-sm !py-2.5 ${!showAll ? "chip-active" : ""}`}
-        >
-          自分が出る会議体（{mineCount}）
-        </a>
-        <a
-          href={`/staff/meetings/committees?month=${month}&all=1`}
-          className={`chip flex-1 justify-center !text-sm !py-2.5 ${showAll ? "chip-active" : ""}`}
-        >
-          すべて見る（{rows.length}）
-        </a>
-      </div>
+      {/* 自分の会議体 ⇄ すべて（管理者だけ） */}
+      {isAdmin && (
+        <div className="flex gap-1.5 mb-4">
+          <a
+            href={`/staff/meetings/committees?month=${month}`}
+            className={`chip flex-1 justify-center !text-sm !py-2.5 ${!showAll ? "chip-active" : ""}`}
+          >
+            自分が出る会議体（{mineCount}）
+          </a>
+          <a
+            href={`/staff/meetings/committees?month=${month}&all=1`}
+            className={`chip flex-1 justify-center !text-sm !py-2.5 ${showAll ? "chip-active" : ""}`}
+          >
+            すべて見る（{rows.length}）
+          </a>
+        </div>
+      )}
 
       <div className="space-y-3">
         {shown.length === 0 && (
           <p className="card text-sm text-ink-500">
             参加する会議体が登録されていません。
-            <a href={`/staff/meetings/committees?month=${month}&all=1`} className="font-bold text-brand-700 underline ml-1">
-              すべての会議体を見る
-            </a>
+            {isAdmin && (
+              <a href={`/staff/meetings/committees?month=${month}&all=1`} className="font-bold text-brand-700 underline ml-1">
+                すべての会議体を見る
+              </a>
+            )}
           </p>
         )}
 
@@ -143,7 +148,12 @@ export default async function CommitteesPage({
                 )}
               </div>
 
-              <p className="text-sm text-ink-700 mt-2">{t.purpose}</p>
+              {t.purpose && (
+                <div className="mt-2">
+                  <p className="text-xs font-bold text-brand-700">目的</p>
+                  <p className="text-sm text-ink-700 mt-0.5 whitespace-pre-wrap">{t.purpose}</p>
+                </div>
+              )}
 
               {/* 参加メンバー：個別指定 → 組織図のチーム → 全員参加 の順で決まる */}
               <div className="mt-2">
@@ -168,7 +178,8 @@ export default async function CommitteesPage({
                 ) : (
                   <p className="text-xs text-ink-500 mt-0.5">目安：{t.participantsHint}</p>
                 )}
-                {t.orgTeams.length > 0 && t.memberStaffIds.length === 0 && (
+                {/* 組織図のチーム名は幹部以上にだけ出す（組織図は幹部以上） */}
+                {isExec && t.orgTeams.length > 0 && t.memberStaffIds.length === 0 && (
                   <p className="text-[11px] text-ink-400 mt-1">
                     担当チーム：{t.orgTeams.map(unitNameOf).join("、")}（組織図から自動で出しています）
                   </p>
@@ -235,13 +246,15 @@ export default async function CommitteesPage({
       <div className="mt-4 space-y-2">
         <p className="text-xs text-ink-400">
           ※ 参加メンバーは「個別指定」があればそれを、無ければ組織図（シナジーマップ）のチーム登録から出します。
-          どちらも無い会議体は全員参加として扱います。
+          どちらも無い会議体は全員参加として扱います。一覧に出るのは、参加している会議体だけです（管理者はすべて）。
         </p>
-        <p className="text-center">
-          <Link href="/staff/org" className="text-sm font-bold text-brand-700 underline">
-            組織図（シナジーマップ）でチームを設定する
-          </Link>
-        </p>
+        {isExec && (
+          <p className="text-center">
+            <Link href="/staff/org" className="text-sm font-bold text-brand-700 underline">
+              組織図（シナジーマップ）でチームを設定する
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -298,7 +311,7 @@ function CommitteeFields({
         />
       </div>
       <div>
-        <label className="label" htmlFor={`${id}-purpose`}>この会議で何をするのか</label>
+        <label className="label" htmlFor={`${id}-purpose`}>目的（この会議で何をするのか）</label>
         <textarea
           id={`${id}-purpose`}
           name="purpose"

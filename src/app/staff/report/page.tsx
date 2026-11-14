@@ -5,6 +5,7 @@ import { formatDateJa, todayJst } from "@/lib/date";
 import { formatYen } from "@/lib/kpi";
 import { PageHeader } from "@/components/ui";
 import { saveDailyReportAction } from "./actions";
+import { reportThreadHref } from "@/lib/eyes/report-comments";
 
 // 日報入力：1分で終わるよう項目は7つだけ。同じ日に保存し直すと上書きされる。
 export default async function ReportPage({
@@ -17,7 +18,10 @@ export default async function ReportPage({
   const today = todayJst();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : today;
 
-  const existing = await getDataStore().getDailyReport(session.staffId, date);
+  const db = getDataStore();
+  const existing = await db.getDailyReport(session.staffId, date);
+  // この日の日報についたコメント（店舗の管理者・管理者から）。あれば読む・返信する画面へ案内する
+  const commentCount = existing ? (await db.listDailyReportComments([existing.id])).length : 0;
 
   const numberField = (
     name: string,
@@ -62,6 +66,16 @@ export default async function ReportPage({
         <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
           未来の日付には入力できません
         </p>
+      )}
+
+      {existing && commentCount > 0 && (
+        <Link
+          href={reportThreadHref(existing.id)}
+          className="flex items-center gap-2 rounded-xl bg-brand-50 border border-brand-200 px-4 py-3 mb-4 text-sm font-bold text-brand-800"
+        >
+          <span className="flex-1">この日報にコメントが {commentCount}件 あります（読む・返信する）</span>
+          <span aria-hidden="true">›</span>
+        </Link>
       )}
 
       <form action={saveDailyReportAction} className="space-y-4">

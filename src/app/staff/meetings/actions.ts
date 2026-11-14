@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { canEditMinutes, isExecutive, isMeetingMember } from "@/lib/eni/access";
+import { canEditMinutes, isExecutive, isMeetingMember, visibleCommittees } from "@/lib/eni/access";
 import { findCommitteeTemplate } from "@/lib/eni/committees";
 import type { MeetingType } from "@/lib/data/types";
 import { notifyQuietly, pushPreview } from "@/lib/push/notify";
@@ -16,8 +16,28 @@ const MINUTES_FILE_MAX_LENGTH = 5_600_000;
 /** ミーティングの登録（会議体テンプレート／1on1／その他） */
 export async function createMeetingAction(formData: FormData): Promise<void> {
   const session = await requireSession();
+  const db = getDataStore();
   const committee = String(formData.get("committee") ?? "");
-  const template = findCommitteeTemplate(await getDataStore().listCommittees(), committee);
+  const committees = await db.listCommittees();
+  const template = findCommitteeTemplate(committees, committee);
+
+  // 会議体の回は、その会議体の参加者（と管理者）だけが登録できる（会議体の一覧と同じ判定）
+  if (committee && committees.some((c) => c.committeeKey === committee) && session.role !== "admin") {
+    const date = String(formData.get("meeting_date") ?? "");
+    const [orgMembers, staffList, meetings] = await Promise.all([
+      db.listOrgMembers(),
+      db.listStaff(),
+      /^\d{4}-\d{2}-\d{2}$/.test(date) ? db.listMeetings({ from: `${date.slice(0, 7)}-01`, to: date }) : Promise.resolve([]),
+    ]);
+    const mine = visibleCommittees(
+      committees,
+      { staffId: session.staffId, isAdmin: false },
+      { orgMembers, activeStaff: staffList.filter((s) => s.isActive), meetings }
+    );
+    if (!mine.some((row) => row.committee.committeeKey === committee)) {
+      redirect("/staff/meetings?error=forbidden");
+    }
+  }
 
   const typeRaw = String(formData.get("meeting_type") ?? "1on1");
   const meetingType: MeetingType = typeRaw === "all" || typeRaw === "other" ? typeRaw : "1on1";
@@ -114,6 +134,7 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
         body: pushPreview(titles.join("／")),
         url: "/staff/tasks",
         tag: "meeting-task",
+        kind: "task",
       })
     )
   );

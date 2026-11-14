@@ -1,43 +1,86 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { formatDateTimeJa, utcToJstLocal } from "@/lib/date";
+import { addDays, formatDateJa, formatDateTimeJa, todayJst, utcToJstLocal } from "@/lib/date";
 import { getMonthlyPushCount, LINE_FREE_QUOTA } from "@/lib/push-count";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import {
   approveAppointmentChangeAction,
   createAppointmentAction,
+  createUnlinkedCustomerAction,
   deleteAppointmentAction,
 } from "../actions";
+import Link from "next/link";
+import { settingsMap } from "@/lib/settings";
+import {
+  DAYS_BEFORE,
+  LINE_NOTICE_SETTINGS_KEY,
+  NOTICE_LABEL,
+  maskPhone,
+  parseLineNoticeSettings,
+} from "@/lib/line/appointment-notices";
+import type { AppointmentNoticeKind, AppointmentNoticeLog } from "@/lib/data/types";
 
-// 次回予約の登録とリマインド状況の確認。
-// 定時バッチ（/api/cron/reminder）が「1週間前の事前案内」と「前日リマインド」を自動送信し、
-// お客様はメッセージ内のリンクから確認・変更希望・キャンセルができる。
+// 次回予約の登録とLINEのお知らせの状況の確認。
+// 予約を登録すると「予約完了のお知らせ」を送り、定時実行（/api/cron/reminder）が「3日前のお知らせ」「前日の確認」を
+// 管理画面で選んだ時刻に送る（文面・時刻は「LINEのお知らせの設定」）。お客様は「予約確認」と送ると次の予約が分かる。
 export default async function AdminAppointmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; deleted?: string; changed?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; deleted?: string; changed?: string; error?: string; customer_added?: string }>;
 }) {
   await requireAdmin();
   const flash = await searchParams;
   const db = getDataStore();
   const now = new Date();
 
-  const [customers, staffList, upcoming, pushCount] = await Promise.all([
+  const [customers, staffList, upcoming, pushCount, settingRows] = await Promise.all([
     db.listCustomers(),
     db.listStaff(),
     db.listNextAppointments({ from: now }),
     getMonthlyPushCount(db),
+    db.listAppSettings(),
   ]);
   const customerMap = new Map(customers.map((c) => [c.id, c]));
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
+  const settings = parseLineNoticeSettings(settingsMap(settingRows)[LINE_NOTICE_SETTINGS_KEY]);
+  const logs = await db.listAppointmentNoticeLogs({ appointmentIds: upcoming.map((a) => a.id), limit: 1000 });
+  /** その予約の、その種類のお知らせの最新の記録（今の予約日時の分だけ） */
+  const noticeOf = (appointmentId: string, scheduledAt: Date, kind: AppointmentNoticeKind): AppointmentNoticeLog | undefined =>
+    logs.find((l) => l.appointmentId === appointmentId && l.kind === kind && l.scheduledFor.getTime() === scheduledAt.getTime());
+  const addedCustomerId = customerMap.has(flash.customer_added ?? "") ? flash.customer_added! : "";
+  const today = todayJst();
+  /** 3日前・前日などを送る日（予約日のN日前）。過ぎていれば送らない */
+  const sendDayLabel = (scheduledAt: Date, kind: "three_days" | "day_before" | "week_before") => {
+    const day = addDays(utcToJstLocal(scheduledAt).slice(0, 10), -DAYS_BEFORE[kind]);
+    if (day < today) return `${NOTICE_LABEL[kind]}：送る日を過ぎています`;
+    return `${NOTICE_LABEL[kind]}：${day === today ? "今日" : formatDateJa(day)} ${settings[kind].hour}時に送信`;
+  };
 
   return (
     <div>
-      <PageHeader title="次回予約・リマインド" backHref="/admin" />
+      <PageHeader
+        title="次回予約・リマインド"
+        backHref="/admin"
+        actions={
+          <Link href="/admin/appointments/settings" className="btn-secondary btn-sm">
+            LINEのお知らせの設定
+          </Link>
+        }
+      />
 
       {flash.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
-          予約を登録しました（前日19時に自動でリマインドが送られます）
+          予約を登録しました（LINEとつながっているお客様には、予約完了のお知らせと、3日前・前日のお知らせが自動で届きます）
+        </p>
+      )}
+      {addedCustomerId && (
+        <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
+          お客様を追加しました。続けて予約を登録してください（LINEとつながるまで、お知らせは届きません）
+        </p>
+      )}
+      {flash.error === "customer_input" && (
+        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
+          お名前と、電話番号（入れる場合は正しい番号）を確認してください
         </p>
       )}
       {flash.deleted && (
@@ -56,7 +99,7 @@ export default async function AdminAppointmentsPage({
         </p>
       )}
 
-      <section className="card mb-4">
+      <section id="new-appointment" className="card mb-4 scroll-mt-20">
         <h2 className="section-title">次回予約を登録</h2>
         {customers.length === 0 ? (
           <p className="text-sm text-ink-400">
@@ -69,13 +112,13 @@ export default async function AdminAppointmentsPage({
               <label className="label" htmlFor="customer_id">
                 お客様
               </label>
-              <select id="customer_id" name="customer_id" className="input" required defaultValue="">
+              <select id="customer_id" name="customer_id" className="input" required defaultValue={addedCustomerId}>
                 <option value="" disabled>
                   選択してください
                 </option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.fullName} 様{c.lineUserId ? "" : "（LINE未連携）"}
+                    {c.fullName} 様{c.phone ? `（${maskPhone(c.phone)}）` : ""}{c.lineUserId ? "" : "（LINE未連携）"}
                   </option>
                 ))}
               </select>
@@ -115,8 +158,26 @@ export default async function AdminAppointmentsPage({
         )}
       </section>
 
+      <details className="card mb-4">
+        <summary className="cursor-pointer font-bold text-sm">LINE未登録のお客様を追加する（ホットペッパーなどの予約）</summary>
+        <form action={createUnlinkedCustomerAction} className="space-y-3 mt-3">
+          <div>
+            <label className="label" htmlFor="new_customer_name">お名前</label>
+            <input id="new_customer_name" name="full_name" className="input" required maxLength={60} placeholder="例）山田 花子" />
+          </div>
+          <div>
+            <label className="label" htmlFor="new_customer_phone">電話番号（任意）</label>
+            <input id="new_customer_phone" name="phone" type="tel" inputMode="tel" className="input" placeholder="例）090-1234-5678" />
+            <p className="hint">
+              お客様があとでLINEに電話番号を送ると、お客様一覧に「LINEとつなぐ候補」として出ます。確かめてから「つなぐ」を押すと、この予約にもお知らせが届くようになります。
+            </p>
+          </div>
+          <button type="submit" className="btn-secondary w-full">お客様を追加する</button>
+        </form>
+      </details>
+
       <p className="text-xs text-ink-500 mb-4">
-        今月のLINE送信数：{pushCount} / {LINE_FREE_QUOTA}通（リマインドも1通として消費します）
+        今月のLINE送信数：{pushCount} / {LINE_FREE_QUOTA}通（お知らせも1通として消費します。「予約確認」への返事は数えません）
       </p>
 
       <section>
@@ -158,14 +219,23 @@ export default async function AdminAppointmentsPage({
                           <StatusBadge label="お客様がキャンセル" tone="danger" />
                         )}
                         {!customer?.lineUserId ? (
-                          <StatusBadge label="LINE未連携のため送信されません" tone="muted" />
-                        ) : a.status === "cancelled" ? null : a.reminderSentAt ? (
-                          <StatusBadge
-                            label={`前日リマインド送信済み ${formatDateTimeJa(a.reminderSentAt)}`}
-                            tone="ok"
-                          />
-                        ) : (
-                          <StatusBadge label="前日19時にリマインド自動送信" tone="muted" />
+                          <StatusBadge label="LINE未連携のためお知らせは送られません" tone="muted" />
+                        ) : a.status === "cancelled" ? null : (
+                          (["completion", "three_days", "day_before", "week_before"] as const)
+                            .filter((kind) => (kind === "completion" ? settings.completion.enabled : settings[kind].enabled))
+                            .map((kind) => {
+                              const log = noticeOf(a.id, a.scheduledAt, kind);
+                              const label =
+                                log?.status === "sent"
+                                  ? `${NOTICE_LABEL[kind]} 送信済み${log.mode === "mock" ? "（モック）" : ""}`
+                                  : log?.status === "failed"
+                                    ? `${NOTICE_LABEL[kind]} 失敗（次の回にもう一度）`
+                                    : kind === "completion"
+                                      ? `${NOTICE_LABEL[kind]} 未送信`
+                                      : sendDayLabel(a.scheduledAt, kind);
+                              const tone = log?.status === "sent" ? "ok" : log?.status === "failed" ? "danger" : "muted";
+                              return <StatusBadge key={kind} label={label} tone={tone} />;
+                            })
                         )}
                       </p>
                     </div>

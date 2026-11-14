@@ -102,6 +102,7 @@ export async function publishShiftAction(formData: FormData): Promise<void> {
     body: "アプリで自分の出勤日を確認してください",
     url: `/staff/schedule?month=${month}`,
     tag: `shift-${month}`,
+    kind: "shift",
   });
   revalidateShift();
   redirect(backTo(month, storeKey, "done=published"));
@@ -273,6 +274,7 @@ export async function saveShiftCellAction(input: ShiftCellInput): Promise<ShiftC
         body: `${formatDateJa(date)}は${what}になりました`,
         url: `/staff/schedule?month=${month}`,
         tag: `shift-change-${date}`,
+        kind: "shift",
       });
     }
     revalidateShift();
