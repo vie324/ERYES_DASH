@@ -4,7 +4,7 @@
 
 import { randomBytes, randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
-import { addDays, addMonths, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst } from "@/lib/date";
+import { addDays, addMonths, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
 import { currentTargetMonth } from "@/lib/shift/period";
 import { buildMonthSchedule, workingDatesOf } from "@/lib/shift/month";
@@ -82,6 +82,15 @@ import type {
   ThanksLike,
   ThanksPost,
   WorkPatternDay,
+  ViewLog,
+  DailyWord,
+  DailyWordShown,
+  DailyReportComment,
+  AppNotification,
+  AppointmentNoticeKind,
+  AppointmentNoticeLog,
+  DailyBrief,
+  ChatMessageMeta,
 } from "@/lib/data/types";
 
 interface MockDb {
@@ -136,6 +145,13 @@ interface MockDb {
   thanksComments: ThanksComment[];
   eniReportComments: EniReportComment[];
   companyEvents: CompanyEvent[];
+  viewLogs: ViewLog[];
+  dailyWords: DailyWord[];
+  dailyWordShown: DailyWordShown[];
+  dailyReportComments: DailyReportComment[];
+  appNotifications: AppNotification[];
+  appointmentNoticeLogs: AppointmentNoticeLog[];
+  dailyBriefs: DailyBrief[];
 }
 
 /**
@@ -247,6 +263,7 @@ function seed(): MockDb {
       themeColor: "",
       fixedOvertimeHours: 20,
       isActive: true,
+      managedStoreIds: [],
       passwordHash: hashPassword("admin1234"),
     },
     {
@@ -265,6 +282,7 @@ function seed(): MockDb {
       // デモで残業超過アラートの動作が見えるよう、あえて少なめに設定している
       fixedOvertimeHours: 10,
       isActive: true,
+      managedStoreIds: [],
       passwordHash: hashPassword("staff1234"),
     },
     {
@@ -282,6 +300,26 @@ function seed(): MockDb {
       themeColor: "",
       fixedOvertimeHours: 20,
       isActive: true,
+      managedStoreIds: [],
+      passwordHash: hashPassword("staff1234"),
+    },
+    // 店舗の管理者（イーリスを見る管理者のデモ）。判定は名前ではなく、ロール（manager）と担当店舗で行う
+    {
+      id: "staff-manager",
+      storeId: store.id,
+      name: "森 さくら",
+      loginId: "manager",
+      role: "manager",
+      jobType: "",
+      rank: "",
+      isExecutive: false,
+      isOwner: false,
+      mission: "",
+      tiers: 1,
+      themeColor: "",
+      fixedOvertimeHours: 20,
+      isActive: true,
+      managedStoreIds: stores.filter((st) => st.name.includes("EREYS")).map((st) => st.id),
       passwordHash: hashPassword("staff1234"),
     },
     // ENi（ヘアサロン）デモ用スタッフ：スタイリスト2名（1名は幹部）＋アシスタント2名
@@ -335,15 +373,18 @@ function seed(): MockDb {
         themeColor: "",
         fixedOvertimeHours: 20,
         isActive: true,
+        managedStoreIds: [],
         passwordHash: hashPassword("staff1234"),
       })
     ),
   ];
 
   const customers: Customer[] = [
-    { id: "cust-1", lineUserId: "mock-user-1", fullName: "高橋 ゆい", createdAt: jstAt(addDays(today, -20), 12) },
-    { id: "cust-2", lineUserId: "mock-user-2", fullName: "鈴木 あや", createdAt: jstAt(addDays(today, -10), 15) },
-    { id: "cust-3", lineUserId: "mock-user-3", fullName: "伊藤 まな", createdAt: jstAt(addDays(today, -1), 18) },
+    { id: "cust-1", lineUserId: "mock-user-1", fullName: "高橋 ゆい", phone: "09011112222", createdAt: jstAt(addDays(today, -20), 12) },
+    { id: "cust-2", lineUserId: "mock-user-2", fullName: "鈴木 あや", phone: "08033334444", createdAt: jstAt(addDays(today, -10), 15) },
+    { id: "cust-3", lineUserId: "mock-user-3", fullName: "伊藤 まな", phone: "", createdAt: jstAt(addDays(today, -1), 18) },
+    // 店舗が先に入れた「LINE未連携」のお客様（ホットペッパーの予約）。同じ電話番号の cust-2 と「つなぐ候補」になる
+    { id: "cust-4", lineUserId: null, fullName: "鈴木 あや", phone: "08033334444", createdAt: jstAt(addDays(today, -2), 11) },
   ];
 
   const counseling: CounselingResponse[] = [
@@ -525,6 +566,18 @@ function seed(): MockDb {
       preReminderSentAt: null,
       createdAt: jstAt(addDays(today, -3), 16),
     },
+    {
+      id: "appt-3",
+      customerId: "cust-4",
+      scheduledAt: jstAt(addDays(today, 3), 15),
+      staffId: "staff-2",
+      status: "scheduled",
+      requestedNewAt: null,
+      changeNote: "",
+      reminderSentAt: null,
+      preReminderSentAt: null,
+      createdAt: jstAt(addDays(today, -2), 11),
+    },
   ];
 
   // ---- 出勤予定のもと（基本パターン＋希望休）のデモデータ ----
@@ -605,6 +658,45 @@ function seed(): MockDb {
       comment: "",
       commentedBy: null,
       updatedAt: jstAt(addDays(today, -1), 20),
+    },
+    // アシスタントの週報（今週ぶん。週報の閲覧状況の確認用）
+    {
+      id: "eni-weekly-1",
+      kind: "weekly",
+      staffId: "staff-5",
+      periodKey: weekStartOf(today),
+      answers: {
+        _rank: "first",
+        practice_hours: 6,
+        sns_hours: 2,
+        other_hours: 1,
+        watched_by: "山本さん2回",
+        done_well: "ワインディングを時間内に巻き切れた",
+        struggle: "ブローの面がまだ揃わない",
+        next_goal: "ブロー練習を3回、モデル1名",
+      },
+      comment: "",
+      commentedBy: null,
+      updatedAt: jstAt(today, 9),
+    },
+    {
+      id: "eni-weekly-2",
+      kind: "weekly",
+      staffId: "staff-6",
+      periodKey: weekStartOf(today),
+      answers: {
+        _rank: "middle",
+        practice_hours: 4,
+        sns_hours: 3,
+        other_hours: 1,
+        model_count: 1,
+        sns_posts: 3,
+        done_well: "モデルさんに次回も来たいと言ってもらえた",
+        next_goal: "SNS投稿を週4本",
+      },
+      comment: "",
+      commentedBy: null,
+      updatedAt: jstAt(today, 10),
     },
   ];
   const practicePairs: PracticePair[] = [
@@ -1186,6 +1278,52 @@ function seed(): MockDb {
     thanksComments,
     eniReportComments: [],
     companyEvents: [],
+    viewLogs: [],
+    // しもんさんの言葉は、本番では代表から届いたものを管理者が登録する。デモは見本だけ入れておく
+    dailyWords: [
+      { id: randomUUID(), body: "【見本】ここに、しもんさんの言葉が1日1つ出ます。管理者画面の「ホームの設定」で登録・並べ替え・停止できます。", sortOrder: 10, isActive: true, createdAt: jstAt(addDays(today, -3), 9) },
+      { id: randomUUID(), body: "【見本】登録した順に、毎日ひとつずつ全員に同じ言葉が出ます。全部出たら最初に戻ります。", sortOrder: 20, isActive: true, createdAt: jstAt(addDays(today, -3), 9) },
+    ],
+    dailyWordShown: [],
+    dailyBriefs: [],
+    // イーリスの日報へのコメント（デモ：店舗の管理者が佐藤さんの最新の日報にコメント済み）
+    dailyReportComments: (() => {
+      const latest = reports
+        .filter((r) => r.staffId === "staff-1" && r.reportDate < today)
+        .sort((a, b) => b.reportDate.localeCompare(a.reportDate))[0];
+      return latest
+        ? [
+            {
+              id: "drc-1",
+              reportId: latest.id,
+              staffId: "staff-manager",
+              body: "次回予約、しっかり取れていて素晴らしいです！ご案内のしかたを朝礼でみんなにも共有してもらえますか？",
+              createdAt: jstAt(today, 9),
+            },
+          ]
+        : [];
+    })(),
+    appNotifications: (() => {
+      const latest = reports
+        .filter((r) => r.staffId === "staff-1" && r.reportDate < today)
+        .sort((a, b) => b.reportDate.localeCompare(a.reportDate))[0];
+      return latest
+        ? [
+            {
+              id: "ntf-1",
+              staffId: "staff-1",
+              kind: "report_comment",
+              title: "日報にコメントが届きました",
+              body: "森さん：次回予約、しっかり取れていて素晴らしいです！",
+              href: `/staff/daily-reports/${latest.id}`,
+              refId: latest.id,
+              createdAt: jstAt(today, 9),
+              readAt: null,
+            },
+          ]
+        : [];
+    })(),
+    appointmentNoticeLogs: [],
   };
 }
 
@@ -1279,6 +1417,7 @@ class MockStore implements DataStore {
       themeColor: "",
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
+      managedStoreIds: input.managedStoreIds ?? [],
       passwordHash: input.passwordHash,
     };
     this.db.staff.push(created);
@@ -1302,6 +1441,7 @@ class MockStore implements DataStore {
         | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
+        | "managedStoreIds"
       >
     > & {
       passwordHash?: string;
@@ -1334,6 +1474,8 @@ class MockStore implements DataStore {
       d.execNoticeChecks = d.execNoticeChecks.filter((c) => c.checkedBy !== id);
       d.chatMessages = d.chatMessages.filter((m) => m.senderId !== id);
       d.eniReportComments = d.eniReportComments.filter((c) => c.staffId !== id);
+      d.dailyReportComments = d.dailyReportComments.filter((c) => c.staffId !== id);
+      d.appNotifications = d.appNotifications.filter((n) => n.staffId !== id);
       // 本人が関わっただけの欄は空にする（記録そのものは残す）
       for (const c of d.counseling) if (c.confirmedBy === id) c.confirmedBy = null;
       for (const a of d.appointments) if (a.staffId === id) a.staffId = null;
@@ -1377,6 +1519,8 @@ class MockStore implements DataStore {
       d.managerRoutineChecks = d.managerRoutineChecks.filter((c) => c.staffId !== id);
       d.pushSubscriptions = d.pushSubscriptions.filter((ps) => ps.staffId !== id);
       d.pushPreferences = d.pushPreferences.filter((pp) => pp.staffId !== id);
+      d.viewLogs = d.viewLogs.filter((v) => v.viewerStaffId !== id && v.ownerStaffId !== id);
+      d.dailyBriefs = d.dailyBriefs.filter((b) => b.staffId !== id);
       d.staff = d.staff.filter((st) => st.id !== id);
       return;
     }
@@ -1422,22 +1566,33 @@ class MockStore implements DataStore {
     return this.db.customers.find((c) => c.lineUserId === lineUserId) ?? null;
   }
 
-  async createCustomer(input: { lineUserId: string | null; fullName: string }): Promise<Customer> {
+  async createCustomer(input: { lineUserId: string | null; fullName: string; phone?: string }): Promise<Customer> {
     const created: Customer = {
       id: randomUUID(),
       lineUserId: input.lineUserId,
       fullName: input.fullName,
+      phone: input.phone ?? "",
       createdAt: new Date(),
     };
     this.db.customers.push(created);
     return created;
   }
 
-  async updateCustomer(id: string, patch: { fullName?: string }): Promise<Customer> {
+  async updateCustomer(id: string, patch: { fullName?: string; phone?: string }): Promise<Customer> {
     const found = this.db.customers.find((c) => c.id === id);
     if (!found) throw new Error("顧客が見つかりません");
-    Object.assign(found, patch);
+    if (patch.fullName !== undefined) found.fullName = patch.fullName;
+    if (patch.phone !== undefined) found.phone = patch.phone;
     return { ...found };
+  }
+
+  async mergeCustomers(keepId: string, removeId: string): Promise<void> {
+    if (keepId === removeId) return;
+    if (!this.db.customers.some((c) => c.id === keepId)) throw new Error("まとめ先のお客様が見つかりません");
+    for (const a of this.db.appointments) if (a.customerId === removeId) a.customerId = keepId;
+    for (const c of this.db.counseling) if (c.customerId === removeId) c.customerId = keepId;
+    for (const l of this.db.appointmentNoticeLogs) if (l.customerId === removeId) l.customerId = keepId;
+    this.db.customers = this.db.customers.filter((c) => c.id !== removeId);
   }
 
   async createCounselingResponse(input: {
@@ -1503,8 +1658,50 @@ class MockStore implements DataStore {
     return this.db.reports.find((r) => r.id === id) ?? null;
   }
 
+  async listDailyReportComments(reportIds: string[]): Promise<DailyReportComment[]> {
+    const ids = new Set(reportIds);
+    return this.db.dailyReportComments
+      .filter((c) => ids.has(c.reportId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((c) => ({ ...c }));
+  }
+
+  async addDailyReportComment(reportId: string, staffId: string, body: string): Promise<DailyReportComment> {
+    const created: DailyReportComment = { id: randomUUID(), reportId, staffId, body, createdAt: new Date() };
+    this.db.dailyReportComments.push(created);
+    return { ...created };
+  }
+
+  async deleteDailyReportComment(id: string, staffId: string): Promise<void> {
+    this.db.dailyReportComments = this.db.dailyReportComments.filter((c) => !(c.id === id && c.staffId === staffId));
+  }
+
+  async createAppNotifications(rows: Omit<AppNotification, "id" | "createdAt" | "readAt">[]): Promise<void> {
+    for (const r of rows) this.db.appNotifications.push({ ...r, id: randomUUID(), createdAt: new Date(), readAt: null });
+  }
+
+  async listAppNotifications(staffId: string, limit: number): Promise<AppNotification[]> {
+    return this.db.appNotifications
+      .filter((n) => n.staffId === staffId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((n) => ({ ...n }));
+  }
+
+  async countUnreadAppNotifications(staffId: string): Promise<number> {
+    return this.db.appNotifications.filter((n) => n.staffId === staffId && n.readAt === null).length;
+  }
+
+  async markAppNotificationsRead(staffId: string, refId?: string): Promise<void> {
+    const now = new Date();
+    for (const n of this.db.appNotifications) {
+      if (n.staffId === staffId && n.readAt === null && (refId === undefined || n.refId === refId)) n.readAt = now;
+    }
+  }
+
   async deleteDailyReport(id: string): Promise<void> {
     this.db.reports = this.db.reports.filter((r) => r.id !== id);
+    this.db.dailyReportComments = this.db.dailyReportComments.filter((c) => c.reportId !== id);
   }
 
   async listDailyReports(filter: {
@@ -1633,6 +1830,7 @@ class MockStore implements DataStore {
 
   async deleteNextAppointment(id: string): Promise<void> {
     this.db.appointments = this.db.appointments.filter((a) => a.id !== id);
+    this.db.appointmentNoticeLogs = this.db.appointmentNoticeLogs.filter((l) => l.appointmentId !== id);
   }
 
   async listAppointmentsNeedingReminder(from: Date, to: Date): Promise<NextAppointment[]> {
@@ -1663,6 +1861,85 @@ class MockStore implements DataStore {
   async markPreReminderSent(id: string, sentAt: Date): Promise<void> {
     const found = this.db.appointments.find((a) => a.id === id);
     if (found) found.preReminderSentAt = sentAt;
+  }
+
+  async claimAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+  }): Promise<AppointmentNoticeLog | null> {
+    const taken = this.db.appointmentNoticeLogs.some(
+      (l) =>
+        l.appointmentId === input.appointmentId &&
+        l.kind === input.kind &&
+        l.scheduledFor.getTime() === input.scheduledFor.getTime() &&
+        (l.status === "sending" || l.status === "sent")
+    );
+    if (taken) return null;
+    const row: AppointmentNoticeLog = {
+      id: randomUUID(),
+      ...input,
+      status: "sending",
+      mode: "",
+      body: "",
+      error: "",
+      createdAt: new Date(),
+    };
+    this.db.appointmentNoticeLogs.push(row);
+    return { ...row };
+  }
+
+  async finishAppointmentNotice(
+    id: string,
+    result: { status: "sent" | "failed" | "skipped"; mode: "live" | "mock" | ""; body: string; error: string }
+  ): Promise<void> {
+    const found = this.db.appointmentNoticeLogs.find((l) => l.id === id);
+    if (found) Object.assign(found, result);
+  }
+
+  async logSkippedAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+    error: string;
+  }): Promise<void> {
+    const already = this.db.appointmentNoticeLogs.some(
+      (l) =>
+        l.appointmentId === input.appointmentId &&
+        l.kind === input.kind &&
+        l.scheduledFor.getTime() === input.scheduledFor.getTime() &&
+        l.status === "skipped"
+    );
+    if (already) return;
+    this.db.appointmentNoticeLogs.push({
+      id: randomUUID(),
+      appointmentId: input.appointmentId,
+      customerId: input.customerId,
+      kind: input.kind,
+      scheduledFor: input.scheduledFor,
+      status: "skipped",
+      mode: "",
+      body: "",
+      error: input.error,
+      createdAt: new Date(),
+    });
+  }
+
+  async countAppointmentNoticesSent(from: Date, to: Date, kinds: AppointmentNoticeKind[]): Promise<number> {
+    return this.db.appointmentNoticeLogs.filter(
+      (l) => l.status === "sent" && kinds.includes(l.kind) && l.createdAt >= from && l.createdAt < to
+    ).length;
+  }
+
+  async listAppointmentNoticeLogs(filter: { appointmentIds?: string[]; limit?: number }): Promise<AppointmentNoticeLog[]> {
+    const ids = filter.appointmentIds ? new Set(filter.appointmentIds) : null;
+    return this.db.appointmentNoticeLogs
+      .filter((l) => !ids || ids.has(l.appointmentId))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, filter.limit ?? 200)
+      .map((l) => ({ ...l }));
   }
 
   async countRemindersSent(from: Date, to: Date): Promise<number> {
@@ -2007,6 +2284,38 @@ class MockStore implements DataStore {
 
   async deleteCompanyEvent(id: string): Promise<void> {
     this.db.companyEvents = this.db.companyEvents.filter((e) => e.id !== id);
+  }
+
+  async recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean> {
+    const since = Date.now() - (opts?.dedupeMinutes ?? 0) * 60_000;
+    const recent = this.db.viewLogs.some(
+      (v) =>
+        v.targetType === input.targetType &&
+        v.targetId === input.targetId &&
+        v.viewerStaffId === input.viewerStaffId &&
+        v.viewedAt.getTime() >= since
+    );
+    if (opts?.dedupeMinutes && recent) return false;
+    this.db.viewLogs.push({ ...input, id: randomUUID(), viewedAt: new Date() });
+    return true;
+  }
+
+  async listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]> {
+    return this.db.viewLogs
+      .filter(
+        (v) =>
+          v.targetType === filter.targetType &&
+          (!filter.periodKeys || filter.periodKeys.includes(v.periodKey)) &&
+          (!filter.targetIds || filter.targetIds.includes(v.targetId)) &&
+          (!filter.viewerStaffId || v.viewerStaffId === filter.viewerStaffId)
+      )
+      .sort((a, b) => b.viewedAt.getTime() - a.viewedAt.getTime())
+      .map((v) => ({ ...v }));
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {
@@ -2815,6 +3124,18 @@ class MockStore implements DataStore {
       .map((r) => ({ ...r }));
   }
 
+  async listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]> {
+    const ids = new Set(staffIds);
+    return this.db.chatMembers.filter((m) => ids.has(m.staffId)).map((m) => ({ ...m }));
+  }
+
+  async listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]> {
+    const rooms = new Set(roomIds);
+    return this.db.chatMessages
+      .filter((m) => rooms.has(m.roomId) && m.createdAt >= from && m.createdAt <= to)
+      .map((m) => ({ id: m.id, roomId: m.roomId, senderId: m.senderId, createdAt: m.createdAt, deleted: m.deleted }));
+  }
+
   async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
     const exists = this.db.chatAcknowledgements.some((a) => a.messageId === messageId && a.staffId === staffId);
     if (!exists) this.db.chatAcknowledgements.push({ messageId, staffId, acknowledgedAt: new Date() });
@@ -2959,6 +3280,54 @@ class MockStore implements DataStore {
 
   async deletePushSubscription(endpoint: string): Promise<void> {
     this.db.pushSubscriptions = this.db.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
+  }
+
+  // ---- ホームの朝の画面 ----
+
+  async listDailyWords(): Promise<DailyWord[]> {
+    return this.db.dailyWords
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime())
+      .map((w) => ({ ...w }));
+  }
+
+  async createDailyWord(body: string): Promise<DailyWord> {
+    const maxOrder = Math.max(0, ...this.db.dailyWords.map((w) => w.sortOrder));
+    const created: DailyWord = { id: randomUUID(), body, sortOrder: maxOrder + 10, isActive: true, createdAt: new Date() };
+    this.db.dailyWords.push(created);
+    return { ...created };
+  }
+
+  async updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void> {
+    const found = this.db.dailyWords.find((w) => w.id === id);
+    if (found) Object.assign(found, patch);
+  }
+
+  async deleteDailyWord(id: string): Promise<void> {
+    this.db.dailyWords = this.db.dailyWords.filter((w) => w.id !== id);
+    for (const row of this.db.dailyWordShown) if (row.wordId === id) row.wordId = null;
+  }
+
+  async listDailyWordShown(limit: number): Promise<DailyWordShown[]> {
+    return this.db.dailyWordShown
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
+  }
+
+  async recordDailyWordShown(date: string, wordId: string): Promise<void> {
+    if (!this.db.dailyWordShown.some((r) => r.date === date)) this.db.dailyWordShown.push({ date, wordId });
+  }
+
+  async getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null> {
+    const found = this.db.dailyBriefs.find((b) => b.staffId === staffId && b.date === date);
+    return found ? { ...found, items: found.items.map((i) => ({ ...i })) } : null;
+  }
+
+  async saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void> {
+    if (this.db.dailyBriefs.some((b) => b.staffId === input.staffId && b.date === input.date)) return;
+    this.db.dailyBriefs.push({ ...input, createdAt: new Date() });
   }
 
   async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {

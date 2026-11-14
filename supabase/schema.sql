@@ -26,7 +26,7 @@ create table if not exists staff (
   name text not null,
   login_id text not null unique,
   password_hash text not null,
-  role text not null default 'staff' check (role in ('admin', 'staff')),
+  role text not null default 'staff' check (role in ('admin', 'manager', 'staff')),  -- manager＝店舗の管理者（担当店舗だけ）
   job_type text not null default '' check (job_type in ('', 'stylist', 'assistant')),
   rank text not null default '' check (rank in ('', 'first', 'middle', 'final')),  -- アシスタントのランク
   is_executive boolean not null default false,
@@ -35,6 +35,7 @@ create table if not exists staff (
   theme_color text not null default '',               -- ダッシュボードの配色キー（空文字はブランド既定）
   fixed_overtime_hours integer not null default 20,   -- 固定残業時間（月）
   is_active boolean not null default true,
+  managed_store_ids uuid[] not null default '{}',      -- 担当店舗（店舗の管理者が見る店舗）
   created_at timestamptz not null default now()
 );
 
@@ -43,6 +44,7 @@ create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
   line_user_id text unique,
   full_name text not null,
+  phone text not null default '',                     -- 電話番号（数字だけ。LINEとのつなぎ込みの照合に使う）
   created_at timestamptz not null default now()
 );
 
@@ -639,6 +641,48 @@ create table if not exists push_preferences (
   updated_at timestamptz not null default now()
 );
 
+-- 2026-11 依頼3：閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録にも使い回せる共通の形。
+-- target_type: 'weekly_report'（週報）など ／ target_id: 見たもののID（週報＝eni_reports.id）
+-- owner_staff_id: 見たものの持ち主（週報を書いた人）／ period_key: 集計用（週報＝その週の月曜）
+-- 自分の週報を見た分は記録しない。集計を見られるのは幹部・管理者だけ（画面・サーバーアクションで制限）
+create table if not exists view_logs (
+  id uuid primary key default gen_random_uuid(),
+  target_type text not null,
+  target_id text not null,
+  owner_staff_id uuid references staff(id) on delete cascade,
+  period_key text not null default '',
+  viewer_staff_id uuid not null references staff(id) on delete cascade,
+  viewed_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼4：ホームの朝の画面
+-- しもんさんの言葉（代表が書きためた言葉。管理者が登録・並べ替え・停止する。AIで作ったり言い換えたりはしない）
+create table if not exists daily_words (
+  id uuid primary key default gen_random_uuid(),
+  body text not null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- その日に出した言葉（1日1行・全員同じ。次の日は登録順でこの次の言葉。全部出たら最初に戻る）
+create table if not exists daily_word_log (
+  shown_on date primary key,
+  word_id uuid references daily_words(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- AIの「今日のタスク」（本人のタスク情報だけから、1人1日1回だけ作って保存。開くたびには作らない）
+create table if not exists ai_daily_briefs (
+  staff_id uuid not null references staff(id) on delete cascade,
+  brief_date date not null,
+  items jsonb not null default '[]',
+  ai boolean not null default false,
+  model text not null default '',
+  created_at timestamptz not null default now(),
+  primary key (staff_id, brief_date)
+);
+
 -- AIしもんへの相談の記録（相談した人の発言とAIしもんの返答を1件ずつ）。
 -- アプリで読めるのは代表（staff.is_owner）だけ。スタッフを削除すると本人の相談も消える。
 create table if not exists ai_shimon_messages (
@@ -648,6 +692,44 @@ create table if not exists ai_shimon_messages (
   role text not null check (role in ('user', 'assistant')),
   content text not null,
   created_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼5：イーリスの日報へのコメント・返信（店舗の管理者・管理者がコメントし、本人が返信する）
+create table if not exists daily_report_comments (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references daily_reports(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+-- アプリ内のお知らせ（ホーム・ヘッダーのベル・お知らせ一覧に出す。プッシュ通知とは別に必ず残す）
+create table if not exists app_notifications (
+  id uuid primary key default gen_random_uuid(),
+  staff_id uuid not null references staff(id) on delete cascade,
+  kind text not null default '',
+  title text not null default '',
+  body text not null default '',
+  href text not null default '',
+  ref_id text not null default '',                    -- 何についてのお知らせか（日報のIDなど）
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+
+-- 予約のお知らせ（LINE）の送信記録：いつ・誰に・何を・成功か失敗か（1回の送信＝1行）
+-- 「送信中・送った」の行は、予約×種類×予約日時で1つだけ（下の部分ユニーク索引）＝同じお知らせを二重に送らない
+create table if not exists appointment_notice_logs (
+  id uuid primary key default gen_random_uuid(),
+  appointment_id uuid not null references next_appointments(id) on delete cascade,
+  customer_id uuid not null references customers(id) on delete cascade,
+  kind text not null check (kind in ('completion', 'three_days', 'day_before', 'week_before')),
+  scheduled_for timestamptz not null,                  -- 送ったときの予約日時（日時が変わったら送り直せる）
+  status text not null check (status in ('sending', 'sent', 'failed', 'skipped')),
+  mode text not null default '',                       -- live＝LINEで送った／mock＝キー未設定で実際には送っていない
+  body text not null default '',
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- ---- 既存DBへの追従（あとから足した列・制約）----
@@ -758,6 +840,13 @@ alter table chat_messages add column if not exists pinned boolean not null defau
 alter table chat_messages add column if not exists announced_at timestamptz;
 alter table chat_messages add column if not exists announced_by uuid references staff(id);
 
+-- 2026-11 依頼5：店舗の管理者（manager）と担当店舗・お客様の電話番号
+-- ロールの選択肢を広げるだけ（今の admin / staff の行はそのまま）
+alter table staff drop constraint if exists staff_role_check;
+alter table staff add constraint staff_role_check check (role in ('admin', 'manager', 'staff'));
+alter table staff add column if not exists managed_store_ids uuid[] not null default '{}';
+alter table customers add column if not exists phone text not null default '';
+
 -- ---- インデックス ----
 -- DMの重複防止と、全体共有ルームが1つだけになるようにする（上で列を足したあとに作る）
 create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
@@ -807,6 +896,18 @@ create unique index if not exists idx_manager_routine_checks_subject on manager_
 create index if not exists idx_manager_routine_checks_store on manager_routine_checks (store_id, period_key);
 create index if not exists idx_staff_tasks_type on staff_tasks (task_type, status);
 create index if not exists idx_chat_acknowledgements_staff on chat_acknowledgements (staff_id);
+create index if not exists idx_view_logs_period on view_logs (target_type, period_key);
+create index if not exists idx_view_logs_target on view_logs (target_type, target_id, viewer_staff_id, viewed_at desc);
+create index if not exists idx_view_logs_viewer on view_logs (viewer_staff_id, viewed_at desc);
+create index if not exists idx_daily_words_sort on daily_words (sort_order, created_at);
+create index if not exists idx_daily_report_comments_report on daily_report_comments (report_id, created_at);
+create index if not exists idx_app_notifications_staff on app_notifications (staff_id, created_at desc);
+create index if not exists idx_app_notifications_unread on app_notifications (staff_id) where read_at is null;
+create unique index if not exists idx_appointment_notice_logs_claim
+  on appointment_notice_logs (appointment_id, kind, scheduled_for) where status in ('sending', 'sent');
+create index if not exists idx_appointment_notice_logs_created on appointment_notice_logs (created_at desc);
+create index if not exists idx_appointment_notice_logs_appointment on appointment_notice_logs (appointment_id);
+create index if not exists idx_customers_phone on customers (phone) where phone <> '';
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
@@ -864,6 +965,13 @@ alter table app_settings enable row level security;
 alter table push_subscriptions enable row level security;
 alter table chat_acknowledgements enable row level security;
 alter table push_preferences enable row level security;
+alter table view_logs enable row level security;
+alter table daily_words enable row level security;
+alter table daily_word_log enable row level security;
+alter table ai_daily_briefs enable row level security;
+alter table daily_report_comments enable row level security;
+alter table app_notifications enable row level security;
+alter table appointment_notice_logs enable row level security;
 alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----

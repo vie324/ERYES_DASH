@@ -2,7 +2,7 @@
 // 通知を送るところ（sendPush / notifyQuietly）で kind を付けると、止めている人には送らない。
 // kind を付けない通知（テスト通知など）は設定に関係なく届く。
 
-export type PushKind = "chat" | "mention" | "announce" | "morning" | "task" | "thanks" | "shift" | "absence";
+export type PushKind = "chat" | "mention" | "announce" | "morning" | "task" | "thanks" | "shift" | "absence" | "report";
 
 export interface PushKindDef {
   key: PushKind;
@@ -25,6 +25,7 @@ export const PUSH_KINDS: PushKindDef[] = [
   { key: "thanks", label: "サンクスカード", note: "サンクスカードが届いたとき" },
   { key: "shift", label: "シフト・希望休", note: "シフトの公開・変更、希望休の募集・締切が近いとき" },
   { key: "absence", label: "欠勤・早退の報告", note: "欠勤・早退の報告が届いたとき", execOnly: true },
+  { key: "report", label: "日報へのコメント", note: "日報にコメントがついたとき・自分のコメントに返信があったとき" },
 ];
 
 export function isPushKind(v: unknown): v is PushKind {

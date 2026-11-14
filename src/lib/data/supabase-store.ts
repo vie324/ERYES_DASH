@@ -82,6 +82,15 @@ import type {
   ThanksLike,
   ThanksPost,
   WorkPatternDay,
+  ViewLog,
+  DailyWord,
+  DailyWordShown,
+  DailyReportComment,
+  AppNotification,
+  AppointmentNoticeKind,
+  AppointmentNoticeLog,
+  DailyBrief,
+  ChatMessageMeta,
 } from "@/lib/data/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -113,12 +122,48 @@ const mapStaff = (r: Row): Staff => ({
   themeColor: r.theme_color ?? "",
   fixedOvertimeHours: r.fixed_overtime_hours,
   isActive: r.is_active,
+  // 列が無い（schema.sql を流し直す前の）DBでは担当店舗なし
+  managedStoreIds: Array.isArray(r.managed_store_ids) ? r.managed_store_ids.map(String) : [],
 });
 
 const mapCustomer = (r: Row): Customer => ({
   id: r.id,
   lineUserId: r.line_user_id,
   fullName: r.full_name,
+  phone: r.phone ?? "",
+  createdAt: new Date(r.created_at),
+});
+
+const mapDailyReportComment = (r: Row): DailyReportComment => ({
+  id: r.id,
+  reportId: r.report_id,
+  staffId: r.staff_id,
+  body: r.body ?? "",
+  createdAt: new Date(r.created_at),
+});
+
+const mapAppNotification = (r: Row): AppNotification => ({
+  id: r.id,
+  staffId: r.staff_id,
+  kind: r.kind ?? "",
+  title: r.title ?? "",
+  body: r.body ?? "",
+  href: r.href ?? "",
+  refId: r.ref_id ?? "",
+  createdAt: new Date(r.created_at),
+  readAt: r.read_at ? new Date(r.read_at) : null,
+});
+
+const mapNoticeLog = (r: Row): AppointmentNoticeLog => ({
+  id: r.id,
+  appointmentId: r.appointment_id,
+  customerId: r.customer_id,
+  kind: r.kind,
+  scheduledFor: new Date(r.scheduled_for),
+  status: r.status,
+  mode: r.mode ?? "",
+  body: r.body ?? "",
+  error: r.error ?? "",
   createdAt: new Date(r.created_at),
 });
 
@@ -721,6 +766,7 @@ class SupabaseStore implements DataStore {
         mission: input.mission ?? "",
         tiers: input.tiers ?? 1,
         fixed_overtime_hours: input.fixedOvertimeHours,
+        ...(input.managedStoreIds && input.managedStoreIds.length > 0 ? { managed_store_ids: input.managedStoreIds } : {}),
       })
       .select()
       .single();
@@ -744,12 +790,14 @@ class SupabaseStore implements DataStore {
         | "themeColor"
         | "fixedOvertimeHours"
         | "isActive"
+        | "managedStoreIds"
       >
     > & {
       passwordHash?: string;
     }
   ): Promise<Staff> {
     const row: Row = {};
+    if (patch.managedStoreIds !== undefined) row.managed_store_ids = patch.managedStoreIds;
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.storeId !== undefined) row.store_id = patch.storeId;
     if (patch.role !== undefined) row.role = patch.role;
@@ -762,12 +810,12 @@ class SupabaseStore implements DataStore {
     if (patch.fixedOvertimeHours !== undefined) row.fixed_overtime_hours = patch.fixedOvertimeHours;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     if (patch.passwordHash !== undefined) row.password_hash = patch.passwordHash;
-    const { data, error } = await this.sb
-      .from("staff")
-      .update(row)
-      .eq("id", id)
-      .select()
-      .single();
+    let { data, error } = await this.sb.from("staff").update(row).eq("id", id).select().single();
+    // 担当店舗の列がまだ無いDB（schema.sql を流す前）でも、ほかの項目は保存できるようにする
+    if (error && isMissingColumn(error) && "managed_store_ids" in row) {
+      const { managed_store_ids: _skip, ...rest } = row;
+      ({ data, error } = await this.sb.from("staff").update(rest).eq("id", id).select().single());
+    }
     return mapStaff(must(data, error, "スタッフ更新"));
   }
 
@@ -876,25 +924,40 @@ class SupabaseStore implements DataStore {
     return data ? mapCustomer(data) : null;
   }
 
-  async createCustomer(input: { lineUserId: string | null; fullName: string }): Promise<Customer> {
-    const { data, error } = await this.sb
-      .from("customers")
-      .insert({ line_user_id: input.lineUserId, full_name: input.fullName })
-      .select()
-      .single();
+  async createCustomer(input: { lineUserId: string | null; fullName: string; phone?: string }): Promise<Customer> {
+    const row: Row = { line_user_id: input.lineUserId, full_name: input.fullName };
+    if (input.phone) row.phone = input.phone;
+    let { data, error } = await this.sb.from("customers").insert(row).select().single();
+    if (error && isMissingColumn(error) && "phone" in row) {
+      const { phone: _skip, ...rest } = row;
+      ({ data, error } = await this.sb.from("customers").insert(rest).select().single());
+    }
     return mapCustomer(must(data, error, "顧客作成"));
   }
 
-  async updateCustomer(id: string, patch: { fullName?: string }): Promise<Customer> {
+  async updateCustomer(id: string, patch: { fullName?: string; phone?: string }): Promise<Customer> {
     const row: Row = {};
     if (patch.fullName !== undefined) row.full_name = patch.fullName;
-    const { data, error } = await this.sb
-      .from("customers")
-      .update(row)
-      .eq("id", id)
-      .select()
-      .single();
+    if (patch.phone !== undefined) row.phone = patch.phone;
+    let { data, error } = await this.sb.from("customers").update(row).eq("id", id).select().single();
+    // 電話番号の列がまだ無いDB（schema.sql を流す前）でも、お名前は保存できるようにする
+    if (error && isMissingColumn(error) && "phone" in row) {
+      const { phone: _skip, ...rest } = row;
+      if (Object.keys(rest).length === 0) return (await this.getCustomer(id))!;
+      ({ data, error } = await this.sb.from("customers").update(rest).eq("id", id).select().single());
+    }
     return mapCustomer(must(data, error, "顧客更新"));
+  }
+
+  async mergeCustomers(keepId: string, removeId: string): Promise<void> {
+    if (keepId === removeId) return;
+    // 予約・カウンセリング（回答・案内）・お知らせの送信記録を付け替えてから、元の記録を消す
+    for (const table of ["next_appointments", "counseling_responses", "counseling_invites", "appointment_notice_logs"]) {
+      const { error } = await this.sb.from(table).update({ customer_id: keepId }).eq("customer_id", removeId);
+      if (error && !isMissingTable(error)) throw new Error(`[supabase] お客様の付け替え（${table}）: ${error.message}`);
+    }
+    const { error } = await this.sb.from("customers").delete().eq("id", removeId);
+    if (error) throw new Error(`[supabase] お客様の記録の削除: ${error.message}`);
   }
 
   async createCounselingResponse(input: {
@@ -977,6 +1040,81 @@ class SupabaseStore implements DataStore {
       .maybeSingle();
     if (error) throw new Error(`[supabase] 日報取得: ${error.message}`);
     return data ? mapReport(data) : null;
+  }
+
+  async listDailyReportComments(reportIds: string[]): Promise<DailyReportComment[]> {
+    if (reportIds.length === 0) return [];
+    const { data, error } = await this.sb
+      .from("daily_report_comments")
+      .select("*")
+      .in("report_id", reportIds)
+      .order("created_at", { ascending: true });
+    if (isMissingTable(error)) return [];
+    return must(data, error, "日報のコメント一覧").map(mapDailyReportComment);
+  }
+
+  async addDailyReportComment(reportId: string, staffId: string, body: string): Promise<DailyReportComment> {
+    const { data, error } = await this.sb
+      .from("daily_report_comments")
+      .insert({ report_id: reportId, staff_id: staffId, body })
+      .select()
+      .single();
+    return mapDailyReportComment(must(data, error, "日報のコメント追加"));
+  }
+
+  async deleteDailyReportComment(id: string, staffId: string): Promise<void> {
+    const { error } = await this.sb.from("daily_report_comments").delete().eq("id", id).eq("staff_id", staffId);
+    if (error) throw new Error(`[supabase] 日報のコメント削除: ${error.message}`);
+  }
+
+  async createAppNotifications(rows: Omit<AppNotification, "id" | "createdAt" | "readAt">[]): Promise<void> {
+    if (rows.length === 0) return;
+    const { error } = await this.sb.from("app_notifications").insert(
+      rows.map((r) => ({
+        staff_id: r.staffId,
+        kind: r.kind,
+        title: r.title,
+        body: r.body,
+        href: r.href,
+        ref_id: r.refId,
+      }))
+    );
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] お知らせの作成: ${error.message}`);
+  }
+
+  async listAppNotifications(staffId: string, limit: number): Promise<AppNotification[]> {
+    const { data, error } = await this.sb
+      .from("app_notifications")
+      .select("*")
+      .eq("staff_id", staffId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (isMissingTable(error)) return [];
+    return must(data, error, "お知らせ一覧").map(mapAppNotification);
+  }
+
+  async countUnreadAppNotifications(staffId: string): Promise<number> {
+    const { count, error } = await this.sb
+      .from("app_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("staff_id", staffId)
+      .is("read_at", null);
+    if (isMissingTable(error)) return 0;
+    if (error) throw new Error(`[supabase] 未読のお知らせ: ${error.message}`);
+    return count ?? 0;
+  }
+
+  async markAppNotificationsRead(staffId: string, refId?: string): Promise<void> {
+    let q = this.sb
+      .from("app_notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("staff_id", staffId)
+      .is("read_at", null);
+    if (refId !== undefined) q = q.eq("ref_id", refId);
+    const { error } = await q;
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] お知らせの既読: ${error.message}`);
   }
 
   async getDailyReportById(id: string): Promise<DailyReport | null> {
@@ -1199,6 +1337,103 @@ class SupabaseStore implements DataStore {
       .update({ pre_reminder_sent_at: sentAt.toISOString() })
       .eq("id", id);
     if (error) throw new Error(`[supabase] 事前案内記録: ${error.message}`);
+  }
+
+  async claimAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+  }): Promise<AppointmentNoticeLog | null> {
+    // 「送信中・送った」の行は、予約×種類×予約日時で1つしか作れない（部分ユニーク索引）。作れなければ送らない
+    const { data, error } = await this.sb
+      .from("appointment_notice_logs")
+      .insert({
+        appointment_id: input.appointmentId,
+        customer_id: input.customerId,
+        kind: input.kind,
+        scheduled_for: input.scheduledFor.toISOString(),
+        status: "sending",
+      })
+      .select()
+      .single();
+    if (error?.code === "23505") return null;
+    if (isMissingTable(error)) {
+      throw new Error("[supabase] appointment_notice_logs がありません。schema.sql を流してください（二重送信を防ぐため送りません）");
+    }
+    return mapNoticeLog(must(data, error, "お知らせの送信の札"));
+  }
+
+  async finishAppointmentNotice(
+    id: string,
+    result: { status: "sent" | "failed" | "skipped"; mode: "live" | "mock" | ""; body: string; error: string }
+  ): Promise<void> {
+    const { error } = await this.sb
+      .from("appointment_notice_logs")
+      .update({
+        status: result.status,
+        mode: result.mode,
+        body: result.body,
+        error: result.error,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) throw new Error(`[supabase] お知らせの送信結果: ${error.message}`);
+  }
+
+  async logSkippedAppointmentNotice(input: {
+    appointmentId: string;
+    customerId: string;
+    kind: AppointmentNoticeKind;
+    scheduledFor: Date;
+    error: string;
+  }): Promise<void> {
+    const { data: existing, error: readError } = await this.sb
+      .from("appointment_notice_logs")
+      .select("id")
+      .eq("appointment_id", input.appointmentId)
+      .eq("kind", input.kind)
+      .eq("scheduled_for", input.scheduledFor.toISOString())
+      .eq("status", "skipped")
+      .limit(1);
+    if (isMissingTable(readError)) return;
+    if ((existing ?? []).length > 0) return;
+    const { error } = await this.sb.from("appointment_notice_logs").insert({
+      appointment_id: input.appointmentId,
+      customer_id: input.customerId,
+      kind: input.kind,
+      scheduled_for: input.scheduledFor.toISOString(),
+      status: "skipped",
+      error: input.error,
+    });
+    if (error && !isMissingTable(error)) throw new Error(`[supabase] お知らせを送らなかった記録: ${error.message}`);
+  }
+
+  async countAppointmentNoticesSent(from: Date, to: Date, kinds: AppointmentNoticeKind[]): Promise<number> {
+    if (kinds.length === 0) return 0;
+    const { count, error } = await this.sb
+      .from("appointment_notice_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "sent")
+      .in("kind", kinds)
+      .gte("created_at", from.toISOString())
+      .lt("created_at", to.toISOString());
+    if (isMissingTable(error)) return 0;
+    if (error) throw new Error(`[supabase] お知らせの送信数: ${error.message}`);
+    return count ?? 0;
+  }
+
+  async listAppointmentNoticeLogs(filter: { appointmentIds?: string[]; limit?: number }): Promise<AppointmentNoticeLog[]> {
+    if (filter.appointmentIds && filter.appointmentIds.length === 0) return [];
+    let q = this.sb
+      .from("appointment_notice_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(filter.limit ?? 200);
+    if (filter.appointmentIds) q = q.in("appointment_id", filter.appointmentIds);
+    const { data, error } = await q;
+    if (isMissingTable(error)) return [];
+    return must(data, error, "お知らせの送信記録").map(mapNoticeLog);
   }
 
   async countRemindersSent(from: Date, to: Date): Promise<number> {
@@ -1669,6 +1904,62 @@ class SupabaseStore implements DataStore {
   async deleteCompanyEvent(id: string): Promise<void> {
     const { error } = await this.sb.from("company_events").delete().eq("id", id);
     if (error) throw new Error(`[supabase] 会社の予定削除: ${error.message}`);
+  }
+
+  async recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean> {
+    if (opts?.dedupeMinutes) {
+      const since = new Date(Date.now() - opts.dedupeMinutes * 60_000).toISOString();
+      const { data, error } = await this.sb
+        .from("view_logs")
+        .select("id")
+        .eq("target_type", input.targetType)
+        .eq("target_id", input.targetId)
+        .eq("viewer_staff_id", input.viewerStaffId)
+        .gte("viewed_at", since)
+        .limit(1);
+      if (isMissingTable(error)) return false; // schema.sql を流し直す前のDB（記録しない）
+      if (error) throw new Error(`[supabase] 閲覧の記録の確認: ${error.message}`);
+      if ((data ?? []).length > 0) return false;
+    }
+    const { error } = await this.sb.from("view_logs").insert({
+      target_type: input.targetType,
+      target_id: input.targetId,
+      owner_staff_id: input.ownerStaffId,
+      period_key: input.periodKey,
+      viewer_staff_id: input.viewerStaffId,
+    });
+    if (isMissingTable(error)) return false;
+    if (error) throw new Error(`[supabase] 閲覧の記録: ${error.message}`);
+    return true;
+  }
+
+  async listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]> {
+    if (filter.periodKeys?.length === 0 || filter.targetIds?.length === 0) return [];
+    let query = this.sb
+      .from("view_logs")
+      .select("*")
+      .eq("target_type", filter.targetType)
+      .order("viewed_at", { ascending: false })
+      .limit(5000);
+    if (filter.periodKeys) query = query.in("period_key", filter.periodKeys);
+    if (filter.targetIds) query = query.in("target_id", filter.targetIds);
+    if (filter.viewerStaffId) query = query.eq("viewer_staff_id", filter.viewerStaffId);
+    const { data, error } = await query;
+    if (isMissingTable(error)) return [];
+    return must(data, error, "閲覧の記録").map((r: Row) => ({
+      id: r.id,
+      targetType: r.target_type,
+      targetId: r.target_id,
+      ownerStaffId: r.owner_staff_id ?? null,
+      periodKey: r.period_key ?? "",
+      viewerStaffId: r.viewer_staff_id,
+      viewedAt: new Date(r.viewed_at),
+    }));
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {
@@ -2695,6 +2986,31 @@ class SupabaseStore implements DataStore {
     return must(data, error, "リアクション一覧").map(mapChatReaction);
   }
 
+  async listChatMembersByStaff(staffIds: string[]): Promise<ChatMember[]> {
+    if (staffIds.length === 0) return [];
+    const { data, error } = await this.sb.from("chat_members").select("*").in("staff_id", staffIds);
+    return must(data, error, "トークの参加情報").map(mapChatMember);
+  }
+
+  async listChatMessageMeta(roomIds: string[], from: Date, to: Date): Promise<ChatMessageMeta[]> {
+    if (roomIds.length === 0) return [];
+    // 本文・写真（データURL）は読まない（重いので、集計に要る列だけ）
+    const { data, error } = await this.sb
+      .from("chat_messages")
+      .select("id, room_id, sender_id, created_at, deleted")
+      .in("room_id", roomIds)
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .limit(5000);
+    return must(data, error, "トークの投稿（集計用）").map((r: Row) => ({
+      id: r.id,
+      roomId: r.room_id,
+      senderId: r.sender_id,
+      createdAt: new Date(r.created_at),
+      deleted: r.deleted ?? false,
+    }));
+  }
+
   async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
     // 2回押しても1件（先に押した時刻を残す）
     const { error } = await this.sb
@@ -2975,6 +3291,96 @@ class SupabaseStore implements DataStore {
   async deletePushSubscription(endpoint: string): Promise<void> {
     const { error } = await this.sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
     if (error) throw new Error(`[supabase] Push購読削除: ${error.message}`);
+  }
+
+  // ---- ホームの朝の画面 ----
+
+  async listDailyWords(): Promise<DailyWord[]> {
+    const { data, error } = await this.sb.from("daily_words").select("*").order("sort_order").order("created_at");
+    if (isMissingTable(error)) return []; // schema.sql を流し直す前のDB（言葉はまだ出さない）
+    return must(data, error, "しもんさんの言葉").map((r: Row) => ({
+      id: r.id,
+      body: r.body ?? "",
+      sortOrder: r.sort_order ?? 0,
+      isActive: r.is_active ?? true,
+      createdAt: new Date(r.created_at),
+    }));
+  }
+
+  async createDailyWord(body: string): Promise<DailyWord> {
+    const words = await this.listDailyWords();
+    const maxOrder = Math.max(0, ...words.map((w) => w.sortOrder));
+    const { data, error } = await this.sb
+      .from("daily_words")
+      .insert({ body, sort_order: maxOrder + 10 })
+      .select()
+      .single();
+    const r = must(data, error, "しもんさんの言葉の登録");
+    return { id: r.id, body: r.body, sortOrder: r.sort_order, isActive: r.is_active, createdAt: new Date(r.created_at) };
+  }
+
+  async updateDailyWord(id: string, patch: Partial<Pick<DailyWord, "body" | "sortOrder" | "isActive">>): Promise<void> {
+    const row: Row = {};
+    if (patch.body !== undefined) row.body = patch.body;
+    if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+    if (patch.isActive !== undefined) row.is_active = patch.isActive;
+    if (Object.keys(row).length === 0) return;
+    const { error } = await this.sb.from("daily_words").update(row).eq("id", id);
+    if (error) throw new Error(`[supabase] しもんさんの言葉の更新: ${error.message}`);
+  }
+
+  async deleteDailyWord(id: string): Promise<void> {
+    const { error } = await this.sb.from("daily_words").delete().eq("id", id);
+    if (error) throw new Error(`[supabase] しもんさんの言葉の削除: ${error.message}`);
+  }
+
+  async listDailyWordShown(limit: number): Promise<DailyWordShown[]> {
+    const { data, error } = await this.sb
+      .from("daily_word_log")
+      .select("*")
+      .order("shown_on", { ascending: false })
+      .limit(limit);
+    if (isMissingTable(error)) return [];
+    return must(data, error, "出した言葉").map((r: Row) => ({ date: r.shown_on, wordId: r.word_id ?? null }));
+  }
+
+  async recordDailyWordShown(date: string, wordId: string): Promise<void> {
+    const { error } = await this.sb
+      .from("daily_word_log")
+      .upsert({ shown_on: date, word_id: wordId }, { onConflict: "shown_on", ignoreDuplicates: true });
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] 出した言葉の記録: ${error.message}`);
+  }
+
+  async getDailyBrief(staffId: string, date: string): Promise<DailyBrief | null> {
+    const { data, error } = await this.sb
+      .from("ai_daily_briefs")
+      .select("*")
+      .eq("staff_id", staffId)
+      .eq("brief_date", date)
+      .maybeSingle();
+    if (isMissingTable(error)) return null;
+    if (error) throw new Error(`[supabase] 今日のタスクの取得: ${error.message}`);
+    if (!data) return null;
+    return {
+      staffId: data.staff_id,
+      date: data.brief_date,
+      items: Array.isArray(data.items)
+        ? data.items.map((i: Row) => ({ text: String(i.text ?? ""), detail: String(i.detail ?? "") }))
+        : [],
+      ai: data.ai ?? false,
+      model: data.model ?? "",
+      createdAt: new Date(data.created_at),
+    };
+  }
+
+  async saveDailyBrief(input: Omit<DailyBrief, "createdAt">): Promise<void> {
+    const { error } = await this.sb.from("ai_daily_briefs").upsert(
+      { staff_id: input.staffId, brief_date: input.date, items: input.items, ai: input.ai, model: input.model },
+      { onConflict: "staff_id,brief_date", ignoreDuplicates: true }
+    );
+    if (isMissingTable(error)) return;
+    if (error) throw new Error(`[supabase] 今日のタスクの保存: ${error.message}`);
   }
 
   async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {

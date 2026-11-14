@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { isExecutive } from "@/lib/eni/access";
+import { canAccessOrgChart } from "@/lib/eni/access";
 import { ORG_CHARTS, buildOrgTree, buildSynergyLinks } from "@/lib/eni/org";
 import { committeeToTemplate, findCommitteeTemplate } from "@/lib/eni/committees";
 import { PageHeader } from "@/components/ui";
@@ -25,7 +25,8 @@ export default async function OrgPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const isExec = await isExecutive(session);
+  // 組織図は幹部・管理者だけ（URLを直接開いてもホームへ戻す）
+  const isExec = await canAccessOrgChart(session);
   if (!isExec) redirect("/staff");
   const chartKey = ORG_CHARTS.some((c) => c.key === params.chart) ? params.chart! : "company";
   const chart = ORG_CHARTS.find((c) => c.key === chartKey)!;

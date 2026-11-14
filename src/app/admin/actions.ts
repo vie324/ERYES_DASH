@@ -12,6 +12,17 @@ import { multicastText, pushText } from "@/lib/line/client";
 import { normalizeTiers } from "@/lib/eni/forms";
 import { syncAllRoomMembers } from "@/lib/chat";
 import {
+  LINE_NOTICE_SETTINGS_KEY,
+  NOTICE_HOURS,
+  SCHEDULED_KINDS,
+  linkCandidates,
+  normalizeKeywords,
+  normalizePhone,
+  parseLineNoticeSettings,
+  sendCompletionNotice,
+  type LineNoticeSettings,
+} from "@/lib/line/appointment-notices";
+import {
   APP_SETTING_DEFS,
   CHOICE_SETTING_DEFS,
   TEXT_SETTING_DEFS,
@@ -33,6 +44,20 @@ async function storeField(formData: FormData, fallback: string): Promise<string>
   return stores.some((s) => s.id === id) ? id : fallback;
 }
 
+/** 権限（ロール）。選択肢にない値はスタッフにする */
+function roleField(formData: FormData): Role {
+  const v = String(formData.get("role") ?? "staff");
+  return v === "admin" || v === "manager" ? v : "staff";
+}
+
+/** 担当店舗（存在する店舗のIDだけ。店舗の管理者が見る店舗） */
+async function managedStoresField(formData: FormData): Promise<string[]> {
+  const picked = formData.getAll("managed_store_ids").map(String);
+  if (picked.length === 0) return [];
+  const known = new Set((await getDataStore().listStores()).map((s) => s.id));
+  return [...new Set(picked.filter((id) => known.has(id)))];
+}
+
 function rankField(formData: FormData): AssistantRank {
   const v = String(formData.get("rank") ?? "");
   return v === "first" || v === "middle" || v === "final" ? v : "";
@@ -45,9 +70,45 @@ export async function updateCustomerNameAction(formData: FormData): Promise<void
   const id = String(formData.get("id") ?? "");
   const fullName = String(formData.get("full_name") ?? "").trim();
   if (!id || !fullName) redirect(`/admin/customers/${id}?error=name`);
-  await getDataStore().updateCustomer(id, { fullName });
+  // 電話番号（任意）。入っているのに電話番号として読めなければ保存しない
+  const rawPhone = formData.has("phone") ? String(formData.get("phone") ?? "").trim() : null;
+  const phone = rawPhone === null ? undefined : rawPhone === "" ? "" : normalizePhone(rawPhone);
+  if (rawPhone && !phone) redirect(`/admin/customers/${id}?error=phone`);
+  await getDataStore().updateCustomer(id, { fullName, ...(phone !== undefined ? { phone } : {}) });
   revalidatePath(`/admin/customers/${id}`);
   redirect(`/admin/customers/${id}?saved=1`);
+}
+
+/** LINE未登録のお客様を店舗で追加する（ホットペッパーなどで入った予約を登録するため。名前＋電話番号） */
+export async function createUnlinkedCustomerAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const fullName = String(formData.get("full_name") ?? "").trim().slice(0, 60);
+  const rawPhone = String(formData.get("phone") ?? "").trim();
+  const phone = rawPhone ? normalizePhone(rawPhone) : "";
+  if (!fullName || (rawPhone && !phone)) redirect("/admin/appointments?error=customer_input");
+  const created = await getDataStore().createCustomer({ lineUserId: null, fullName, phone });
+  revalidatePath("/admin/appointments");
+  revalidatePath("/admin/customers");
+  redirect(`/admin/appointments?customer_added=${created.id}#new-appointment`);
+}
+
+/**
+ * LINEとつなぐ：店舗が入れた「LINE未連携」のお客様を、同じ電話番号のLINEのお客様にまとめる
+ * （予約・カウンセリングを付け替えて、未連携の記録を消す）。電話番号が同じ組だけを受け付ける。
+ */
+export async function linkCustomerAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const keepId = String(formData.get("keep_id") ?? "");
+  const removeId = String(formData.get("remove_id") ?? "");
+  const db = getDataStore();
+  const pair = linkCandidates(await db.listCustomers()).find(
+    (c) => c.lineCustomer.id === keepId && c.unlinked.id === removeId
+  );
+  if (!pair) redirect("/admin/customers?error=link");
+  await db.mergeCustomers(keepId, removeId);
+  revalidatePath("/admin/customers");
+  revalidatePath("/admin/appointments");
+  redirect(`/admin/customers?linked=1`);
 }
 
 // ---- 次回予約 ----
@@ -67,13 +128,69 @@ export async function createAppointmentAction(formData: FormData): Promise<void>
   const customer = await db.getCustomer(customerId);
   if (!customer) redirect(`${backTo}?error=customer`);
 
-  await db.createNextAppointment({
+  const appointment = await db.createNextAppointment({
     customerId,
     scheduledAt: jstLocalToUtc(scheduledLocal),
     staffId,
   });
+  // 予約完了のお知らせ（LINE）。送れなくても予約の登録は止めない（送れなかった分は定時実行でもう一度）
+  try {
+    const settings = parseLineNoticeSettings(
+      (await db.listAppSettings()).find((r) => r.key === LINE_NOTICE_SETTINGS_KEY)?.value
+    );
+    await sendCompletionNotice(db, appointment, settings);
+  } catch (e) {
+    console.error("[line] 予約完了のお知らせに失敗:", e instanceof Error ? e.message : e);
+  }
   revalidatePath("/admin/appointments");
   redirect(`${backTo}?saved=1`);
+}
+
+/** LINEのお知らせの設定（文面・送る時刻・合言葉）を保存 */
+export async function saveLineNoticeSettingsAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const current = parseLineNoticeSettings(
+    (await getDataStore().listAppSettings()).find((r) => r.key === LINE_NOTICE_SETTINGS_KEY)?.value
+  );
+  const str = (name: string, fallback: string) => {
+    const v = String(formData.get(name) ?? "").replace(/\r\n?/g, "\n").trim();
+    return v ? v.slice(0, 1000) : fallback;
+  };
+  const hour = (name: string, fallback: number) => {
+    const n = Number(formData.get(name));
+    return NOTICE_HOURS.includes(n) ? n : fallback;
+  };
+  const next: LineNoticeSettings = {
+    ...current,
+    completion: {
+      enabled: formData.get("completion_enabled") === "on",
+      template: str("completion_template", current.completion.template),
+    },
+    keywords: normalizeKeywords(String(formData.get("keywords") ?? "").split(/[\n,、]/)),
+    replyFound: str("reply_found", current.replyFound),
+    replyNone: str("reply_none", current.replyNone),
+    askPhone: str("ask_phone", current.askPhone),
+    phoneSaved: str("phone_saved", current.phoneSaved),
+  };
+  for (const kind of SCHEDULED_KINDS) {
+    next[kind] = {
+      enabled: formData.get(`${kind}_enabled`) === "on",
+      hour: hour(`${kind}_hour`, current[kind].hour),
+      template: str(`${kind}_template`, current[kind].template),
+    };
+  }
+  if (next.keywords.length === 0) next.keywords = current.keywords;
+  await getDataStore().setAppSetting(LINE_NOTICE_SETTINGS_KEY, JSON.stringify(next));
+  revalidatePath("/admin/appointments/settings");
+  redirect("/admin/appointments/settings?saved=1");
+}
+
+/** LINEのお知らせの設定を初期値に戻す */
+export async function resetLineNoticeSettingsAction(): Promise<void> {
+  await requireAdmin();
+  await getDataStore().setAppSetting(LINE_NOTICE_SETTINGS_KEY, "");
+  revalidatePath("/admin/appointments/settings");
+  redirect("/admin/appointments/settings?reset=1");
 }
 
 export async function deleteAppointmentAction(formData: FormData): Promise<void> {
@@ -230,7 +347,7 @@ export async function createStaffAction(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const loginId = String(formData.get("login_id") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const role = (String(formData.get("role") ?? "staff") === "admin" ? "admin" : "staff") as Role;
+  const role = roleField(formData);
   const fixedOvertimeHours = Number(formData.get("fixed_overtime_hours") ?? 20);
 
   if (!name || !loginId || password.length < 8 || !Number.isFinite(fixedOvertimeHours)) {
@@ -252,6 +369,7 @@ export async function createStaffAction(formData: FormData): Promise<void> {
       isExecutive: formData.get("is_executive") === "on",
       tiers: tiersField(formData),
       fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
+      managedStoreIds: await managedStoresField(formData),
     });
   } catch {
     redirect("/admin/settings?error=staff_duplicate");
@@ -266,7 +384,7 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   const session = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const role = (String(formData.get("role") ?? "staff") === "admin" ? "admin" : "staff") as Role;
+  const role = roleField(formData);
   const fixedOvertimeHours = Number(formData.get("fixed_overtime_hours") ?? 20);
   const newPassword = String(formData.get("new_password") ?? "");
   const isActive = formData.get("is_active") === "on";
@@ -287,6 +405,7 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
     mission: String(formData.get("mission") ?? "").trim().slice(0, 500),
     tiers: tiersField(formData),
     fixedOvertimeHours: Math.max(0, Math.round(fixedOvertimeHours)),
+    managedStoreIds: await managedStoresField(formData),
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),
   });
