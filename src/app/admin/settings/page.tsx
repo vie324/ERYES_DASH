@@ -205,6 +205,8 @@ export default async function AdminSettingsPage({
                 </span>
                 {s.role === "admin" ? (
                   <StatusBadge label="管理者" tone="pending" />
+                ) : s.role === "manager" ? (
+                  <StatusBadge label="店舗の管理者" tone="pending" />
                 ) : (
                   <StatusBadge label="スタッフ" tone="muted" />
                 )}
@@ -246,6 +248,7 @@ export default async function AdminSettingsPage({
                       disabled={s.id === session.staffId}
                     >
                       <option value="staff">スタッフ</option>
+                      <option value="manager">店舗の管理者（担当店舗だけ）</option>
                       <option value="admin">管理者</option>
                     </select>
                   </div>
@@ -260,6 +263,24 @@ export default async function AdminSettingsPage({
                     />
                   </div>
                 </div>
+                <fieldset>
+                  <legend className="label">担当店舗（店舗の管理者が見る店舗）</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {stores.map((st) => (
+                      <label key={st.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="managed_store_ids"
+                          value={st.id}
+                          defaultChecked={s.managedStoreIds.includes(st.id)}
+                          className="h-5 w-5 accent-brand-500"
+                        />
+                        {st.name}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="hint">「店舗の管理者」にした人は、ここで選んだ店舗のスタッフの日報を見てコメントできます（例：イーリスを見る管理者はEREYSの店舗）。管理者・スタッフは空のままで構いません。</p>
+                </fieldset>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">職種（ENiのヘアスタッフのみ）</label>
@@ -408,6 +429,7 @@ export default async function AdminSettingsPage({
               <label className="label" htmlFor="new_role">権限</label>
               <select id="new_role" name="role" className="input" defaultValue="staff">
                 <option value="staff">スタッフ</option>
+                <option value="manager">店舗の管理者（担当店舗だけ）</option>
                 <option value="admin">管理者</option>
               </select>
             </div>
@@ -423,6 +445,17 @@ export default async function AdminSettingsPage({
             </select>
             <p className="hint">幹部のルーティン業務（店舗ごと）や、店舗ごとの集計に使います。</p>
           </div>
+          <fieldset>
+            <legend className="label">担当店舗（店舗の管理者にする人だけ）</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {stores.map((st) => (
+                <label key={st.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="managed_store_ids" value={st.id} className="h-5 w-5 accent-brand-500" />
+                  {st.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="new_password2">初期パスワード（8文字以上）</label>

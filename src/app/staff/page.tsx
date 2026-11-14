@@ -16,6 +16,8 @@ import { AnnouncementBoard } from "@/components/announcement-board";
 import { ThemePicker } from "@/components/theme-picker";
 import { getSalonBoardUrl } from "@/lib/settings";
 import { EniHome } from "@/components/home/eni-home";
+import { InboxBanner } from "@/components/inbox-banner";
+import { countUncommentedReports, isReportReviewer } from "@/lib/eyes/report-comments";
 
 /** ホームのメニュー1項目。スマホ＝アイコングリッド／PC＝大きなボタンの両方で使う */
 interface HomeMenuItem {
@@ -56,7 +58,22 @@ export default async function StaffHomePage() {
   const taskBadge = taskSummary.dueCount > 0 ? taskSummary.dueCount : null;
   const chatBadge = chatOverview.totalUnread > 0 ? chatOverview.totalUnread : null;
 
-  const items = await eyesMenuItems(session.staffId, today, { shiftBadge, taskBadge, chatBadge, isExec });
+  // 店舗の管理者（担当店舗のある人）は「日報へのコメント」を先頭に出す。本人には未読のコメントを「過去日報」に出す
+  const reviewer = me && session.role === "manager" && isReportReviewer(me) ? me : null;
+  const [uncommented, notifications] = await Promise.all([
+    reviewer ? countUncommentedReports(db, reviewer, today) : Promise.resolve(0),
+    db.listAppNotifications(session.staffId, 50),
+  ]);
+  const unreadReportComments = notifications.filter((n) => n.readAt === null && n.kind.startsWith("report")).length;
+  const items = await eyesMenuItems(session.staffId, today, {
+    shiftBadge,
+    taskBadge,
+    chatBadge,
+    isExec,
+    reviewer: Boolean(reviewer),
+    uncommented,
+    unreadReportComments,
+  });
 
   return (
     <div>
@@ -73,6 +90,25 @@ export default async function StaffHomePage() {
 
       {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
       <AnnouncementBoard />
+
+      {/* 日報へのコメントなど、未読のお知らせ */}
+      <InboxBanner staffId={session.staffId} />
+
+      {/* 店舗の管理者：まだコメントのない日報（直近3日） */}
+      {uncommented > 0 && (
+        <Link
+          href="/staff/daily-reports?filter=todo"
+          className="flex items-center gap-3 rounded-2xl border border-brand-300 bg-gradient-to-r from-brand-100 to-brand-50 p-4 mb-4"
+        >
+          <span className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0 bg-white text-brand-600">
+            <Icon name="chat" className="w-5 h-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-brand-800">まだコメントのない日報が {uncommented}件 あります</span>
+            <span className="block text-xs text-ink-500 mt-0.5">担当店舗のスタッフの直近3日の日報・タップしてコメント ›</span>
+          </span>
+        </Link>
+      )}
 
       <DayoffNoticeBanner notice={dayoffNotice} />
 
@@ -161,6 +197,12 @@ async function eyesMenuItems(
     taskBadge: number | null;
     chatBadge: number | null;
     isExec: boolean;
+    /** 店舗の管理者（担当店舗のスタッフの日報にコメントする人） */
+    reviewer: boolean;
+    /** まだコメントのない日報（直近） */
+    uncommented: number;
+    /** 自分の日報についた、まだ読んでいないコメント・返信 */
+    unreadReportComments: number;
   }
 ): Promise<HomeMenuItem[]> {
   const db = getDataStore();
@@ -173,6 +215,22 @@ async function eyesMenuItems(
   const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
 
   return [
+    ...(flags.reviewer
+      ? [
+          {
+            href: "/staff/daily-reports",
+            accent: "plum" as MenuAccent,
+            icon: "chat" as IconName,
+            title: "日報へのコメント（担当店舗）",
+            short: "日報コメ",
+            description:
+              flags.uncommented > 0
+                ? `まだコメントのない日報が ${flags.uncommented} 件あります`
+                : "担当店舗のスタッフの日報を見て、コメントを送る",
+            badge: flags.uncommented || null,
+          },
+        ]
+      : []),
     {
       href: "/staff/counseling",
       accent: "sky",
@@ -271,7 +329,11 @@ async function eyesMenuItems(
       icon: "book",
       title: "過去の日報をふりかえる",
       short: "過去日報",
-      description: "これまでの日報・ふりかえりを見返す",
+      description:
+        flags.unreadReportComments > 0
+          ? `日報に新しいコメントが ${flags.unreadReportComments} 件あります`
+          : "これまでの日報・ふりかえり・届いたコメントを見返す",
+      badge: flags.unreadReportComments || null,
     },
     ...(flags.isExec
       ? [

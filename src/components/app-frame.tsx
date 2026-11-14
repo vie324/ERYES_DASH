@@ -11,6 +11,7 @@ import { getDayoffNotice } from "@/lib/shift/requests";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
 import { countExecAttention } from "@/lib/home/badges";
+import { countUncommentedReports, isReportReviewer } from "@/lib/eyes/report-comments";
 import { getAppLinks } from "@/lib/settings";
 import { AppShell } from "@/components/app-shell";
 import { PushSetup } from "@/components/push-setup";
@@ -93,14 +94,22 @@ export async function AppFrame({
     }
   }
 
-  // タスク（今日やること）とトークルーム（未読）のバッジは業態共通。外部リンクはメニューの「外部サービス」用
-  const [taskSummary, chatOverview, links] = await Promise.all([
+  // タスク（今日やること）・トークルーム（未読）・お知らせ（未読）のバッジは業態共通。外部リンクはメニューの「外部サービス」用
+  const [taskSummary, chatOverview, links, unreadInbox] = await Promise.all([
     getMyTaskSummary(db, session.staffId, today),
     getChatOverview(db, session.staffId),
     getAppLinks(db),
+    db.countUnreadAppNotifications(session.staffId),
   ]);
   badges.tasks = taskSummary.dueCount;
   badges.chat = chatOverview.totalUnread;
+  badges.inbox = unreadInbox;
+
+  // 日報へのコメント（EREYS）：管理者と、担当店舗のある店舗の管理者に「まだコメントのない日報」の数
+  const reviewer = me ? isReportReviewer(me) : false;
+  if (brand === "eyes" && reviewer && me) {
+    badges.reportReview = await countUncommentedReports(db, me, today);
+  }
 
   // 幹部バッジ：未確認の「日報の気づき」＋期限切れの幹部タスク＋自分の店舗のルーティンの未完了
   // （ホームのショートカットと同じ数え方。lib/home/badges.ts）
@@ -116,6 +125,8 @@ export async function AppFrame({
     attendanceEnabled,
     badges,
     links,
+    // 管理者はいつも「日報へのコメント」が出るので、ここでは店舗の管理者だけ
+    isReportReviewer: reviewer && session.role === "manager",
   };
   return (
     <AppShell
@@ -125,7 +136,7 @@ export async function AppFrame({
       tabs={buildMobileTabs(navContext)}
       user={{
         name: session.name,
-        roleLabel: isAdmin ? "全体管理者" : "スタッフ",
+        roleLabel: isAdmin ? "全体管理者" : session.role === "manager" ? "店舗の管理者" : "スタッフ",
         brandLabel: BRAND_INFO[brand].label,
         brandSub: BRAND_INFO[brand].sub,
         brandMark: brand === "eni" ? "N" : "E",
@@ -133,10 +144,14 @@ export async function AppFrame({
       logoSrc={getLogoSrc(brand)}
       logoAlt={getBrandName(brand)}
       helpHref={isAdmin ? "/admin/help" : "/staff/help"}
+      inbox={{ href: "/staff/inbox", count: unreadInbox }}
       banner={<DemoBanner show={isDemoMode()} />}
     >
       {/* 通知の案内（未許可のときだけ出る）と、アプリアイコンのバッジ（未読トーク＋今日のタスク） */}
-      <PushSetup publicKey={env.vapidPublicKey} badgeCount={taskSummary.dueCount + chatOverview.totalUnread} />
+      <PushSetup
+        publicKey={env.vapidPublicKey}
+        badgeCount={taskSummary.dueCount + chatOverview.totalUnread + unreadInbox}
+      />
       {children}
     </AppShell>
   );

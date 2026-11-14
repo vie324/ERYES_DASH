@@ -196,7 +196,7 @@ async function EyesDashboard({ viewer }: { viewer: DashboardViewer }) {
               value={tomorrow.length}
               total={Math.max(tomorrow.length, 1)}
               label="明日のリマインド予定"
-              hint="毎日19時に自動送信されます"
+              hint="前日の確認（LINE）が自動で送られます（時刻は設定で変えられます）"
             />
             <div className="flex items-center gap-2 text-[11px]">
               <span

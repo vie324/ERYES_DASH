@@ -1,7 +1,10 @@
 // LINE Messaging API Webhook
 // ・友だち追加（follow）→ フルネーム送信を促すあいさつを返信
 //   （公式アカウントの「あいさつメッセージ」はオフ運用のため、これが友だち追加時の1通目）
-// ・テキスト受信（message）→ 未登録ならフルネームとして顧客登録、登録済みなら案内を返信
+// ・テキスト受信（message）→ 未登録ならフルネームとして顧客登録（続けて電話番号をお願いする）、登録済みなら案内を返信
+// ・「予約確認」（合言葉は管理画面で変えられる。リッチメニューのボタンからも送れる）→ そのLINEのお客様の次の予約を返す。
+//   返すのは、このLINEアカウントにつながっているお客様の予約だけ（ほかの人の予約は見えない）
+// ・電話番号らしい言葉 → 登録済みのお客様の電話番号として保存（店舗が入れた予約とつなぐ候補を出すのに使う。自動ではつながない）
 // 氏名はチャットで受け取って登録し、続けてメニューの「カルテ入力」でカルテを記入してもらう。
 //（「カルテ入力」から先に送信された場合も api/liff/counseling 側で顧客を自動作成する）
 // LINE未接続（モックモード）では署名検証をスキップし、curl等で動作確認できる（README参照）。
@@ -9,6 +12,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataStore } from "@/lib/data";
 import { replyText, verifyLineSignature } from "@/lib/line/client";
+import { settingsMap } from "@/lib/settings";
+import {
+  LINE_NOTICE_SETTINGS_KEY,
+  appointmentListText,
+  isReservationKeyword,
+  normalizePhone,
+  parseLineNoticeSettings,
+  renderNotice,
+  type LineNoticeSettings,
+} from "@/lib/line/appointment-notices";
+import type { DataStore } from "@/lib/data/types";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +73,18 @@ function looksLikeName(text: string): boolean {
   return t.length >= 1 && t.length <= 30 && !/https?:\/\//.test(t) && !t.includes("\n");
 }
 
-async function handleEvent(event: LineEvent): Promise<void> {
+/** 「予約確認」への返事：このLINEのお客様の、これからのご予約（キャンセルを除く）だけ */
+async function reservationReply(db: DataStore, customerId: string, fullName: string, settings: LineNoticeSettings): Promise<string> {
+  const [appointments, store] = await Promise.all([
+    db.listNextAppointments({ customerId, from: new Date() }),
+    db.getStore(),
+  ]);
+  const upcoming = appointments.filter((a) => a.status !== "cancelled");
+  if (upcoming.length === 0) return renderNotice(settings.replyNone, { name: fullName, store: store.name });
+  return renderNotice(settings.replyFound, { name: fullName, store: store.name, list: appointmentListText(upcoming) });
+}
+
+async function handleEvent(event: LineEvent, settings: LineNoticeSettings): Promise<void> {
   const db = getDataStore();
   const userId = event.source?.userId;
 
@@ -71,20 +96,39 @@ async function handleEvent(event: LineEvent): Promise<void> {
   if (event.type === "message" && event.message?.type === "text" && event.replyToken && userId) {
     const text = event.message.text ?? "";
     const existing = await db.getCustomerByLineUserId(userId);
+    const isKeyword = isReservationKeyword(text, settings.keywords);
+    const phone = normalizePhone(text);
 
-    // 登録済みのお客様には案内のみ（氏名は再登録しない）
     if (existing) {
+      // 予約確認：このLINEアカウントにつながっているお客様の予約だけを返す
+      if (isKeyword) {
+        await replyText(event.replyToken, await reservationReply(db, existing.id, existing.fullName, settings));
+        return;
+      }
+      // 電話番号：お客様の記録に入れる（店舗が先に入れた予約とは、店舗が確かめてからつなぐ）。
+      // ほかの人の記録があるかどうかは、返事で分からないようにする
+      if (phone) {
+        await db.updateCustomer(existing.id, { phone });
+        await replyText(event.replyToken, settings.phoneSaved);
+        return;
+      }
+      // それ以外は案内のみ（氏名は再登録しない）
       await replyText(event.replyToken, MSG_GUIDE);
       return;
     }
 
-    // 未登録：送られたテキストをフルネームとして登録し、「カルテ入力」へ案内
+    // 未登録で「予約確認」や電話番号が先に届いたら、名前として登録せず、まずフルネームをお願いする
+    if (isKeyword || phone) {
+      await replyText(event.replyToken, MSG_WELCOME);
+      return;
+    }
+    // 未登録：送られたテキストをフルネームとして登録し、「カルテ入力」へ案内。続けて電話番号をお願いする
     if (!looksLikeName(text)) {
       await replyText(event.replyToken, MSG_ASK_AGAIN);
       return;
     }
     const customer = await db.createCustomer({ lineUserId: userId, fullName: text.trim() });
-    await replyText(event.replyToken, MSG_REGISTERED(customer.fullName));
+    await replyText(event.replyToken, `${MSG_REGISTERED(customer.fullName)}\n\n${settings.askPhone}`);
     return;
   }
 
@@ -109,9 +153,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // LINEプラットフォームへは素早く200を返す必要があるが、
   // イベント数は少ないため順次処理で問題ない（タイムアウト時はLINE側が再送する）
+  let settings: LineNoticeSettings;
+  try {
+    settings = parseLineNoticeSettings(settingsMap(await getDataStore().listAppSettings())[LINE_NOTICE_SETTINGS_KEY]);
+  } catch {
+    settings = parseLineNoticeSettings(null);
+  }
   for (const event of events) {
     try {
-      await handleEvent(event);
+      await handleEvent(event, settings);
     } catch (e) {
       console.error("[LINE webhook] イベント処理に失敗:", e);
     }
