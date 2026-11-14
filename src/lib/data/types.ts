@@ -830,6 +830,7 @@ export interface DataStore {
       Pick<
         Staff,
         | "name"
+        | "storeId"
         | "role"
         | "jobType"
         | "rank"

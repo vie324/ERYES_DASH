@@ -18,6 +18,14 @@ function jobTypeField(formData: FormData): JobType {
   return v === "stylist" || v === "assistant" ? v : "";
 }
 
+/** 所属店舗（存在する店舗のIDだけ受け付ける。未指定・不明なら fallback） */
+async function storeField(formData: FormData, fallback: string): Promise<string> {
+  const id = String(formData.get("store_id") ?? "");
+  if (!id) return fallback;
+  const stores = await getDataStore().listStores();
+  return stores.some((s) => s.id === id) ? id : fallback;
+}
+
 function rankField(formData: FormData): AssistantRank {
   const v = String(formData.get("rank") ?? "");
   return v === "first" || v === "middle" || v === "final" ? v : "";
@@ -224,9 +232,10 @@ export async function createStaffAction(formData: FormData): Promise<void> {
 
   const db = getDataStore();
   const store = await db.getStore();
+  const storeId = await storeField(formData, store.id);
   try {
     await db.createStaff({
-      storeId: store.id,
+      storeId,
       name,
       loginId,
       passwordHash: hashPassword(password),
@@ -258,8 +267,10 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   // 自分自身の管理者権限・有効フラグは外せない（締め出し防止）
   const lockSelf = id === session.staffId;
 
+  const current = await getDataStore().getStaff(id);
   await getDataStore().updateStaff(id, {
     name,
+    storeId: await storeField(formData, current?.storeId ?? ""),
     role: lockSelf ? "admin" : role,
     jobType: jobTypeField(formData),
     rank: rankField(formData),

@@ -200,6 +200,9 @@ export default async function AdminSettingsPage({
                 ) : (
                   <StatusBadge label="スタッフ" tone="muted" />
                 )}
+                {stores.length > 1 && (
+                  <StatusBadge label={stores.find((st) => st.id === s.storeId)?.name ?? "店舗不明"} tone="muted" />
+                )}
                 {s.isExecutive && <StatusBadge label="幹部" tone="warning" />}
                 {s.jobType === "stylist" && <StatusBadge label="スタイリスト" tone="ok" />}
                 {s.jobType === "assistant" && <StatusBadge label="アシスタント" tone="ok" />}
@@ -209,9 +212,21 @@ export default async function AdminSettingsPage({
               </summary>
               <form action={updateStaffAction} className="space-y-3 mt-4 pt-4 border-t border-ink-100">
                 <input type="hidden" name="id" value={s.id} />
-                <div>
-                  <label className="label">氏名</label>
-                  <input name="name" defaultValue={s.name} className="input" required />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">氏名</label>
+                    <input name="name" defaultValue={s.name} className="input" required />
+                  </div>
+                  <div>
+                    <label className="label">所属店舗</label>
+                    <select name="store_id" defaultValue={s.storeId} className="input">
+                      {stores.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -388,6 +403,17 @@ export default async function AdminSettingsPage({
                 <option value="admin">管理者</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className="label" htmlFor="new_store">所属店舗</label>
+            <select id="new_store" name="store_id" className="input" defaultValue={stores[0]?.id ?? ""}>
+              {stores.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+            <p className="hint">幹部のルーティン業務（店舗ごと）や、店舗ごとの集計に使います。</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

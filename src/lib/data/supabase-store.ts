@@ -726,6 +726,7 @@ class SupabaseStore implements DataStore {
       Pick<
         Staff,
         | "name"
+        | "storeId"
         | "role"
         | "jobType"
         | "rank"
@@ -742,6 +743,7 @@ class SupabaseStore implements DataStore {
   ): Promise<Staff> {
     const row: Row = {};
     if (patch.name !== undefined) row.name = patch.name;
+    if (patch.storeId !== undefined) row.store_id = patch.storeId;
     if (patch.role !== undefined) row.role = patch.role;
     if (patch.jobType !== undefined) row.job_type = patch.jobType;
     if (patch.rank !== undefined) row.rank = patch.rank;

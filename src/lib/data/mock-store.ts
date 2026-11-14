@@ -1286,6 +1286,7 @@ class MockStore implements DataStore {
       Pick<
         Staff,
         | "name"
+        | "storeId"
         | "role"
         | "jobType"
         | "rank"
