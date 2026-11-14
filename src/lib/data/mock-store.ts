@@ -75,6 +75,7 @@ import type {
   Store,
   TaskCompletion,
   TaskKind,
+  TaskType,
   ThanksComment,
   ThanksLike,
   ThanksPost,
@@ -134,19 +135,24 @@ interface MockDb {
 }
 
 /**
- * 店長・副店長のルーティン業務の初期値。
- * デイリーの4項目は運用で必ず回すもの。ウィークリー・マンスリーは例として入れておき、
- * 実際の運用に合わせて幹部メニューから追加・編集してもらう。
+ * 毎日の業務の初期値（本番は supabase/schema.sql の初期データと同じ内容）。
+ *  ・幹部（店長・副店長）…… デイリーの6項目は運用で必ず回すもの（口コミ返信・カルテ記入は2026-11に追加）。
+ *    ウィークリー・マンスリーは例として入れておき、実際の運用に合わせて幹部メニューから追加・編集してもらう。
+ *  ・スタイリスト ………… 一人ひとりの毎日の業務（2026-11に追加）
  */
 const DEFAULT_MANAGER_ROUTINES: Omit<ManagerRoutine, "id">[] = [
-  { title: "公式LINEチェック", cycle: "daily", note: "返信もれ・予約の問い合わせが残っていないか", sortOrder: 10, isActive: true },
-  { title: "労務管理（早退・遅刻・欠勤など）", cycle: "daily", note: "当日の勤怠のズレを把握し、必要なら申し送りする", sortOrder: 20, isActive: true },
-  { title: "レジ締め・エクセルの入力の確認", cycle: "daily", note: "現金残高とエクセルの数字が合っているか", sortOrder: 30, isActive: true },
-  { title: "日報・週報の入力・確認", cycle: "daily", note: "全員の提出状況を見て、未提出には声をかける", sortOrder: 40, isActive: true },
-  { title: "シフトの提出状況の確認", cycle: "weekly", note: "翌月分の希望休・シフト希望がそろっているか", sortOrder: 10, isActive: true },
-  { title: "材料の在庫チェック・発注", cycle: "weekly", note: "切らしそうな商材がないか", sortOrder: 20, isActive: true },
-  { title: "月次の数字のまとめ・共有", cycle: "monthly", note: "売上・客数・次回予約率を幹部会議で共有する", sortOrder: 10, isActive: true },
-  { title: "スタッフ全員との1on1の実施確認", cycle: "monthly", note: "今月まだ話せていない人がいないか", sortOrder: 20, isActive: true },
+  { title: "公式LINEチェック", cycle: "daily", note: "返信もれ・予約の問い合わせが残っていないか", sortOrder: 10, isActive: true, audience: "exec" },
+  { title: "労務管理（早退・遅刻・欠勤など）", cycle: "daily", note: "当日の勤怠のズレを把握し、必要なら申し送りする", sortOrder: 20, isActive: true, audience: "exec" },
+  { title: "レジ締め・エクセルの入力の確認", cycle: "daily", note: "現金残高とエクセルの数字が合っているか", sortOrder: 30, isActive: true, audience: "exec" },
+  { title: "日報・週報の入力・確認", cycle: "daily", note: "全員の提出状況を見て、未提出には声をかける", sortOrder: 40, isActive: true, audience: "exec" },
+  { title: "口コミ返信チェック", cycle: "daily", note: "新しい口コミに返信もれがないか", sortOrder: 50, isActive: true, audience: "exec" },
+  { title: "カルテ記入チェック", cycle: "daily", note: "その日のお客様のカルテが全員ぶん記入されているか", sortOrder: 60, isActive: true, audience: "exec" },
+  { title: "シフトの提出状況の確認", cycle: "weekly", note: "翌月分の希望休・シフト希望がそろっているか", sortOrder: 10, isActive: true, audience: "exec" },
+  { title: "材料の在庫チェック・発注", cycle: "weekly", note: "切らしそうな商材がないか", sortOrder: 20, isActive: true, audience: "exec" },
+  { title: "月次の数字のまとめ・共有", cycle: "monthly", note: "売上・客数・次回予約率を幹部会議で共有する", sortOrder: 10, isActive: true, audience: "exec" },
+  { title: "スタッフ全員との1on1の実施確認", cycle: "monthly", note: "今月まだ話せていない人がいないか", sortOrder: 20, isActive: true, audience: "exec" },
+  { title: "カルテ記入チェック", cycle: "daily", note: "担当したお客様のカルテを記入したか", sortOrder: 10, isActive: true, audience: "stylist" },
+  { title: "営業フィードバック", cycle: "daily", note: "営業後のフィードバック（良かったこと・次に活かすこと）をしたか", sortOrder: 20, isActive: true, audience: "stylist" },
 ];
 
 /** JSTの日時（時・分）をUTCのDateにする（デモデータ生成用） */
@@ -742,6 +748,7 @@ function seed(): MockDb {
   const staffTasks: StaffTask[] = [
     {
       id: "task-1",
+      taskType: "routine",
       kind: "routine",
       title: "インスタのストーリーを1本投稿",
       note: "サロンワークの様子・ビフォーアフターなど",
@@ -757,6 +764,7 @@ function seed(): MockDb {
     },
     {
       id: "task-2",
+      taskType: "task",
       kind: "request",
       title: "来月のポップ（春キャンペーン）を作成",
       note: "A4サイズ・レジ横用。先月のデータはドライブにあります",
@@ -772,6 +780,7 @@ function seed(): MockDb {
     },
     {
       id: "task-3",
+      taskType: "task",
       kind: "exec",
       title: "採用媒体の原稿を更新する",
       note: "新しい店内写真に差し替え。文言は幹部会議で決めた案で",
@@ -787,6 +796,7 @@ function seed(): MockDb {
     },
     {
       id: "task-4",
+      taskType: "routine",
       kind: "exec",
       title: "月次の数字まとめを共有",
       note: "売上・新規・次回予約率をスプレッドシートに",
@@ -799,6 +809,32 @@ function seed(): MockDb {
       doneAt: null,
       createdAt: jstAt(addDays(today, -30), 9),
       updatedAt: jstAt(addDays(today, -30), 9),
+    },
+  ];
+
+  // ---- 毎日の業務（幹部のルーティン業務／スタイリストの毎日の業務）のデモデータ ----
+  // ENi 自由が丘店の今日の分を一部だけ済ませておく（店舗ごと・人ごとの見え方の確認用）
+  const managerRoutines: ManagerRoutine[] = DEFAULT_MANAGER_ROUTINES.map((r) => ({ id: randomUUID(), ...r }));
+  const routineByTitle = (title: string, audience: ManagerRoutine["audience"]) =>
+    managerRoutines.find((r) => r.title === title && r.audience === audience)!;
+  const managerRoutineChecks: ManagerRoutineCheck[] = [
+    {
+      id: randomUUID(),
+      routineId: routineByTitle("公式LINEチェック", "exec").id,
+      periodKey: today,
+      staffId: "staff-3",
+      subjectKey: "store-4",
+      storeId: "store-4",
+      checkedAt: jstAt(today, 10, 5),
+    },
+    {
+      id: randomUUID(),
+      routineId: routineByTitle("カルテ記入チェック", "stylist").id,
+      periodKey: today,
+      staffId: "staff-4",
+      subjectKey: "staff-4",
+      storeId: "store-4",
+      checkedAt: jstAt(today, 19, 30),
     },
   ];
 
@@ -1135,8 +1171,8 @@ function seed(): MockDb {
     chatReactions: [],
     aiShimonMessages,
     committees: committeesFromTemplates().map((c) => ({ id: randomUUID(), ...c })),
-    managerRoutines: DEFAULT_MANAGER_ROUTINES.map((r) => ({ id: randomUUID(), ...r })),
-    managerRoutineChecks: [],
+    managerRoutines,
+    managerRoutineChecks,
     appSettings: [],
     pushSubscriptions: [],
     thanksPosts,
@@ -2456,6 +2492,7 @@ class MockStore implements DataStore {
 
   async listStaffTasks(filter?: {
     kind?: TaskKind;
+    taskType?: TaskType;
     assigneeStaffId?: string;
     createdBy?: string;
     includeDone?: boolean;
@@ -2464,6 +2501,7 @@ class MockStore implements DataStore {
       .filter(
         (t) =>
           (!filter?.kind || t.kind === filter.kind) &&
+          (!filter?.taskType || t.taskType === filter.taskType) &&
           (!filter?.assigneeStaffId || t.assigneeStaffId === filter.assigneeStaffId) &&
           (!filter?.createdBy || t.createdBy === filter.createdBy) &&
           (filter?.includeDone || t.status !== "done")
@@ -2838,22 +2876,29 @@ class MockStore implements DataStore {
     this.db.managerRoutineChecks = this.db.managerRoutineChecks.filter((c) => c.routineId !== id);
   }
 
-  async setManagerRoutineChecked(
-    routineId: string,
-    periodKey: string,
-    staffId: string,
-    checked: boolean
-  ): Promise<void> {
+  async setManagerRoutineChecked(input: {
+    routineId: string;
+    periodKey: string;
+    subjectKey: string;
+    storeId: string | null;
+    staffId: string;
+    checked: boolean;
+  }): Promise<void> {
     const idx = this.db.managerRoutineChecks.findIndex(
-      (c) => c.routineId === routineId && c.periodKey === periodKey
+      (c) =>
+        c.routineId === input.routineId &&
+        c.periodKey === input.periodKey &&
+        c.subjectKey === input.subjectKey
     );
-    if (checked) {
+    if (input.checked) {
       if (idx >= 0) return;
       this.db.managerRoutineChecks.push({
         id: randomUUID(),
-        routineId,
-        periodKey,
-        staffId,
+        routineId: input.routineId,
+        periodKey: input.periodKey,
+        staffId: input.staffId,
+        subjectKey: input.subjectKey,
+        storeId: input.storeId,
         checkedAt: new Date(),
       });
     } else if (idx >= 0) {

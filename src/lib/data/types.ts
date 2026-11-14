@@ -439,10 +439,24 @@ export interface OrderRequest {
 }
 
 // ============================================================
-// タスク管理（ルーティン／依頼／幹部タスク）
+// タスク管理（ルーティン／タスク × 自分・依頼・幹部）
 // ============================================================
 
-// routine=自分で決めたルーティン / request=誰かからお願いされたタスク / exec=幹部タスク
+/**
+ * 種類（登録画面の最初に選ぶ）。
+ *  ・routine＝ルーティン …… くり返し（毎日／毎週◯曜日／毎月◯日）。該当日に「今日やること」に出て、日ごとに完了をつける
+ *  ・task＝タスク ………… 1回きり。期限と担当者を決め、完了したら終わり
+ * 以前は種類の列が無く、くり返しの有無だけで見分けていた（DBの移行は supabase/schema.sql）。
+ */
+export type TaskType = "routine" | "task";
+
+/**
+ * 誰が決めたか（8月に決めた3分類「ルーティン・依頼・会社ルール」のうち、手で登録する2つ＋幹部）。
+ *  ・routine＝自分で登録したもの（DBの値は旧名の routine のまま。くり返しかどうかは TaskType で見る）
+ *  ・request＝人から依頼されたもの
+ *  ・exec＝幹部タスク（幹部メニューで、幹部どうしで進捗を見合う）
+ * 会社ルール（日報・週報・議事録・希望休など）は登録せず、提出状況から自動で出す（タスク画面）。
+ */
 export type TaskKind = "routine" | "request" | "exec";
 // 単発タスクの進捗。繰り返しタスクは task_completions（日別）で管理する
 export type TaskStatus = "open" | "in_progress" | "done";
@@ -451,6 +465,8 @@ export type TaskRepeat = "" | "daily" | "weekly" | "monthly";
 
 export interface StaffTask {
   id: string;
+  /** ルーティン（くり返し）か、タスク（1回きり）か */
+  taskType: TaskType;
   kind: TaskKind;
   title: string;
   note: string;
@@ -564,12 +580,20 @@ export interface Committee {
 }
 
 // ============================================================
-// 店長・副店長のルーティン業務（デイリー／ウィークリー／マンスリー）
+// 毎日の業務（幹部＝店長・副店長のルーティン業務／スタイリストの毎日の業務）
+// デイリー／ウィークリー／マンスリーで、マスタと実施記録を同じ仕組みで持つ
 // ============================================================
 
 export type RoutineCycle = "daily" | "weekly" | "monthly";
 
-/** ルーティン業務のマスタ（幹部が追加・編集できる） */
+/**
+ * 誰の業務か。
+ *  ・exec＝幹部（店長・副店長）…… 店舗ごとに1つチェックする（その店舗の誰かがやればよい）
+ *  ・stylist＝スタイリスト ……… 一人ひとりがチェックする
+ */
+export type RoutineAudience = "exec" | "stylist";
+
+/** 業務のマスタ（管理者・幹部が追加・編集・停止できる。全店舗に共通） */
 export interface ManagerRoutine {
   id: string;
   title: string;
@@ -577,14 +601,24 @@ export interface ManagerRoutine {
   note: string;
   sortOrder: number;
   isActive: boolean;
+  audience: RoutineAudience;
 }
 
-/** ルーティン業務の実施記録。periodKey は daily=日付 / weekly=週の月曜 / monthly="YYYY-MM" */
+/**
+ * 業務の実施記録。periodKey は daily=日付 / weekly=週の月曜 / monthly="YYYY-MM"。
+ * subjectKey は「何の分か」：幹部の業務＝店舗ID／スタイリストの業務＝スタッフID。
+ * 以前は店舗の区別が無く（1業務×1期間で1件）、移行した記録には付けた人の所属店舗が入っている。
+ */
 export interface ManagerRoutineCheck {
   id: string;
   routineId: string;
   periodKey: string;
+  /** チェックした人 */
   staffId: string;
+  /** 幹部の業務＝店舗ID／スタイリストの業務＝スタッフID（店舗ごと・人ごとの集計に使う） */
+  subjectKey: string;
+  /** 集計用の店舗（幹部の業務＝その店舗／スタイリストの業務＝チェックした時点の所属店舗） */
+  storeId: string | null;
   checkedAt: Date;
 }
 
@@ -1051,6 +1085,7 @@ export interface DataStore {
   /** includeDone=false なら未完了（open/in_progress と繰り返し）のみ */
   listStaffTasks(filter?: {
     kind?: TaskKind;
+    taskType?: TaskType;
     assigneeStaffId?: string;
     createdBy?: string;
     includeDone?: boolean;
@@ -1118,7 +1153,7 @@ export interface DataStore {
   upsertCommittee(input: Omit<Committee, "id">): Promise<void>;
   deleteCommittee(committeeKey: string): Promise<void>;
 
-  // ---- 店長・副店長のルーティン業務 ----
+  // ---- 毎日の業務（幹部のルーティン業務／スタイリストの毎日の業務） ----
   listManagerRoutines(): Promise<ManagerRoutine[]>;
   createManagerRoutine(input: Omit<ManagerRoutine, "id">): Promise<ManagerRoutine>;
   updateManagerRoutine(
@@ -1126,13 +1161,16 @@ export interface DataStore {
     patch: Partial<Omit<ManagerRoutine, "id">>
   ): Promise<void>;
   deleteManagerRoutine(id: string): Promise<void>;
-  /** 実施記録の付け外し（ルーティン×期間×担当者） */
-  setManagerRoutineChecked(
-    routineId: string,
-    periodKey: string,
-    staffId: string,
-    checked: boolean
-  ): Promise<void>;
+  /** 実施記録の付け外し（業務×期間×対象。対象は幹部の業務＝店舗／スタイリストの業務＝本人） */
+  setManagerRoutineChecked(input: {
+    routineId: string;
+    periodKey: string;
+    subjectKey: string;
+    storeId: string | null;
+    /** チェックした人 */
+    staffId: string;
+    checked: boolean;
+  }): Promise<void>;
   listManagerRoutineChecks(periodKeys: string[]): Promise<ManagerRoutineCheck[]>;
 
   // ---- アプリ設定（サロンボードURLなど） ----

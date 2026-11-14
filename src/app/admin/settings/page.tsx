@@ -8,10 +8,11 @@ import {
   deleteStaffAction,
   deleteStoreAction,
   saveAppSettingsAction,
+  saveTextSettingAction,
   updateStaffAction,
   updateStoreAction,
 } from "../actions";
-import { APP_SETTING_DEFS, settingsMap } from "@/lib/settings";
+import { APP_SETTING_DEFS, TEXT_SETTING_DEFS, settingsMap, textSettingOf } from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
 import { findOwner } from "@/lib/ai-shimon/access";
@@ -471,6 +472,26 @@ export default async function AdminSettingsPage({
           </p>
         </form>
       </section>
+
+      {/* 文章の設定（幹部メニューの「大切にすること」など）。1項目＝1フォーム */}
+      {TEXT_SETTING_DEFS.map((def) => (
+        <section key={def.key} id={def.key} className="card mt-5 scroll-mt-20">
+          <h2 className="font-display text-lg font-bold text-ink-900 mb-1">{def.label}</h2>
+          <p className="hint !mt-0 mb-3">{def.note}</p>
+          <form action={saveTextSettingAction} className="space-y-3">
+            <input type="hidden" name="key" value={def.key} />
+            <textarea
+              name="value"
+              rows={def.rows}
+              maxLength={def.maxLength}
+              defaultValue={textSettingOf(appSettings, def.key)}
+              className="input leading-relaxed"
+              aria-label={def.label}
+            />
+            <button type="submit" className="btn-secondary w-full">この文面で保存</button>
+          </form>
+        </section>
+      ))}
 
       {/* AIしもん：準備状況の確認（設定そのものは環境変数とファイル配置で行う） */}
       <section className="card mt-5">

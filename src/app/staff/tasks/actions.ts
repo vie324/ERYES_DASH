@@ -7,7 +7,10 @@ import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
 import { formatDateJa, todayJst } from "@/lib/date";
 import { notifyQuietly, shortName } from "@/lib/push/notify";
-import type { TaskRepeat, TaskStatus } from "@/lib/data/types";
+import { parseTaskForm } from "@/lib/task-form";
+import { SELF_TASK_KIND } from "@/lib/tasks";
+import { periodKeyOf } from "@/lib/eni/routines";
+import type { TaskStatus } from "@/lib/data/types";
 
 /** リダイレクト先（アプリ内のみ許可。改ざん対策） */
 function backOf(formData: FormData, fallback = "/staff/tasks"): string {
@@ -22,131 +25,99 @@ function backOf(formData: FormData, fallback = "/staff/tasks"): string {
 function refresh(): void {
   revalidatePath("/staff/tasks");
   revalidatePath("/staff/exec");
+  revalidatePath("/staff/eni-report");
   revalidatePath("/staff");
 }
 
-/** 繰り返し設定をフォームから読み取る */
-function parseRepeat(formData: FormData): { repeat: TaskRepeat; repeatDays: number[] } {
-  const raw = String(formData.get("repeat") ?? "");
-  if (raw === "daily") return { repeat: "daily", repeatDays: [] };
-  if (raw === "weekly") {
-    const days = formData
-      .getAll("repeat_weekdays")
-      .map(Number)
-      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
-    return { repeat: "weekly", repeatDays: [...new Set(days)].sort((a, b) => a - b) };
-  }
-  if (raw === "monthly") {
-    const day = Math.round(Number(formData.get("repeat_monthday")) || 0);
-    return { repeat: "monthly", repeatDays: day >= 1 && day <= 31 ? [day] : [1] };
-  }
-  return { repeat: "", repeatDays: [] };
-}
-
-/** 自分のタスク（ルーティン・単発）を作成 */
-export async function createRoutineTaskAction(formData: FormData): Promise<void> {
+/**
+ * ルーティン・タスクの登録（タスク画面）。最初に選んだ種類で、要る項目を確かめる。
+ *  ・ルーティン …… 自分のルーティン（くり返し）。担当は自分
+ *  ・タスク ……… 期限つき。担当が自分以外なら「依頼」になり、担当の人に通知する
+ */
+export async function createTaskAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const back = backOf(formData);
-  const title = String(formData.get("title") ?? "").trim().slice(0, 100);
-  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
-  const dueDate = String(formData.get("due_date") ?? "").trim();
-  const { repeat, repeatDays } = parseRepeat(formData);
-
-  if (!title || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))) {
-    redirect(`${back}?error=input`);
-  }
-  if (repeat === "weekly" && repeatDays.length === 0) {
-    redirect(`${back}?error=input`);
-  }
-
-  await getDataStore().createStaffTask({
-    kind: "routine",
-    title,
-    note,
-    assigneeStaffId: session.staffId,
-    createdBy: session.staffId,
-    dueDate: repeat ? "" : dueDate,
-    repeat,
-    repeatDays,
-    status: "open",
-  });
-  refresh();
-  redirect(`${back}?saved=1`);
-}
-
-/** タスクを誰かに依頼する */
-export async function createRequestTaskAction(formData: FormData): Promise<void> {
-  const session = await requireSession();
-  const back = backOf(formData);
-  const title = String(formData.get("title") ?? "").trim().slice(0, 100);
-  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
-  const assigneeStaffId = String(formData.get("assignee") ?? "");
-  const dueDate = String(formData.get("due_date") ?? "").trim();
-
+  const parsed = parseTaskForm(formData);
+  if (!parsed.ok) redirect(`${back}?error=${parsed.error}`);
+  const form = parsed.value;
   const db = getDataStore();
-  const assignee = assigneeStaffId ? await db.getStaff(assigneeStaffId) : null;
-  if (!title || !assignee || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))) {
-    redirect(`${back}?error=input`);
+
+  if (form.taskType === "routine") {
+    await db.createStaffTask({
+      taskType: "routine",
+      kind: SELF_TASK_KIND,
+      title: form.title,
+      note: form.note,
+      assigneeStaffId: session.staffId,
+      createdBy: session.staffId,
+      dueDate: "",
+      repeat: form.repeat,
+      repeatDays: form.repeatDays,
+      status: "open",
+    });
+    refresh();
+    redirect(`${back}?saved=routine`);
   }
+
+  const assigneeId = form.assigneeId || session.staffId;
+  const assignee = await db.getStaff(assigneeId);
+  if (!assignee || !assignee.isActive) redirect(`${back}?error=assignee`);
+  const isRequest = assigneeId !== session.staffId;
 
   await db.createStaffTask({
-    kind: "request",
-    title,
-    note,
-    assigneeStaffId,
+    taskType: "task",
+    kind: isRequest ? "request" : SELF_TASK_KIND,
+    title: form.title,
+    note: form.note,
+    assigneeStaffId: assigneeId,
     createdBy: session.staffId,
-    dueDate,
+    dueDate: form.dueDate,
     repeat: "",
     repeatDays: [],
     status: "open",
   });
-  if (assigneeStaffId !== session.staffId) {
-    await notifyQuietly(db, [assigneeStaffId], {
+  if (isRequest) {
+    await notifyQuietly(db, [assigneeId], {
       title: `${shortName(session.name)}さんからタスクの依頼`,
-      body: `${title}${dueDate ? `（〜${formatDateJa(dueDate)}）` : ""}`,
+      body: `${form.title}（〜${formatDateJa(form.dueDate)}）`,
       url: "/staff/tasks",
       tag: "task",
     });
   }
   refresh();
-  redirect(`${back}?saved=request`);
+  redirect(`${back}?saved=${isRequest ? "request" : "task"}`);
 }
 
-/** 幹部タスクを作成（幹部のみ。担当者・繰り返しを設定できる） */
+/** 幹部タスクを作成（幹部のみ）。ルーティン・タスクのどちらも、担当者を選べる */
 export async function createExecTaskAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   if (!(await isExecutive(session))) redirect("/staff");
   const back = backOf(formData, "/staff/exec");
-  const title = String(formData.get("title") ?? "").trim().slice(0, 100);
-  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
-  const assigneeStaffId = String(formData.get("assignee") ?? "");
-  const dueDate = String(formData.get("due_date") ?? "").trim();
-  const { repeat, repeatDays } = parseRepeat(formData);
+  const parsed = parseTaskForm(formData);
+  if (!parsed.ok) redirect(`${back}?error=${parsed.error}`);
+  const form = parsed.value;
 
   const db = getDataStore();
-  const assignee = assigneeStaffId ? await db.getStaff(assigneeStaffId) : null;
-  if (!title || !assignee || (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))) {
-    redirect(`${back}?error=input`);
-  }
-  if (repeat === "weekly" && repeatDays.length === 0) {
-    redirect(`${back}?error=input`);
-  }
+  const assigneeStaffId = form.assigneeId || session.staffId;
+  const assignee = await db.getStaff(assigneeStaffId);
+  if (!assignee || !assignee.isActive) redirect(`${back}?error=assignee`);
 
   await db.createStaffTask({
+    taskType: form.taskType,
     kind: "exec",
-    title,
-    note,
+    title: form.title,
+    note: form.note,
     assigneeStaffId,
     createdBy: session.staffId,
-    dueDate: repeat ? "" : dueDate,
-    repeat,
-    repeatDays,
+    dueDate: form.dueDate,
+    repeat: form.repeat,
+    repeatDays: form.repeatDays,
     status: "open",
   });
   if (assigneeStaffId !== session.staffId) {
     await notifyQuietly(db, [assigneeStaffId], {
       title: "幹部タスクが割り当てられました",
-      body: `${title}${!repeat && dueDate ? `（〜${formatDateJa(dueDate)}）` : ""}`,
+      body: `${form.title}${form.dueDate ? `（〜${formatDateJa(form.dueDate)}）` : ""}`,
       url: "/staff/exec",
       tag: "task",
     });
@@ -173,7 +144,7 @@ export async function toggleTaskDoneAction(formData: FormData): Promise<void> {
     (await isExecutive(session));
   if (!canToggle) redirect(`${back}?error=forbidden`);
 
-  if (task!.repeat) {
+  if (task!.taskType === "routine") {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect(`${back}?error=input`);
     await db.setTaskCompletion(taskId, date, session.staffId, done);
   } else {
@@ -242,4 +213,32 @@ export async function toggleCompanyMeetingTaskAction(formData: FormData): Promis
   await db.setMeetingTaskDone(taskId, done);
   refresh();
   revalidatePath("/staff/meetings");
+}
+
+/**
+ * スタイリストの毎日の業務（カルテ記入チェック・営業フィードバックなど）を、自分の分としてチェックする。
+ * マスタは幹部メニューで編集する。チェックできるのはスタイリスト本人の分だけ。
+ */
+export async function toggleMyDailyItemAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const back = backOf(formData);
+  const routineId = String(formData.get("routine_id") ?? "");
+  const done = String(formData.get("done") ?? "") === "1";
+
+  const db = getDataStore();
+  const [me, routines] = await Promise.all([db.getStaff(session.staffId), db.listManagerRoutines()]);
+  const routine = routines.find((r) => r.id === routineId);
+  if (!routine || !routine.isActive || routine.audience !== "stylist") redirect(`${back}?error=notfound`);
+  if (!me || me.jobType !== "stylist") redirect(`${back}?error=forbidden`);
+
+  // 付け外しできるのは今の期間（今日・今週・今月）の分だけ（期間はサーバーで決める）
+  await db.setManagerRoutineChecked({
+    routineId: routine!.id,
+    periodKey: periodKeyOf(routine!.cycle, todayJst()),
+    subjectKey: me!.id,
+    storeId: me!.storeId,
+    staffId: me!.id,
+    checked: done,
+  });
+  refresh();
 }

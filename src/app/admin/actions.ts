@@ -10,7 +10,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
 import { multicastText, pushText } from "@/lib/line/client";
 import { normalizeTiers } from "@/lib/eni/forms";
-import { APP_SETTING_DEFS, normalizeSettingValue } from "@/lib/settings";
+import { APP_SETTING_DEFS, TEXT_SETTING_DEFS, normalizeSettingValue, normalizeTextSetting } from "@/lib/settings";
 import type { AssistantRank, JobType, Role } from "@/lib/data/types";
 
 function jobTypeField(formData: FormData): JobType {
@@ -332,4 +332,21 @@ export async function saveAppSettingsAction(formData: FormData): Promise<void> {
   revalidatePath("/staff");
   revalidatePath("/admin");
   redirect(`/admin/settings?msg=${encodeURIComponent("設定を保存しました")}&t=ok`);
+}
+
+/**
+ * 文章の設定（幹部メニューの「大切にすること」など、複数行の文面）の保存。
+ * 空にして保存すると、初期の文面に戻る（lib/settings.ts の TEXT_SETTING_DEFS）。
+ */
+export async function saveTextSettingAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  const def = TEXT_SETTING_DEFS.find((d) => d.key === key);
+  if (!def) {
+    redirect(`/admin/settings?msg=${encodeURIComponent("保存できない項目です")}&t=error`);
+  }
+  await getDataStore().setAppSetting(key, normalizeTextSetting(key, String(formData.get("value") ?? "")));
+  revalidatePath("/admin/settings");
+  revalidatePath("/staff/exec");
+  redirect(`/admin/settings?msg=${encodeURIComponent(`「${def!.label}」を保存しました`)}&t=ok#${key}`);
 }

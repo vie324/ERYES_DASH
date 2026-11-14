@@ -366,6 +366,18 @@ html {
       hover:text-white hover:border-brand-600 hover:brightness-105;
   }
 
+  /* ---- セグメント（iPhoneの切り替えボタン。「ルーティン／タスク」などの二択・三択）---- */
+  .segmented {
+    @apply grid grid-flow-col auto-cols-fr gap-1 rounded-xl bg-ink-100/80 p-1;
+  }
+  .segmented-item {
+    @apply rounded-lg px-2 py-2.5 text-center text-ink-600 transition-all duration-200 min-h-11
+      hover:text-ink-900 active:scale-[0.98];
+  }
+  .segmented-item-active {
+    @apply bg-white text-ink-900 shadow-[0_1px_3px_rgba(41,38,33,0.14)];
+  }
+
   /* ---- 通知・お知らせ ---- */
   .note {
     @apply rounded-xl px-4 py-3 text-sm font-bold border;

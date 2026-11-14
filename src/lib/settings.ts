@@ -41,6 +41,71 @@ export const APP_SETTING_DEFS: AppSettingDef[] = [
   })),
 ];
 
+// ---- 文章の設定（複数行。管理者がマスタ設定で書き換える）----
+
+export interface TextSettingDef {
+  key: string;
+  label: string;
+  note: string;
+  /** 未入力（空）のときに出す文面 */
+  fallback: string;
+  maxLength: number;
+  rows: number;
+}
+
+/** 幹部メニューのいちばん上に出す「大切にすること」 */
+export const EXEC_VALUES_KEY = "exec_values";
+
+/**
+ * 「大切にすること」の初期の文面（ENiからいただいたまま。改行もこのとおり）。
+ * 6行目の「アンテナを貼り」も原文のまま。直す場合はマスタ設定から書き換える。
+ */
+export const DEFAULT_EXEC_VALUES = [
+  "細かいことでも情報提供し、さらに情報や高い視点の共有を自ら求めにいくこと。",
+  "大切にしている想いやさまざまな仕組みや行いの意味意義を視座高く共有し続ける。朝礼時間の発信者であれ。",
+  "接客サービス、カウンセリング提案、技術力とスピードと説明力の基準を常に高めていくこと。",
+  "営業後フィードバックの時間をとても大切に。",
+  "空いている時間も、常にフロアを見て、細かい動きや時間やクオリティのチェックをして伝えられるようにしておくこと。",
+  "スタッフの表情や言葉にアンテナを貼り、良い水質づくりの意識を持つ",
+].join("\n");
+
+export const TEXT_SETTING_DEFS: TextSettingDef[] = [
+  {
+    key: EXEC_VALUES_KEY,
+    label: "幹部メニューの「大切にすること」",
+    note: "幹部メニューを開くと、いちばん上に常に表示されます（見られるのは幹部と管理者だけ）。1行が1項目です。空にして保存すると初期の文面に戻ります",
+    fallback: DEFAULT_EXEC_VALUES,
+    maxLength: 2000,
+    rows: 8,
+  },
+];
+
+/** 文章の設定を読む（未入力なら初期の文面） */
+export function textSettingOf(rows: AppSetting[], key: string): string {
+  const def = TEXT_SETTING_DEFS.find((d) => d.key === key);
+  const value = rows.find((r) => r.key === key)?.value.trim() ?? "";
+  return value || def?.fallback || "";
+}
+
+/** 保存前の整え：改行をそろえ、行末の空白と空行を落とし、長さを丸める */
+export function normalizeTextSetting(key: string, raw: string): string {
+  const def = TEXT_SETTING_DEFS.find((d) => d.key === key);
+  const lines = raw
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== "");
+  return lines.join("\n").slice(0, def?.maxLength ?? 2000);
+}
+
+/** 「大切にすること」を1行ずつ（幹部メニューの最上部に並べる） */
+export async function getExecValues(db: DataStore): Promise<string[]> {
+  return textSettingOf(await db.listAppSettings(), EXEC_VALUES_KEY)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 /** 設定の一覧を「キー→値」に。未設定は既定値で埋める */
 export function settingsMap(rows: AppSetting[]): Record<string, string> {
   const map: Record<string, string> = {};

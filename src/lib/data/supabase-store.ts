@@ -10,6 +10,8 @@ import { DEFAULT_ORG_UNITS } from "@/lib/eni/org";
 import { committeesFromTemplates } from "@/lib/eni/committees";
 import { ALL_ROOM_KEY, ALL_ROOM_NAME } from "@/lib/chat";
 import { summarizeThreads } from "@/lib/ai-shimon/threads";
+import { normalizeTaskType } from "@/lib/tasks";
+import { normalizeAudience } from "@/lib/eni/routines";
 import type {
   AbsenceReport,
   AiShimonMessage,
@@ -73,6 +75,7 @@ import type {
   Store,
   TaskCompletion,
   TaskKind,
+  TaskType,
   ThanksComment,
   ThanksLike,
   ThanksPost,
@@ -337,6 +340,8 @@ const mapOrderRequest = (r: Row): OrderRequest => ({
 
 const mapStaffTask = (r: Row): StaffTask => ({
   id: r.id,
+  // 種類の列が無い（schema.sql を流し直す前の）DBでは、くり返しの有無で決める（移行と同じ決まり）
+  taskType: normalizeTaskType(r.task_type, r.repeat_rule),
   kind: r.kind,
   title: r.title,
   note: r.note ?? "",
@@ -421,6 +426,8 @@ const mapManagerRoutine = (r: Row): ManagerRoutine => ({
   note: r.note ?? "",
   sortOrder: r.sort_order ?? 0,
   isActive: r.is_active ?? true,
+  // 列が無いDBでは、これまでの業務（すべて店長・副店長の業務）として扱う
+  audience: normalizeAudience(r.audience),
 });
 
 const mapManagerRoutineCheck = (r: Row): ManagerRoutineCheck => ({
@@ -428,6 +435,9 @@ const mapManagerRoutineCheck = (r: Row): ManagerRoutineCheck => ({
   routineId: r.routine_id,
   periodKey: r.period_key,
   staffId: r.staff_id,
+  // 列が無い・移行前の記録は空（＝店舗の区別なし。幹部の業務はどの店舗の分としても数える）
+  subjectKey: r.subject_key ?? "",
+  storeId: r.store_id ?? null,
   checkedAt: new Date(r.checked_at),
 });
 
@@ -2237,21 +2247,26 @@ class SupabaseStore implements DataStore {
   async createStaffTask(
     input: Omit<StaffTask, "id" | "doneAt" | "createdAt" | "updatedAt">
   ): Promise<StaffTask> {
-    const { data, error } = await this.sb
+    const legacy: Row = {
+      kind: input.kind,
+      title: input.title,
+      note: input.note,
+      assignee_staff_id: input.assigneeStaffId,
+      created_by: input.createdBy,
+      due_date: input.dueDate || null,
+      repeat_rule: input.repeat,
+      repeat_days: input.repeatDays,
+      status: input.status,
+    };
+    let { data, error } = await this.sb
       .from("staff_tasks")
-      .insert({
-        kind: input.kind,
-        title: input.title,
-        note: input.note,
-        assignee_staff_id: input.assigneeStaffId,
-        created_by: input.createdBy,
-        due_date: input.dueDate || null,
-        repeat_rule: input.repeat,
-        repeat_days: input.repeatDays,
-        status: input.status,
-      })
+      .insert({ ...legacy, task_type: input.taskType })
       .select()
       .single();
+    if (isMissingColumn(error)) {
+      // schema.sql を流し直す前のDB：種類はくり返しの有無で決まるので、列なしでも同じ結果になる
+      ({ data, error } = await this.sb.from("staff_tasks").insert(legacy).select().single());
+    }
     return mapStaffTask(must(data, error, "タスク作成"));
   }
 
@@ -2262,6 +2277,7 @@ class SupabaseStore implements DataStore {
 
   async listStaffTasks(filter?: {
     kind?: TaskKind;
+    taskType?: TaskType;
     assigneeStaffId?: string;
     createdBy?: string;
     includeDone?: boolean;
@@ -2276,7 +2292,10 @@ class SupabaseStore implements DataStore {
     if (filter?.createdBy) query = query.eq("created_by", filter.createdBy);
     if (!filter?.includeDone) query = query.neq("status", "done");
     const { data, error } = await query;
-    return must(data, error, "タスク一覧").map(mapStaffTask);
+    // 種類はくり返しの有無からも決まる（列が無いDBでも同じ）ので、読んだあとに絞る
+    return must(data, error, "タスク一覧")
+      .map(mapStaffTask)
+      .filter((t: StaffTask) => !filter?.taskType || t.taskType === filter.taskType);
   }
 
   async updateStaffTask(
@@ -2791,9 +2810,15 @@ class SupabaseStore implements DataStore {
         note: input.note,
         sort_order: input.sortOrder,
         is_active: input.isActive,
+        audience: input.audience,
       })
       .select()
       .single();
+    if (isMissingColumn(error)) {
+      throw new Error(
+        "[supabase] ルーティン業務の追加: 対象（幹部／スタイリスト）の列がありません。supabase/schema.sql を実行してください"
+      );
+    }
     return mapManagerRoutine(must(data, error, "ルーティン業務の追加"));
   }
 
@@ -2807,6 +2832,7 @@ class SupabaseStore implements DataStore {
     if (patch.note !== undefined) row.note = patch.note;
     if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
+    if (patch.audience !== undefined) row.audience = patch.audience;
     if (Object.keys(row).length === 0) return;
     const { error } = await this.sb.from("manager_routines").update(row).eq("id", id);
     if (error) throw new Error(`[supabase] ルーティン業務の更新: ${error.message}`);
@@ -2817,24 +2843,40 @@ class SupabaseStore implements DataStore {
     if (error) throw new Error(`[supabase] ルーティン業務の削除: ${error.message}`);
   }
 
-  async setManagerRoutineChecked(
-    routineId: string,
-    periodKey: string,
-    staffId: string,
-    checked: boolean
-  ): Promise<void> {
-    if (checked) {
+  async setManagerRoutineChecked(input: {
+    routineId: string;
+    periodKey: string;
+    subjectKey: string;
+    storeId: string | null;
+    staffId: string;
+    checked: boolean;
+  }): Promise<void> {
+    if (input.checked) {
       const { error } = await this.sb.from("manager_routine_checks").upsert(
-        { routine_id: routineId, period_key: periodKey, staff_id: staffId, checked_at: new Date().toISOString() },
-        { onConflict: "routine_id,period_key" }
+        {
+          routine_id: input.routineId,
+          period_key: input.periodKey,
+          subject_key: input.subjectKey,
+          store_id: input.storeId,
+          staff_id: input.staffId,
+          checked_at: new Date().toISOString(),
+        },
+        { onConflict: "routine_id,period_key,subject_key" }
       );
-      if (error) throw new Error(`[supabase] ルーティンの記録: ${error.message}`);
+      if (error) {
+        throw new Error(
+          isMissingColumn(error) || /no unique|ON CONFLICT/i.test(error.message)
+            ? "[supabase] ルーティンの記録: 店舗ごとの記録の列がありません。supabase/schema.sql を実行してください"
+            : `[supabase] ルーティンの記録: ${error.message}`
+        );
+      }
     } else {
       const { error } = await this.sb
         .from("manager_routine_checks")
         .delete()
-        .eq("routine_id", routineId)
-        .eq("period_key", periodKey);
+        .eq("routine_id", input.routineId)
+        .eq("period_key", input.periodKey)
+        .eq("subject_key", input.subjectKey);
       if (error) throw new Error(`[supabase] ルーティンの記録取消: ${error.message}`);
     }
   }

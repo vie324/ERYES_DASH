@@ -1,21 +1,32 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { isExecutive } from "@/lib/eni/access";
+import { BRAND_INFO, getBrand } from "@/lib/brand";
 import { addDays, formatDateJa, formatDateTimeJa, formatMonthJa, formatWeekJa, todayJst } from "@/lib/date";
-import { hasExecNotice, isTaskActionable, isTaskDueOn } from "@/lib/tasks";
+import { hasExecNotice, isTaskActionable, isTaskDueOn, isTaskOverdue } from "@/lib/tasks";
+import { TASK_FORM_ERROR_MESSAGE } from "@/lib/task-form";
+import { getExecValues } from "@/lib/settings";
+import { brandStoreIds, shortStoreName } from "@/lib/shift/month";
 import {
+  ROUTINE_AUDIENCES,
+  ROUTINE_AUDIENCE_LABEL,
+  ROUTINE_AUDIENCE_NOTE,
+  ROUTINE_AUDIENCE_SHORT,
   ROUTINE_CYCLES,
   ROUTINE_CYCLE_LABEL,
   ROUTINE_CYCLE_SHORT,
   buildRoutineStatuses,
   countUndone,
   currentPeriodKeys,
+  defaultRoutineStoreId,
   type RoutineStatus,
 } from "@/lib/eni/routines";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { RepeatFields, TaskRow } from "@/components/task-ui";
+import { TaskRow } from "@/components/task-ui";
+import { TaskCreateForm } from "@/components/task-create-form";
 import { createExecTaskAction } from "@/app/staff/tasks/actions";
 import {
   createRoutineAction,
@@ -24,18 +35,19 @@ import {
   toggleRoutineAction,
   updateRoutineAction,
 } from "./actions";
-import type { EniReport, ManagerRoutine, RoutineCycle, StaffTask } from "@/lib/data/types";
+import type { EniReport, ManagerRoutine, RoutineCycle, Staff, StaffTask, Store } from "@/lib/data/types";
 
 const BACK = "/staff/exec";
 
-// 幹部メニュー：幹部のみが入れる。
-//  ・タスク：幹部タスクの作成・進捗・繰り返し・メンバー別の未完了の追跡（期限切れはアラート表示）
-//  ・気づき：スタイリスト日報の「現場での気づき」「スタッフへの指導・共有」を一覧で確認し、
-//    確認したらチェックで流す（全員分の共有事項を見逃さない）
+// 幹部メニュー：幹部と管理者だけが入れる（それ以外はURLを直接開いてもホームへ戻す）。
+//  ・いちばん上 …… 「大切にすること」（文面は管理者がマスタ設定で編集）
+//  ・幹部タスク …… 作成・進捗・繰り返し・メンバー別の未完了の追跡（期限切れはアラート表示）
+//  ・ルーティン …… 店長・副店長の業務を店舗ごとにチェック／スタイリストの毎日の業務の状況とマスタ
+//  ・日報の気づき … スタイリスト日報の「現場での気づき」「スタッフへの指導・共有」を確認して流す
 export default async function ExecPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ tab?: string; store?: string; saved?: string; error?: string }>;
 }) {
   const session = await requireSession();
   if (!(await isExecutive(session))) redirect("/staff");
@@ -45,8 +57,9 @@ export default async function ExecPage({
     params.tab === "notices" ? "notices" : params.tab === "routines" ? "routines" : "tasks";
   const db = getDataStore();
   const today = todayJst();
+  const brand = (await getBrand()) ?? "eni";
 
-  const [execTasks, staffList, noticeReportsAll, completionsToday, routines, routineChecks] =
+  const [execTasks, staffList, noticeReportsAll, completionsToday, routines, routineChecks, stores, execValues] =
     await Promise.all([
       db.listStaffTasks({ kind: "exec", includeDone: true }),
       db.listStaff(),
@@ -54,11 +67,23 @@ export default async function ExecPage({
       db.listTaskCompletions({ from: today, to: today }),
       db.listManagerRoutines(),
       db.listManagerRoutineChecks(currentPeriodKeys(today)),
+      db.listStores(),
+      getExecValues(db),
     ]);
-  // 店長・副店長のルーティン（今日／今週／今月の分）
-  const routineStatuses = buildRoutineStatuses(routines, routineChecks, today);
-  const routineUndone = countUndone(routineStatuses);
-  const dailyUndone = countUndone(routineStatuses, "daily");
+  const me = staffList.find((s) => s.id === session.staffId) ?? null;
+
+  // ルーティンは店舗ごと。いま選んでいる業態の店舗から選ぶ（最初は自分の店舗）
+  const brandIds = new Set(brandStoreIds(stores, BRAND_INFO[brand].label));
+  const routineStores = stores.filter((s) => brandIds.has(s.id));
+  const storeId =
+    params.store && routineStores.some((s) => s.id === params.store)
+      ? params.store
+      : defaultRoutineStoreId(me, routineStores);
+  const store = routineStores.find((s) => s.id === storeId) ?? null;
+  const execStatuses = buildRoutineStatuses(routines, routineChecks, today, { audience: "exec", subjectKey: storeId });
+  const routineUndone = countUndone(execStatuses);
+  const dailyUndone = countUndone(execStatuses, "daily");
+
   const staffNames = new Map(staffList.map((s) => [s.id, s.name]));
   const activeStaff = staffList.filter((s) => s.isActive);
   const doneTodayIds = new Set(completionsToday.map((c) => c.taskId));
@@ -74,7 +99,7 @@ export default async function ExecPage({
 
   const openTasks = execTasks.filter((t) => t.status !== "done");
   const doneTasks = execTasks.filter((t) => t.status === "done").slice(0, 10);
-  const overdue = openTasks.filter((t) => !t.repeat && t.dueDate && t.dueDate < today);
+  const overdue = openTasks.filter((t) => isTaskOverdue(t, today));
   const myOpen = openTasks.filter(
     (t) => t.assigneeStaffId === session.staffId && isTaskActionable(t, today, doneTodayIds)
   );
@@ -87,64 +112,80 @@ export default async function ExecPage({
     byAssignee.set(t.assigneeStaffId, list);
   }
 
+  const errorMessage = params.error
+    ? params.error === "confirm"
+      ? "削除するには確認のチェックを入れてください"
+      : (TASK_FORM_ERROR_MESSAGE[params.error] ?? TASK_FORM_ERROR_MESSAGE.input)
+    : "";
+
   return (
     <div className="page-narrow">
       <PageHeader
         title="幹部メニュー"
         backHref="/staff"
-        description="幹部タスク・店長/副店長のルーティン業務・日報の気づきの確認"
+        description="大切にすること・幹部タスク・ルーティン業務・日報の気づき"
         icon="crown"
       />
 
+      {/* 大切にすること（幹部メニューを開くと、いつもいちばん上に出る） */}
+      <ExecValuesCard lines={execValues} canEdit={session.role === "admin"} />
+
       {params.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
-          保存しました
+          {params.saved === "deleted" ? "削除しました" : "保存しました"}
         </p>
       )}
-      {params.error && (
-        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">
-          {params.error === "forbidden" ? "この操作の権限がありません" : "入力内容を確認してください"}
-        </p>
+      {errorMessage && (
+        <p className="rounded-xl bg-red-50 text-red-600 text-sm font-bold px-4 py-3 mb-4">{errorMessage}</p>
       )}
 
       {/* 今日のルーティンが残っているときは、どのタブにいても知らせる */}
       {dailyUndone > 0 && tab !== "routines" && (
         <a
-          href="/staff/exec?tab=routines"
+          href={`/staff/exec?tab=routines&store=${storeId}`}
           className="card !p-3.5 mb-4 flex items-center gap-2 border-red-300 bg-red-50"
         >
           <Icon name="alertTriangle" className="w-4 h-4 text-red-600 shrink-0" />
           <span className="flex-1 min-w-0 text-sm font-bold text-red-700">
-            今日のルーティン業務が {dailyUndone} 件のこっています
+            {store ? `${shortStoreName(store.name)}の` : ""}今日のルーティン業務が {dailyUndone} 件のこっています
           </span>
           <Icon name="chevronRight" className="w-4 h-4 text-red-400 shrink-0" />
         </a>
       )}
 
       {/* タブ */}
-      <div className="flex gap-1.5 mb-4">
-        <a
-          href="/staff/exec?tab=tasks"
-          className={`chip flex-1 justify-center !text-xs sm:!text-sm !py-2.5 ${tab === "tasks" ? "chip-active" : ""}`}
-        >
-          幹部タスク（{openTasks.length}）
-        </a>
-        <a
-          href="/staff/exec?tab=routines"
-          className={`chip flex-1 justify-center !text-xs sm:!text-sm !py-2.5 ${tab === "routines" ? "chip-active" : ""}`}
-        >
-          ルーティン（{routineUndone}）
-        </a>
-        <a
-          href="/staff/exec?tab=notices"
-          className={`chip flex-1 justify-center !text-xs sm:!text-sm !py-2.5 ${tab === "notices" ? "chip-active" : ""}`}
-        >
-          日報の気づき（{unchecked.length}）
-        </a>
+      <div className="segmented mb-4" role="tablist">
+        {(
+          [
+            ["tasks", "幹部タスク", openTasks.length],
+            ["routines", "ルーティン", routineUndone],
+            ["notices", "日報の気づき", unchecked.length],
+          ] as const
+        ).map(([key, label, count]) => (
+          <a
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            href={key === "routines" ? `/staff/exec?tab=routines&store=${storeId}` : `/staff/exec?tab=${key}`}
+            className={`segmented-item !py-2 ${tab === key ? "segmented-item-active" : ""}`}
+          >
+            <span className="block text-xs sm:text-sm font-bold">{label}</span>
+            <span className="block text-[11px] opacity-70">{count}件</span>
+          </a>
+        ))}
       </div>
 
       {tab === "routines" ? (
-        <RoutinesTab statuses={routineStatuses} today={today} staffNames={staffNames} />
+        <RoutinesTab
+          routines={routines}
+          execStatuses={execStatuses}
+          checks={routineChecks}
+          today={today}
+          staffList={staffList}
+          staffNames={staffNames}
+          stores={routineStores}
+          storeId={storeId}
+        />
       ) : tab === "tasks" ? (
         <>
           {/* アラート：期限切れ */}
@@ -183,7 +224,7 @@ export default async function ExecPage({
                     key={t.id}
                     task={t}
                     today={today}
-                    done={t.repeat ? doneTodayIds.has(t.id) : false}
+                    done={t.taskType === "routine" ? doneTodayIds.has(t.id) : false}
                     back={BACK}
                     staffNames={staffNames}
                     statusControl
@@ -206,11 +247,9 @@ export default async function ExecPage({
                 {[...byAssignee.entries()]
                   .sort((a, b) => b[1].length - a[1].length)
                   .map(([staffId, tasks]) => {
-                    const memberOverdue = tasks.filter(
-                      (t) => !t.repeat && t.dueDate && t.dueDate < today
-                    ).length;
+                    const memberOverdue = tasks.filter((t) => isTaskOverdue(t, today)).length;
                     const todayDue = tasks.filter(
-                      (t) => t.repeat && isTaskDueOn(t, today) && !doneTodayIds.has(t.id)
+                      (t) => t.taskType === "routine" && isTaskDueOn(t, today) && !doneTodayIds.has(t.id)
                     ).length;
                     return (
                       <div key={staffId}>
@@ -228,7 +267,7 @@ export default async function ExecPage({
                               key={t.id}
                               task={t}
                               today={today}
-                              done={t.repeat ? doneTodayIds.has(t.id) : false}
+                              done={t.taskType === "routine" ? doneTodayIds.has(t.id) : false}
                               back={BACK}
                               staffNames={staffNames}
                               statusControl
@@ -243,57 +282,22 @@ export default async function ExecPage({
             )}
           </section>
 
-          {/* 作成フォーム */}
+          {/* 作成フォーム（最初に「ルーティン」か「タスク」かを選ぶ） */}
           <section className="card mb-4">
             <h2 className="section-title flex items-center gap-1.5">
               <Icon name="plus" className="w-4 h-4 text-brand-600" />
               幹部タスクを追加
             </h2>
-            <form action={createExecTaskAction} className="space-y-3">
-              <input type="hidden" name="back" value={BACK} />
-              <div>
-                <label className="label" htmlFor="exec-title">
-                  何を
-                </label>
-                <input
-                  id="exec-title"
-                  name="title"
-                  className="input"
-                  placeholder="例）採用媒体の原稿を更新する"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="exec-assignee">
-                    誰が
-                  </label>
-                  <select id="exec-assignee" name="assignee" className="input" required defaultValue={session.staffId}>
-                    {activeStaff.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="exec-due">
-                    いつまでに（任意）
-                  </label>
-                  <input id="exec-due" name="due_date" type="date" className="input" />
-                </div>
-              </div>
-              <RepeatFields idPrefix="exec" />
-              <div>
-                <label className="label" htmlFor="exec-note">
-                  メモ（任意）
-                </label>
-                <input id="exec-note" name="note" className="input" placeholder="補足・決定事項など" />
-              </div>
-              <button type="submit" className="btn-primary w-full">
-                タスクを追加する
-              </button>
-            </form>
+            <TaskCreateForm
+              action={createExecTaskAction}
+              back={BACK}
+              idPrefix="exec"
+              meId={session.staffId}
+              assignees={activeStaff.map((s) => ({ id: s.id, name: s.name }))}
+              routineAssignable
+              initialType="task"
+              titlePlaceholder={{ routine: "例）月次の数字まとめを共有", task: "例）採用媒体の原稿を更新する" }}
+            />
           </section>
 
           {/* 完了済み（直近） */}
@@ -362,34 +366,101 @@ export default async function ExecPage({
   );
 }
 
+/** 「大切にすること」：幹部メニューのいちばん上に常に出す（1行＝1項目。文面はマスタ設定で編集） */
+function ExecValuesCard({ lines, canEdit }: { lines: string[]; canEdit: boolean }) {
+  if (lines.length === 0) return null;
+  return (
+    <section className="card mb-4 !p-0 overflow-hidden" aria-labelledby="exec-values-title">
+      <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5 border-b border-brand-100 bg-brand-50/60">
+        <Icon name="sparkles" className="w-4 h-4 text-brand-600 shrink-0" />
+        <h2 id="exec-values-title" className="flex-1 text-sm font-bold text-ink-800">
+          大切にすること
+        </h2>
+        {canEdit && (
+          <Link href="/admin/settings#exec_values" className="text-[11px] font-bold text-brand-700 underline">
+            編集する
+          </Link>
+        )}
+      </div>
+      <ol className="divide-y divide-brand-100">
+        {lines.map((line, i) => (
+          <li key={i} className="flex gap-3 px-4 py-2.5">
+            <span className="shrink-0 w-5 h-5 mt-0.5 rounded-full bg-brand-100 text-brand-700 text-[11px] font-bold flex items-center justify-center">
+              {i + 1}
+            </span>
+            <span className="text-sm leading-relaxed text-ink-800">{line}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** その周期の「今どの期間の分か」を日本語で出す */
+function periodLabel(cycle: RoutineCycle, periodKey: string): string {
+  return cycle === "daily"
+    ? formatDateJa(periodKey, true)
+    : cycle === "weekly"
+      ? formatWeekJa(periodKey)
+      : formatMonthJa(periodKey);
+}
+
 /**
- * 店長・副店長のルーティン業務。
- * デイリー／ウィークリー／マンスリーごとに「今の期間ぶん」をチェックしていく。
- * 未完了はアラートで知らせ、マスタ（項目そのもの）もこの画面から追加・編集できる。
+ * ルーティン業務。
+ *  ・幹部（店長・副店長）の業務 …… 店舗ごとに「今の期間ぶん」をチェックしていく（その店舗の誰かがやればよい）
+ *  ・スタイリストの毎日の業務 …… 一人ひとりがタスク画面でチェックする。ここでは店舗のスタイリストの状況を見る
+ * 項目（マスタ）は全店舗共通で、この画面から追加・編集・停止できる（管理者・幹部）。
  */
 function RoutinesTab({
-  statuses,
+  routines,
+  execStatuses,
+  checks,
   today,
+  staffList,
   staffNames,
+  stores,
+  storeId,
 }: {
-  statuses: RoutineStatus[];
+  routines: ManagerRoutine[];
+  execStatuses: RoutineStatus[];
+  checks: Parameters<typeof buildRoutineStatuses>[1];
   today: string;
+  staffList: Staff[];
   staffNames: Map<string, string>;
+  stores: Store[];
+  storeId: string;
 }) {
-  const byCycle = (cycle: RoutineCycle) => statuses.filter((s) => s.routine.cycle === cycle);
-  /** その周期の「今どの期間の分か」を日本語で出す */
-  const periodLabel = (cycle: RoutineCycle, periodKey: string) =>
-    cycle === "daily"
-      ? formatDateJa(periodKey, true)
-      : cycle === "weekly"
-        ? formatWeekJa(periodKey)
-        : formatMonthJa(periodKey);
+  const store = stores.find((s) => s.id === storeId) ?? null;
+  const byCycle = (cycle: RoutineCycle) => execStatuses.filter((s) => s.routine.cycle === cycle);
+  // この店舗のスタイリスト（毎日の業務の状況を一人ずつ出す）
+  const stylists = staffList.filter((s) => s.isActive && s.jobType === "stylist" && s.storeId === storeId);
+  const stylistRoutines = routines.filter((r) => r.isActive && r.audience === "stylist");
+  const stylistStatuses = stylists.map((s) => ({
+    staff: s,
+    statuses: buildRoutineStatuses(routines, checks, today, { audience: "stylist", subjectKey: s.id }),
+  }));
+  const stopped = routines.filter((r) => !r.isActive);
 
   return (
     <>
+      {/* 店舗の切り替え（店舗ごとにチェックする） */}
+      {stores.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto scroll-slim -mx-1 px-1 pb-1 mb-3">
+          {stores.map((s) => (
+            <a
+              key={s.id}
+              href={`/staff/exec?tab=routines&store=${s.id}`}
+              className={`chip shrink-0 ${s.id === storeId ? "chip-active" : ""}`}
+            >
+              {shortStoreName(s.name)}
+            </a>
+          ))}
+        </div>
+      )}
+
       <p className="text-xs text-ink-500 mb-3">
-        店長・副店長が毎回やる業務です。終わったらチェックしてください。
-        未完了はこの画面と幹部メニューの入口でお知らせします。
+        {store ? `${shortStoreName(store.name)}の` : ""}店長・副店長の業務です。終わったらチェックしてください
+        （店舗ごとに記録します。その店舗の幹部の誰かがやれば完了です）。
       </p>
 
       {ROUTINE_CYCLES.map((cycle) => {
@@ -410,15 +481,6 @@ function RoutinesTab({
             </div>
             <p className="text-[11px] text-ink-400 mb-3">対象：{periodLabel(cycle, periodKey)}</p>
 
-            {undone > 0 && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 mb-3 flex items-center gap-2">
-                <Icon name="alertTriangle" className="w-4 h-4 text-red-600 shrink-0" />
-                <span className="text-xs font-bold text-red-700">
-                  {ROUTINE_CYCLE_SHORT[cycle]}のチェックが {undone} 件のこっています
-                </span>
-              </div>
-            )}
-
             <div className="space-y-2">
               {rows.map(({ routine, periodKey: key, check, done }) => (
                 <div
@@ -431,6 +493,7 @@ function RoutinesTab({
                     <form action={toggleRoutineAction} className="shrink-0">
                       <input type="hidden" name="routine_id" value={routine.id} />
                       <input type="hidden" name="period_key" value={key} />
+                      <input type="hidden" name="store_id" value={storeId} />
                       <input type="hidden" name="done" value={done ? "0" : "1"} />
                       <button
                         type="submit"
@@ -456,22 +519,7 @@ function RoutinesTab({
                       )}
                     </div>
                   </div>
-
-                  {/* マスタの編集（内容・周期・並び順） */}
-                  <details className="mt-2 pt-2 border-t border-ink-100">
-                    <summary className="cursor-pointer text-[11px] font-bold text-ink-400">
-                      この業務の内容を編集する
-                    </summary>
-                    <RoutineFields routine={routine} />
-                    <form action={deleteRoutineAction} className="mt-2 pt-2 border-t border-red-100 space-y-2">
-                      <input type="hidden" name="routine_id" value={routine.id} />
-                      <label className="flex items-center gap-2 text-xs font-bold text-red-600">
-                        <input type="checkbox" name="confirm" className="h-4 w-4 accent-red-500" />
-                        この業務を削除する（これまでの記録も消えます）
-                      </label>
-                      <button type="submit" className="btn-danger w-full">削除</button>
-                    </form>
-                  </details>
+                  <RoutineEditor routine={routine} storeId={storeId} />
                 </div>
               ))}
             </div>
@@ -479,17 +527,111 @@ function RoutinesTab({
         );
       })}
 
-      {statuses.length === 0 && (
-        <EmptyState message="ルーティン業務がまだ登録されていません。下から追加してください" />
+      {execStatuses.length === 0 && (
+        <EmptyState message="店長・副店長の業務がまだ登録されていません。下から追加してください" />
+      )}
+
+      {/* スタイリストの毎日の業務（一人ひとりがタスク画面でチェックする） */}
+      <section className="card mb-4">
+        <h2 className="section-title">スタイリストの毎日の業務</h2>
+        <p className="text-xs text-ink-500 mb-3">
+          {ROUTINE_AUDIENCE_NOTE.stylist}。ここでは{store ? `${shortStoreName(store.name)}の` : ""}スタイリストの今日の状況を見られます。
+        </p>
+        {stylistRoutines.length === 0 ? (
+          <p className="text-sm text-ink-500">まだ登録されていません。下の「業務を追加」で「スタイリスト」を選んで追加できます。</p>
+        ) : (
+          <>
+            {stylistStatuses.length > 0 ? (
+              <ul className="divide-y divide-ink-100 rounded-xl border border-ink-100 mb-3">
+                {stylistStatuses.map(({ staff, statuses }) => {
+                  const done = statuses.filter((s) => s.done).length;
+                  return (
+                    <li key={staff.id} className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 text-sm font-bold text-ink-800">{staff.name}</span>
+                        <StatusBadge
+                          label={`${done}/${statuses.length}`}
+                          tone={done === statuses.length ? "ok" : "warning"}
+                        />
+                      </div>
+                      <p className="text-[11px] text-ink-500 mt-1">
+                        {statuses.map((s) => `${s.done ? "✓" : "・"}${s.routine.title}`).join("　")}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-ink-400 mb-3">この店舗にスタイリストが登録されていません。</p>
+            )}
+            <div className="space-y-2">
+              {stylistRoutines.map((routine) => (
+                <div key={routine.id} className="rounded-xl border border-ink-200 p-3">
+                  <p className="text-sm font-bold text-ink-900">
+                    {routine.title}
+                    <span className="ml-2 text-[11px] text-brand-700">{ROUTINE_CYCLE_SHORT[routine.cycle]}</span>
+                  </p>
+                  {routine.note && <p className="text-xs text-ink-500 mt-0.5">{routine.note}</p>}
+                  <RoutineEditor routine={routine} storeId={storeId} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* 止めている業務（運用中に戻すとき用） */}
+      {stopped.length > 0 && (
+        <details className="card mb-4 group">
+          <summary className="cursor-pointer list-none text-sm font-bold text-ink-500 flex items-center justify-between">
+            止めている業務（{stopped.length}件）
+            <span className="text-ink-300 transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="space-y-2 mt-3">
+            {stopped.map((routine) => (
+              <div key={routine.id} className="rounded-xl border border-ink-200 bg-ink-50/60 p-3">
+                <p className="text-sm font-bold text-ink-500">
+                  {routine.title}
+                  <span className="ml-2 text-[11px]">
+                    {ROUTINE_AUDIENCE_LABEL[routine.audience]}・{ROUTINE_CYCLE_SHORT[routine.cycle]}
+                  </span>
+                </p>
+                <RoutineEditor routine={routine} storeId={storeId} />
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* 追加 */}
       <section className="card">
         <h2 className="section-title flex items-center gap-1.5">
           <Icon name="plus" className="w-4 h-4 text-brand-600" />
-          ルーティン業務を追加
+          業務を追加
         </h2>
         <form action={createRoutineAction} className="space-y-3">
+          <input type="hidden" name="store_id" value={storeId} />
+          <div>
+            <p className="label !mb-2">だれの業務か</p>
+            <p className="hint !mt-0 mb-2">幹部＝店長・副店長（店舗ごとに1つチェック）／スタイリスト＝一人ひとりがチェック</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ROUTINE_AUDIENCES.map((a) => (
+                <label
+                  key={a}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold has-checked:border-brand-400 has-checked:bg-brand-50"
+                >
+                  <input
+                    type="radio"
+                    name="audience"
+                    value={a}
+                    defaultChecked={a === "exec"}
+                    className="h-4 w-4 accent-brand-500"
+                  />
+                  {ROUTINE_AUDIENCE_SHORT[a]}
+                </label>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="label" htmlFor="routine-title">やること</label>
             <input
@@ -532,52 +674,71 @@ function RoutinesTab({
           <button type="submit" className="btn-primary w-full">この業務を追加する</button>
         </form>
         <p className="text-[11px] text-ink-400 mt-2">
-          ※ 追加・編集した内容はこの「ルーティン」タブにそのまま出ます（{today.slice(0, 4)}年以降もずっと使えます）。
+          ※ 項目は全店舗に共通です。追加すると、すべての店舗（スタイリストの業務はスタイリスト全員）に出ます。
         </p>
       </section>
     </>
   );
 }
 
-/** ルーティン業務マスタの入力欄（編集用） */
-function RoutineFields({ routine }: { routine: ManagerRoutine }) {
+/** 業務マスタの編集（内容・対象・周期・並び順・運用中/停止・削除）。管理者・幹部が使う */
+function RoutineEditor({ routine, storeId }: { routine: ManagerRoutine; storeId: string }) {
   return (
-    <form action={updateRoutineAction} className="mt-2 space-y-2">
-      <input type="hidden" name="routine_id" value={routine.id} />
-      <div>
-        <label className="label !text-xs" htmlFor={`${routine.id}-title`}>やること</label>
-        <input
-          id={`${routine.id}-title`}
-          name="title"
-          defaultValue={routine.title}
-          className="input !min-h-10 !py-2 text-sm"
-          required
-        />
-      </div>
-      <div>
-        <label className="label !text-xs" htmlFor={`${routine.id}-note`}>メモ</label>
-        <input
-          id={`${routine.id}-note`}
-          name="note"
-          defaultValue={routine.note}
-          className="input !min-h-10 !py-2 text-sm"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
+    <details className="mt-2 pt-2 border-t border-ink-100">
+      <summary className="cursor-pointer text-[11px] font-bold text-ink-400">この業務の内容を編集する</summary>
+      <form action={updateRoutineAction} className="mt-2 space-y-2">
+        <input type="hidden" name="routine_id" value={routine.id} />
+        <input type="hidden" name="store_id" value={storeId} />
         <div>
-          <label className="label !text-xs" htmlFor={`${routine.id}-cycle`}>頻度</label>
-          <select
-            id={`${routine.id}-cycle`}
-            name="cycle"
-            defaultValue={routine.cycle}
+          <label className="label !text-xs" htmlFor={`${routine.id}-title`}>やること</label>
+          <input
+            id={`${routine.id}-title`}
+            name="title"
+            defaultValue={routine.title}
             className="input !min-h-10 !py-2 text-sm"
-          >
-            {ROUTINE_CYCLES.map((c) => (
-              <option key={c} value={c}>
-                {ROUTINE_CYCLE_LABEL[c]}
-              </option>
-            ))}
-          </select>
+            required
+          />
+        </div>
+        <div>
+          <label className="label !text-xs" htmlFor={`${routine.id}-note`}>メモ</label>
+          <input
+            id={`${routine.id}-note`}
+            name="note"
+            defaultValue={routine.note}
+            className="input !min-h-10 !py-2 text-sm"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="label !text-xs" htmlFor={`${routine.id}-audience`}>だれの業務か</label>
+            <select
+              id={`${routine.id}-audience`}
+              name="audience"
+              defaultValue={routine.audience}
+              className="input !min-h-10 !py-2 text-sm"
+            >
+              {ROUTINE_AUDIENCES.map((a) => (
+                <option key={a} value={a}>
+                  {ROUTINE_AUDIENCE_LABEL[a]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label !text-xs" htmlFor={`${routine.id}-cycle`}>頻度</label>
+            <select
+              id={`${routine.id}-cycle`}
+              name="cycle"
+              defaultValue={routine.cycle}
+              className="input !min-h-10 !py-2 text-sm"
+            >
+              {ROUTINE_CYCLES.map((c) => (
+                <option key={c} value={c}>
+                  {ROUTINE_CYCLE_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div>
           <label className="label !text-xs" htmlFor={`${routine.id}-sort`}>並び順</label>
@@ -591,18 +752,27 @@ function RoutineFields({ routine }: { routine: ManagerRoutine }) {
             className="input !min-h-10 !py-2 text-sm"
           />
         </div>
-      </div>
-      <label className="flex items-center gap-2 text-xs font-bold text-ink-600">
-        <input
-          type="checkbox"
-          name="is_active"
-          defaultChecked={routine.isActive}
-          className="h-4 w-4 accent-brand-500"
-        />
-        運用中（外すと一覧から隠れます）
-      </label>
-      <button type="submit" className="btn-secondary w-full !min-h-10 !py-2 text-sm">この内容で更新</button>
-    </form>
+        <label className="flex items-center gap-2 text-xs font-bold text-ink-600">
+          <input
+            type="checkbox"
+            name="is_active"
+            defaultChecked={routine.isActive}
+            className="h-4 w-4 accent-brand-500"
+          />
+          運用中（外すと止まり、一覧から隠れます。「止めている業務」から戻せます）
+        </label>
+        <button type="submit" className="btn-secondary w-full !min-h-10 !py-2 text-sm">この内容で更新</button>
+      </form>
+      <form action={deleteRoutineAction} className="mt-2 pt-2 border-t border-red-100 space-y-2">
+        <input type="hidden" name="routine_id" value={routine.id} />
+        <input type="hidden" name="store_id" value={storeId} />
+        <label className="flex items-center gap-2 text-xs font-bold text-red-600">
+          <input type="checkbox" name="confirm" className="h-4 w-4 accent-red-500" />
+          この業務を削除する（これまでの記録も消えます。止めるだけなら上の「運用中」を外してください）
+        </label>
+        <button type="submit" className="btn-danger w-full">削除</button>
+      </form>
+    </details>
   );
 }
 

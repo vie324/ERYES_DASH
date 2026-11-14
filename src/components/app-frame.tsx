@@ -9,9 +9,10 @@ import { buildMenuShortcuts, buildMobileTabs, buildNav, homeNavItem, type NavCon
 import { addDays, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { getDayoffNotice } from "@/lib/shift/requests";
 import { getChatOverview } from "@/lib/chat";
-import { getMyTaskSummary, hasExecNotice } from "@/lib/tasks";
+import { getMyTaskSummary, hasExecNotice, isTaskOverdue } from "@/lib/tasks";
 import { getAppLinks } from "@/lib/settings";
-import { buildRoutineStatuses, countUndone, currentPeriodKeys } from "@/lib/eni/routines";
+import { buildRoutineStatuses, countUndone, currentPeriodKeys, defaultRoutineStoreId } from "@/lib/eni/routines";
+import { brandStoreIds } from "@/lib/shift/month";
 import { AppShell } from "@/components/app-shell";
 import { PushSetup } from "@/components/push-setup";
 import { DemoBanner } from "@/components/ui";
@@ -110,15 +111,19 @@ export async function AppFrame({
     const checks = await db.listExecNoticeChecks(noticeReports.map((r) => r.id));
     const checkedIds = new Set(checks.map((c) => c.reportId));
     const uncheckedNotices = noticeReports.filter((r) => !checkedIds.has(r.id)).length;
-    const overdueExecTasks = (await db.listStaffTasks({ kind: "exec" })).filter(
-      (t) => !t.repeat && t.dueDate && t.dueDate < today
-    ).length;
-    // 店長・副店長のルーティンの未完了も幹部バッジに足す（毎日の抜けに気づけるように）
-    const [routines, routineChecks] = await Promise.all([
+    const overdueExecTasks = (await db.listStaffTasks({ kind: "exec" })).filter((t) => isTaskOverdue(t, today)).length;
+    // 店長・副店長のルーティンの未完了も幹部バッジに足す（毎日の抜けに気づけるように）。
+    // 記録は店舗ごとなので、幹部メニューで最初に開く店舗（自分の店舗）の分を数える
+    const [routines, routineChecks, stores] = await Promise.all([
       db.listManagerRoutines(),
       db.listManagerRoutineChecks(currentPeriodKeys(today)),
+      db.listStores(),
     ]);
-    const undoneRoutines = countUndone(buildRoutineStatuses(routines, routineChecks, today));
+    const brandIds = new Set(brandStoreIds(stores, BRAND_INFO[brand].label));
+    const routineStoreId = defaultRoutineStoreId(me, stores.filter((st) => brandIds.has(st.id)));
+    const undoneRoutines = countUndone(
+      buildRoutineStatuses(routines, routineChecks, today, { audience: "exec", subjectKey: routineStoreId })
+    );
     badges.exec = uncheckedNotices + overdueExecTasks + undoneRoutines;
   }
 
