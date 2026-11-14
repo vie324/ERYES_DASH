@@ -68,9 +68,23 @@ export default async function AdminAppointmentsPage({
         }
       />
 
+      {!settings.enabled && (
+        <Link
+          href="/admin/appointments/settings#switch"
+          className="note note-warn !p-4 mb-4 flex items-center gap-2 text-sm font-bold text-amber-900"
+        >
+          <span className="flex-1">
+            お客様へのLINEは、今はオフです。予約を登録しても、お客様にLINEのお知らせは届きません。
+          </span>
+          <span className="shrink-0 underline">設定を開く</span>
+        </Link>
+      )}
+
       {flash.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">
-          予約を登録しました（LINEとつながっているお客様には、予約完了のお知らせと、3日前・前日のお知らせが自動で届きます）
+          {settings.enabled
+            ? "予約を登録しました（LINEとつながっているお客様には、予約完了のお知らせと、3日前・前日のお知らせが自動で届きます）"
+            : "予約を登録しました（お客様へのLINEがオフのため、お知らせは送っていません）"}
         </p>
       )}
       {addedCustomerId && (
@@ -218,7 +232,9 @@ export default async function AdminAppointmentsPage({
                         {a.status === "cancelled" && (
                           <StatusBadge label="お客様がキャンセル" tone="danger" />
                         )}
-                        {!customer?.lineUserId ? (
+                        {!settings.enabled ? (
+                          <StatusBadge label="お客様へのLINE：オフ" tone="muted" />
+                        ) : !customer?.lineUserId ? (
                           <StatusBadge label="LINE未連携のためお知らせは送られません" tone="muted" />
                         ) : a.status === "cancelled" ? null : (
                           (["completion", "three_days", "day_before", "week_before"] as const)

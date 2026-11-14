@@ -23,7 +23,7 @@ import { getSalonBoardUrl } from "@/lib/settings";
 import { EniHome } from "@/components/home/eni-home";
 import { InboxBanner } from "@/components/inbox-banner";
 import { countUncommentedReports } from "@/lib/eyes/report-comments";
-import { linkCandidates } from "@/lib/line/appointment-notices";
+import { getLineNoticeSettings, linkCandidates } from "@/lib/line/appointment-notices";
 
 // 管理者ダッシュボード：ログイン後に選んだ業態（EREYS/ENi）に応じて内容を切り替える。
 // ENi は、スタッフと同じ作り直したホーム（管理者メニュー・ホームの設定への入口つき）。EREYS は今のまま。
@@ -109,9 +109,10 @@ async function EyesAdminDashboard({ staffId }: { staffId: string }) {
   const db = getDataStore();
   const today = todayJst();
   const me = await db.getStaff(staffId);
-  const [uncommented, allCustomers] = await Promise.all([
+  const [uncommented, allCustomers, lineSettings] = await Promise.all([
     me ? countUncommentedReports(db, me, today) : Promise.resolve(0),
     db.listCustomers(),
+    getLineNoticeSettings(db),
   ]);
   // 店舗で入れた予約のお客様が、同じ電話番号でLINEに登録した（店舗が確かめて「つなぐ」を押すまでお知らせが届かない）
   const linkCount = linkCandidates(allCustomers).length;
@@ -193,7 +194,7 @@ async function EyesAdminDashboard({ staffId }: { staffId: string }) {
         <StatCard label="今月の売上（全員）" value={formatYen(monthKpi.totalSales)}
           sub={`次回予約率 ${formatPercent(monthKpi.rebookRate)}`} />
         <StatCard label="明日のリマインド予定" value={`${tomorrowAppointments.length}件`}
-          sub="前日の確認（LINE）を自動送信" />
+          sub={lineSettings.enabled ? "前日の確認（LINE）を自動送信" : "お客様へのLINEはオフ（送りません）"} />
         <StatCard
           label="今月のLINE送信数"
           value={`${pushCount} / ${LINE_FREE_QUOTA}通`}

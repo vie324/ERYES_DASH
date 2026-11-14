@@ -15,6 +15,7 @@ import {
 } from "@/lib/eyes/report-comments";
 import {
   DEFAULT_LINE_NOTICE_SETTINGS,
+  LINE_NOTICE_SETTINGS_KEY,
   isReservationKeyword,
   jstHourFromSchedule,
   linkCandidates,
@@ -122,8 +123,10 @@ describe("イーリスの日報へのコメント：判定はロールと担当�
 // ---------------------------------------------------------------- 81 予約LINE
 
 describe("LINEのお知らせの設定：管理画面で変えられ、おかしな値は初期値", () => {
-  it("初期値：予約完了・3日前・前日は送る、1週間前は止めている", () => {
+  it("初期値：お客様へのLINEはオフ。オンにしたときは予約完了・3日前・前日を送り、1週間前は止めている", () => {
     const s = parseLineNoticeSettings(null);
+    expect(s.enabled).toBe(false);
+    expect(parseLineNoticeSettings(JSON.stringify({ enabled: true })).enabled).toBe(true);
     expect(s.completion.enabled).toBe(true);
     expect(s.three_days.enabled).toBe(true);
     expect(s.day_before.enabled).toBe(true);
@@ -183,8 +186,24 @@ describe("LINEとつなぐ候補：同じ電話番号でも自動ではつなが
   });
 });
 
+describe("お客様へのLINEがオフ（初期値）の間は、お知らせを送らない", () => {
+  const off = parseLineNoticeSettings(null);
+
+  it("予約完了のお知らせも、定時実行のお知らせも送らない", async () => {
+    const appointment = await db.createNextAppointment({
+      customerId: "cust-1",
+      scheduledAt: new Date(jstDayBoundsUtc(addDays(today, 1)).start.getTime() + 11 * 3600e3),
+      staffId: null,
+    });
+    expect(await sendCompletionNotice(db, appointment, off)).toBe("off");
+    expect(await runScheduledNotices(db, { today, slotHour: 21, settings: off })).toEqual([]);
+    expect(await db.listAppointmentNoticeLogs({ appointmentIds: [appointment.id] })).toHaveLength(0);
+    await db.deleteNextAppointment(appointment.id);
+  });
+});
+
 describe("予約のお知らせ：二重に送らない・対象日と時刻・LINE未連携には送らない", () => {
-  const settings = parseLineNoticeSettings(null);
+  const settings = parseLineNoticeSettings(JSON.stringify({ enabled: true }));
 
   it("同じお知らせは2回送らない（送信の札）", async () => {
     const appointment = await db.createNextAppointment({
@@ -246,7 +265,7 @@ describe("予約のお知らせ：二重に送らない・対象日と時刻・L
   });
 
   it("止めた種類は送らない", async () => {
-    const off = parseLineNoticeSettings(JSON.stringify({ three_days: { enabled: false } }));
+    const off = parseLineNoticeSettings(JSON.stringify({ enabled: true, three_days: { enabled: false } }));
     const summary = await runScheduledNotices(db, { today, slotHour: 21, settings: off });
     expect(summary.find((s) => s.kind === "three_days")).toBeUndefined();
   });
@@ -263,7 +282,19 @@ describe("LINEの「予約確認」：そのLINEのお客様の予約だけを�
     return getMockSendLogs().find((l) => l.to === replyToken)?.text ?? "";
   }
 
-  it("つながっているお客様には、自分の次の予約を返す", async () => {
+  it("お客様へのLINEがオフ（初期値）の間は、「予約確認」にも電話番号にも反応せず、これまでどおりの自動の返信", async () => {
+    const r1 = await send("mock-user-1", "予約確認");
+    expect(r1).toContain("自動メッセージ");
+    expect(r1).not.toContain("高橋 ゆい 様");
+    const r2 = await send("off-user", "山本 さくら");
+    expect(r2).not.toContain("お電話番号");
+    const r3 = await send("off-user", "080-1111-2222");
+    expect(r3).toContain("自動メッセージ");
+    expect((await db.getCustomerByLineUserId("off-user"))?.phone).toBe("");
+  });
+
+  it("つながっているお客様には、自分の次の予約を返す（オンにしたあと）", async () => {
+    await db.setAppSetting(LINE_NOTICE_SETTINGS_KEY, JSON.stringify({ enabled: true }));
     const reply = await send("mock-user-1", "予約確認");
     expect(reply).toContain("高橋 ゆい 様");
     expect(reply).toMatch(/・\d{4}年\d+月\d+日/);

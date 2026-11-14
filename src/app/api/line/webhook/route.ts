@@ -5,6 +5,9 @@
 // ・「予約確認」（合言葉は管理画面で変えられる。リッチメニューのボタンからも送れる）→ そのLINEのお客様の次の予約を返す。
 //   返すのは、このLINEアカウントにつながっているお客様の予約だけ（ほかの人の予約は見えない）
 // ・電話番号らしい言葉 → 登録済みのお客様の電話番号として保存（店舗が入れた予約とつなぐ候補を出すのに使う。自動ではつながない）
+// 「予約確認」と電話番号（お名前の登録のあとのお願いも）は、管理画面の「お客様へのLINE」がオンのときだけ動く（初期値はオフ）。
+// オフの間は、これまでどおり「お名前の登録」と「自動の返信」だけ。
+// ※まだ登録していない人から「予約確認」や電話番号が先に届いたときに、それを名前として登録しない（まずお名前をお願いする）のは、オン・オフに関係なく行う
 // 氏名はチャットで受け取って登録し、続けてメニューの「カルテ入力」でカルテを記入してもらう。
 //（「カルテ入力」から先に送信された場合も api/liff/counseling 側で顧客を自動作成する）
 // LINE未接続（モックモード）では署名検証をスキップし、curl等で動作確認できる（README参照）。
@@ -100,14 +103,14 @@ async function handleEvent(event: LineEvent, settings: LineNoticeSettings): Prom
     const phone = normalizePhone(text);
 
     if (existing) {
-      // 予約確認：このLINEアカウントにつながっているお客様の予約だけを返す
-      if (isKeyword) {
+      // 予約確認：このLINEアカウントにつながっているお客様の予約だけを返す（お客様へのLINEがオンのときだけ）
+      if (settings.enabled && isKeyword) {
         await replyText(event.replyToken, await reservationReply(db, existing.id, existing.fullName, settings));
         return;
       }
       // 電話番号：お客様の記録に入れる（店舗が先に入れた予約とは、店舗が確かめてからつなぐ）。
-      // ほかの人の記録があるかどうかは、返事で分からないようにする
-      if (phone) {
+      // ほかの人の記録があるかどうかは、返事で分からないようにする（お客様へのLINEがオンのときだけ）
+      if (settings.enabled && phone) {
         await db.updateCustomer(existing.id, { phone });
         await replyText(event.replyToken, settings.phoneSaved);
         return;
@@ -128,7 +131,11 @@ async function handleEvent(event: LineEvent, settings: LineNoticeSettings): Prom
       return;
     }
     const customer = await db.createCustomer({ lineUserId: userId, fullName: text.trim() });
-    await replyText(event.replyToken, `${MSG_REGISTERED(customer.fullName)}\n\n${settings.askPhone}`);
+    // 電話番号のお願いは、お客様へのLINEがオンのときだけ添える
+    await replyText(
+      event.replyToken,
+      settings.enabled ? `${MSG_REGISTERED(customer.fullName)}\n\n${settings.askPhone}` : MSG_REGISTERED(customer.fullName)
+    );
     return;
   }
 
