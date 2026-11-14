@@ -18,6 +18,7 @@ import type {
   AiShimonThread,
   AppSetting,
   PushSubscriptionRow,
+  PushPreference,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -29,6 +30,7 @@ import type {
   ChatMessage,
   ChatMessageInput,
   ChatReaction,
+  ChatAcknowledgement,
   ChatRoom,
   Committee,
   CounselingInvite,
@@ -578,6 +580,12 @@ function must<T>(data: T | null, error: { message: string } | null, context: str
   if (error) throw new Error(`[supabase] ${context}: ${error.message}`);
   if (data === null) throw new Error(`[supabase] ${context}: データが見つかりません`);
   return data;
+}
+
+/** テーブルが無い（schema.sql をまだ流し直していない）DBのエラーか */
+function isMissingTable(error: { code?: string; message: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "42P01" || error.code === "PGRST205" || /relation .* does not exist|Could not find the table/i.test(error.message);
 }
 
 /** 列が足りない（schema.sql をまだ流し直していない）DBのエラーか */
@@ -2687,6 +2695,33 @@ class SupabaseStore implements DataStore {
     return must(data, error, "リアクション一覧").map(mapChatReaction);
   }
 
+  async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
+    // 2回押しても1件（先に押した時刻を残す）
+    const { error } = await this.sb
+      .from("chat_acknowledgements")
+      .upsert({ message_id: messageId, staff_id: staffId }, { onConflict: "message_id,staff_id", ignoreDuplicates: true });
+    if (error) throw new Error(`[supabase] 確認しました: ${error.message}`);
+  }
+
+  async listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]> {
+    if (messageIds.length === 0) return [];
+    const rows: Row[] = [];
+    // 一度に渡すIDが多すぎないよう分けて読む（全体共有は投稿が多い）
+    for (let i = 0; i < messageIds.length; i += 200) {
+      const { data, error } = await this.sb
+        .from("chat_acknowledgements")
+        .select("*")
+        .in("message_id", messageIds.slice(i, i + 200));
+      if (isMissingTable(error)) return []; // schema.sql を流し直す前のDB（まだ誰も押せない）
+      rows.push(...must(data, error, "確認しました一覧"));
+    }
+    return rows.map((r) => ({
+      messageId: r.message_id,
+      staffId: r.staff_id,
+      acknowledgedAt: new Date(r.acknowledged_at),
+    }));
+  }
+
   // ---- AIしもん（相談の記録） ----
 
   async addAiShimonMessages(rows: Omit<AiShimonMessage, "id">[]): Promise<void> {
@@ -2940,6 +2975,25 @@ class SupabaseStore implements DataStore {
   async deletePushSubscription(endpoint: string): Promise<void> {
     const { error } = await this.sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
     if (error) throw new Error(`[supabase] Push購読削除: ${error.message}`);
+  }
+
+  async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {
+    if (staffIds.length === 0) return [];
+    const { data, error } = await this.sb.from("push_preferences").select("*").in("staff_id", staffIds);
+    if (isMissingTable(error)) return []; // schema.sql を流し直す前のDB（＝全員すべて受け取る）
+    return must(data, error, "通知の設定").map((r: Row) => ({
+      staffId: r.staff_id,
+      disabledKinds: Array.isArray(r.disabled_kinds) ? r.disabled_kinds.map(String) : [],
+      updatedAt: new Date(r.updated_at),
+    }));
+  }
+
+  async setPushPreference(staffId: string, disabledKinds: string[]): Promise<void> {
+    const { error } = await this.sb.from("push_preferences").upsert(
+      { staff_id: staffId, disabled_kinds: [...new Set(disabledKinds)], updated_at: new Date().toISOString() },
+      { onConflict: "staff_id" }
+    );
+    if (error) throw new Error(`[supabase] 通知の設定の保存: ${error.message}`);
   }
 
   async setAppSetting(key: string, value: string): Promise<void> {

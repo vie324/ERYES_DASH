@@ -122,7 +122,10 @@ function staffNav(ctx: NavContext): NavGroup[] {
   const b = ctx.badges ?? {};
   const support: NavGroup = {
     label: "サポート",
-    items: [{ href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" }],
+    items: [
+      { href: "/staff/notifications", label: "通知の設定", short: "通知", icon: "bell" },
+      { href: "/staff/help", label: "使い方ガイド", short: "使い方", icon: "help" },
+    ],
   };
 
   // 幹部だけに出す「幹部」グループ（幹部タスク・日報の気づきをまとめる）
@@ -171,7 +174,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
-          { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
+          { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         ],
       },
       execGroup,
@@ -235,7 +238,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
           badge: badge(b.minutes),
         },
         { href: "/staff/meetings/committees", label: "会議体の一覧", icon: "book" },
-        { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
+        { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         // 組織図は管理者・幹部のみ（それ以外には見せない）
         ...(ctx.isExecutive
           ? [
@@ -268,6 +271,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
   const support: NavGroup = {
     label: "サポート",
     items: [
+      { href: "/staff/notifications", label: "通知の設定", short: "通知", icon: "bell" },
       { href: "/admin/help", label: "使い方ガイド", short: "使い方", icon: "help" },
       { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
     ],
@@ -321,7 +325,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
           { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
-          { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
+          { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         ],
       },
       execGroup,
@@ -362,7 +366,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
           badge: badge(b.minutes),
         },
         { href: "/staff/meetings/committees", label: "会議体の一覧", icon: "book" },
-        { href: "/staff/events", label: "会社の予定・イベント", short: "予定", icon: "calendar" },
+        { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         { href: "/staff/org", label: "組織図", icon: "share" },
       ],
     },

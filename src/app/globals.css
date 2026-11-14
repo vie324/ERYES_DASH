@@ -378,6 +378,19 @@ html {
     @apply bg-white text-ink-900 shadow-[0_1px_3px_rgba(41,38,33,0.14)];
   }
 
+  /* ---- iPhoneのようなスイッチ（チェックボックスをそのまま見た目だけ変える。JSなしで動く）---- */
+  .toggle {
+    @apply relative h-[31px] w-[51px] cursor-pointer appearance-none rounded-full bg-ink-200 transition-colors duration-200
+      checked:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/70;
+  }
+  .toggle::after {
+    content: "";
+    @apply absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.2)] transition-transform duration-200;
+  }
+  .toggle:checked::after {
+    transform: translateX(20px);
+  }
+
   /* ---- 通知・お知らせ ---- */
   .note {
     @apply rounded-xl px-4 py-3 text-sm font-bold border;
@@ -419,6 +432,21 @@ html {
   .nav-group-label {
     @apply px-3 pb-1.5 pt-4 text-[10px] font-bold tracking-[0.18em] text-sidebar-muted/80 uppercase;
   }
+}
+
+/* ---- トーク：アナウンスから開いたときの「元の投稿」の目印（少しのあいだ色を付ける）---- */
+@keyframes chat-focus {
+  0%,
+  45% {
+    background-color: rgba(255, 214, 102, 0.6);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.chat-focus {
+  border-radius: 14px;
+  animation: chat-focus 2.6s ease-out;
 }
 
 /* ---- 全体共有のアナウンス（ダッシュボード最上部）---- */

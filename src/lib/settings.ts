@@ -106,6 +106,60 @@ export async function getExecValues(db: DataStore): Promise<string[]> {
     .filter(Boolean);
 }
 
+// ---- 選ぶ設定（管理者がマスタ設定で選択肢から選ぶ）----
+
+export interface ChoiceSettingDef {
+  key: string;
+  label: string;
+  note: string;
+  options: { value: string; label: string }[];
+  /** 未設定のときの値 */
+  fallback: string;
+}
+
+/** 全体共有ルームに投稿できる人（all＝全員／exec＝幹部と管理者／admin＝管理者だけ） */
+export const ALL_ROOM_POSTERS_KEY = "all_room_posters";
+/** 毎朝のリマインドの時刻（日本時間の時。vercel.json の定時実行がある時刻から選ぶ） */
+export const MORNING_REMINDER_HOUR_KEY = "morning_reminder_hour";
+/**
+ * 毎朝のリマインドを送れる時刻（日本時間）。vercel.json に、この時刻ごとの定時実行（1日1回）を登録している。
+ * 時刻を足すときは vercel.json にも同じ時刻（UTC＝日本時間−9時間）を足すこと。
+ */
+export const MORNING_REMINDER_HOURS = [6, 7, 8, 9, 10, 11, 12];
+
+export const CHOICE_SETTING_DEFS: ChoiceSettingDef[] = [
+  {
+    key: ALL_ROOM_POSTERS_KEY,
+    label: "全体共有ルームに投稿できる人",
+    note: "全スタッフが自動で参加するルームです。投稿できない人も、読む・「確認しました」を押すことはできます",
+    options: [
+      { value: "all", label: "全員" },
+      { value: "exec", label: "幹部と管理者だけ" },
+      { value: "admin", label: "管理者だけ" },
+    ],
+    fallback: "all",
+  },
+  {
+    key: MORNING_REMINDER_HOUR_KEY,
+    label: "毎朝のリマインドの時刻",
+    note: "その日の未完了のタスク・ルーティンや未読のトークがある人に通知します（本人が通知の設定で止めていれば送りません）。Vercelの無料プランでは、選んだ時刻の00〜59分のどこかで届きます",
+    options: MORNING_REMINDER_HOURS.map((h) => ({ value: String(h), label: `${h}:00` })),
+    fallback: "9",
+  },
+];
+
+/** 選ぶ設定を読む（未設定・選択肢にない値は既定値） */
+export function choiceSettingOf(rows: AppSetting[], key: string): string {
+  const def = CHOICE_SETTING_DEFS.find((d) => d.key === key);
+  const value = rows.find((r) => r.key === key)?.value.trim() ?? "";
+  if (!def) return value;
+  return def.options.some((o) => o.value === value) ? value : def.fallback;
+}
+
+export async function getChoiceSetting(db: DataStore, key: string): Promise<string> {
+  return choiceSettingOf(await db.listAppSettings(), key);
+}
+
 /** 設定の一覧を「キー→値」に。未設定は既定値で埋める */
 export function settingsMap(rows: AppSetting[]): Record<string, string> {
   const map: Record<string, string> = {};

@@ -8,11 +8,19 @@ import {
   deleteStaffAction,
   deleteStoreAction,
   saveAppSettingsAction,
+  saveChoiceSettingAction,
   saveTextSettingAction,
   updateStaffAction,
   updateStoreAction,
 } from "../actions";
-import { APP_SETTING_DEFS, TEXT_SETTING_DEFS, settingsMap, textSettingOf } from "@/lib/settings";
+import {
+  APP_SETTING_DEFS,
+  CHOICE_SETTING_DEFS,
+  TEXT_SETTING_DEFS,
+  choiceSettingOf,
+  settingsMap,
+  textSettingOf,
+} from "@/lib/settings";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { isPromptAvailable, knowledgeStatus, nicknameStatus, promptSource } from "@/lib/ai-shimon/prompt";
 import { findOwner } from "@/lib/ai-shimon/access";
@@ -497,6 +505,37 @@ export default async function AdminSettingsPage({
             サロンボード・カミキュラムは空欄で保存すると既定のログインページに戻ります。
           </p>
         </form>
+      </section>
+
+      {/* 選ぶ設定（全体共有に投稿できる人・毎朝のリマインドの時刻）。1項目＝1フォーム */}
+      <section className="card mt-5">
+        <h2 className="font-display text-lg font-bold text-ink-900 mb-3">全体共有・通知</h2>
+        <div className="space-y-5">
+          {CHOICE_SETTING_DEFS.map((def) => (
+            <form key={def.key} id={def.key} action={saveChoiceSettingAction} className="space-y-2 scroll-mt-20">
+              <input type="hidden" name="key" value={def.key} />
+              <label className="label" htmlFor={`${def.key}-value`}>
+                {def.label}
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id={`${def.key}-value`}
+                  name="value"
+                  defaultValue={choiceSettingOf(appSettings, def.key)}
+                  className="input flex-1"
+                >
+                  {def.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-secondary shrink-0 !px-4">保存</button>
+              </div>
+              <p className="hint">{def.note}</p>
+            </form>
+          ))}
+        </div>
       </section>
 
       {/* 文章の設定（幹部メニューの「大切にすること」など）。1項目＝1フォーム */}

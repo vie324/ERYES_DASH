@@ -10,7 +10,14 @@ import { hashPassword } from "@/lib/auth/password";
 import { formatDateTimeJa, jstLocalToUtc } from "@/lib/date";
 import { multicastText, pushText } from "@/lib/line/client";
 import { normalizeTiers } from "@/lib/eni/forms";
-import { APP_SETTING_DEFS, TEXT_SETTING_DEFS, normalizeSettingValue, normalizeTextSetting } from "@/lib/settings";
+import { syncAllRoomMembers } from "@/lib/chat";
+import {
+  APP_SETTING_DEFS,
+  CHOICE_SETTING_DEFS,
+  TEXT_SETTING_DEFS,
+  normalizeSettingValue,
+  normalizeTextSetting,
+} from "@/lib/settings";
 import type { AssistantRank, JobType, Role } from "@/lib/data/types";
 
 function jobTypeField(formData: FormData): JobType {
@@ -249,6 +256,8 @@ export async function createStaffAction(formData: FormData): Promise<void> {
   } catch {
     redirect("/admin/settings?error=staff_duplicate");
   }
+  // 新しく入ったスタッフも、全体共有ルームに自動で入る（失敗してもスタッフの追加は止めない）
+  await syncAllRoomMembers(db).catch((e) => console.error("[chat] 全体共有への参加に失敗:", e));
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=staff");
 }
@@ -281,6 +290,10 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
     isActive: lockSelf ? true : isActive,
     ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),
   });
+  // 有効に戻した人も全体共有ルームに入れる（すでに入っている人には何もしない）
+  if (isActive) {
+    await syncAllRoomMembers(getDataStore()).catch((e) => console.error("[chat] 全体共有への参加に失敗:", e));
+  }
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=staff");
 }
@@ -359,5 +372,20 @@ export async function saveTextSettingAction(formData: FormData): Promise<void> {
   await getDataStore().setAppSetting(key, normalizeTextSetting(key, String(formData.get("value") ?? "")));
   revalidatePath("/admin/settings");
   revalidatePath("/staff/exec");
+  redirect(`/admin/settings?msg=${encodeURIComponent(`「${def!.label}」を保存しました`)}&t=ok#${key}`);
+}
+
+/** 選ぶ設定（全体共有に投稿できる人・毎朝のリマインドの時刻など）の保存。選択肢にない値は受け付けない */
+export async function saveChoiceSettingAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  const value = String(formData.get("value") ?? "");
+  const def = CHOICE_SETTING_DEFS.find((d) => d.key === key);
+  if (!def || !def.options.some((o) => o.value === value)) {
+    redirect(`/admin/settings?msg=${encodeURIComponent("選択肢から選んでください")}&t=error`);
+  }
+  await getDataStore().setAppSetting(key, value);
+  revalidatePath("/admin/settings");
+  revalidatePath("/staff/chat", "layout");
   redirect(`/admin/settings?msg=${encodeURIComponent(`「${def!.label}」を保存しました`)}&t=ok#${key}`);
 }

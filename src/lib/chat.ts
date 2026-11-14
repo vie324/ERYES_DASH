@@ -3,6 +3,7 @@
 // トーク一覧とホームのバッジで共通化する。
 
 import type {
+  ChatAcknowledgement,
   ChatMember,
   ChatMessage,
   ChatRoom,
@@ -13,6 +14,61 @@ import type {
 /** 全体共有ルームの識別キー（全員が強制参加。アナウンスの発信元） */
 export const ALL_ROOM_KEY = "all";
 export const ALL_ROOM_NAME = "全体共有";
+
+/** 全体共有に投稿できる人の設定値（マスタ設定。lib/settings.ts の ALL_ROOM_POSTERS_KEY） */
+export type AllRoomPosters = "all" | "exec" | "admin";
+
+export const ALL_ROOM_POSTERS_LABEL: Record<AllRoomPosters, string> = {
+  all: "全員",
+  exec: "幹部と管理者",
+  admin: "管理者",
+};
+
+/** 全体共有に投稿できるか（設定：全員／幹部と管理者だけ／管理者だけ）。画面とサーバーアクションで同じ判定を使う */
+export function canPostToAllRoom(posters: string, viewer: { isAdmin: boolean; isExec: boolean }): boolean {
+  if (posters === "admin") return viewer.isAdmin;
+  if (posters === "exec") return viewer.isAdmin || viewer.isExec;
+  return true;
+}
+
+/**
+ * 在籍スタッフ全員を全体共有ルームに入れる（新しく入った人・有効に戻した人も自動で入る）。
+ * スタッフの追加・更新のあとと、トーク一覧を開いたときに呼ぶ。全体共有から抜ける操作は用意していない。
+ */
+export async function syncAllRoomMembers(db: DataStore): Promise<void> {
+  const staff = await db.listStaff();
+  const active = staff.filter((s) => s.isActive).map((s) => s.id);
+  if (active.length > 0) await db.ensureAllRoom(active);
+}
+
+export interface AcknowledgementStatus {
+  /** 押した人（押した順） */
+  done: { staff: Staff; at: Date }[];
+  /** まだの人 */
+  pending: Staff[];
+}
+
+/**
+ * 全体共有の1投稿の「確認しました」の状況。対象は在籍しているメンバーのうち送った本人以外。
+ * 一覧（名前）を見られるのは幹部と管理者だけ（呼び出し側で判定する）。
+ */
+export function acknowledgementStatus(
+  message: Pick<ChatMessage, "id" | "senderId">,
+  members: Staff[],
+  acknowledgements: ChatAcknowledgement[]
+): AcknowledgementStatus {
+  const targets = members.filter((s) => s.isActive && s.id !== message.senderId);
+  const acked = new Map(
+    acknowledgements.filter((a) => a.messageId === message.id).map((a) => [a.staffId, a.acknowledgedAt] as const)
+  );
+  return {
+    done: targets
+      .filter((s) => acked.has(s.id))
+      .map((s) => ({ staff: s, at: acked.get(s.id)! }))
+      .sort((a, b) => a.at.getTime() - b.at.getTime()),
+    pending: targets.filter((s) => !acked.has(s.id)),
+  };
+}
 
 export interface ChatRoomOverview {
   room: ChatRoom;

@@ -114,6 +114,7 @@ export async function saveMeetingMinutesAction(formData: FormData): Promise<void
         body: pushPreview(titles.join("／")),
         url: "/staff/tasks",
         tag: "meeting-task",
+        kind: "task",
       })
     )
   );

@@ -58,6 +58,7 @@ export async function createAbsenceReportAction(formData: FormData): Promise<voi
       body: `${formatDateJa(date)}（${pushPreview(reason, 50)}）`,
       url: "/staff/absence",
       tag: "absence",
+      kind: "absence",
     }
   );
   revalidatePath("/staff/absence");
@@ -98,6 +99,7 @@ export async function cancelAbsenceReportAction(formData: FormData): Promise<voi
       body: `${formatDateJa(report.absenceDate)}の報告は取り消されました`,
       url: "/staff/absence",
       tag: "absence",
+      kind: "absence",
     }
   );
   revalidatePath("/staff/absence");

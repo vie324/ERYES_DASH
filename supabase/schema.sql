@@ -471,6 +471,15 @@ create table if not exists chat_reactions (
   primary key (message_id, staff_id, emoji)
 );
 
+-- 2026-11 依頼2：全体共有の投稿への「確認しました」（1投稿×1人で1件。取り消しはしない）
+-- 押した人・まだの人の一覧は幹部と管理者が見る（画面とサーバーアクションで制限）
+create table if not exists chat_acknowledgements (
+  message_id uuid not null references chat_messages(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  acknowledged_at timestamptz not null default now(),
+  primary key (message_id, staff_id)
+);
+
 -- ============================================================
 -- 社内SNS（サンクスカード）
 -- ============================================================
@@ -619,6 +628,14 @@ create table if not exists push_subscriptions (
   auth text not null default '',
   user_agent text not null default '',
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 2026-11 依頼2：通知の受け取り設定（1人1行。止めている通知の種類だけを持つ。行が無い人はすべて受け取る）
+-- 種類のキーは src/lib/push/kinds.ts（chat / mention / announce / morning / task / thanks / shift / absence）
+create table if not exists push_preferences (
+  staff_id uuid primary key references staff(id) on delete cascade,
+  disabled_kinds jsonb not null default '[]',
   updated_at timestamptz not null default now()
 );
 
@@ -789,6 +806,7 @@ create index if not exists idx_manager_routine_checks_period on manager_routine_
 create unique index if not exists idx_manager_routine_checks_subject on manager_routine_checks (routine_id, period_key, subject_key);
 create index if not exists idx_manager_routine_checks_store on manager_routine_checks (store_id, period_key);
 create index if not exists idx_staff_tasks_type on staff_tasks (task_type, status);
+create index if not exists idx_chat_acknowledgements_staff on chat_acknowledgements (staff_id);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
@@ -844,6 +862,8 @@ alter table manager_routines enable row level security;
 alter table manager_routine_checks enable row level security;
 alter table app_settings enable row level security;
 alter table push_subscriptions enable row level security;
+alter table chat_acknowledgements enable row level security;
+alter table push_preferences enable row level security;
 alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----

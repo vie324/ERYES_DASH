@@ -558,6 +558,16 @@ export interface ChatReaction {
   emoji: string;
 }
 
+/**
+ * 全体共有の投稿への「確認しました」（1投稿×1人で1件）。
+ * 押した人・まだの人の一覧は幹部と管理者が見られる。本人には自分が押したかどうかが分かる。
+ */
+export interface ChatAcknowledgement {
+  messageId: string;
+  staffId: string;
+  acknowledgedAt: Date;
+}
+
 // ============================================================
 // 会議体マスタ（管理者が画面から編集できる）
 // ============================================================
@@ -640,6 +650,16 @@ export interface PushSubscriptionRow {
 export interface AppSetting {
   key: string;
   value: string;
+}
+
+/**
+ * 通知の受け取り設定（1人1行）。止めている通知の種類だけを持つ（初期値＝すべて受け取る）。
+ * 種類の定義は lib/push/kinds.ts。端末ごとではなく本人ごとの設定。
+ */
+export interface PushPreference {
+  staffId: string;
+  disabledKinds: string[];
+  updatedAt: Date;
 }
 
 // ============================================================
@@ -1138,6 +1158,9 @@ export interface DataStore {
   markChatRead(roomId: string, staffId: string): Promise<void>;
   toggleChatReaction(messageId: string, staffId: string, emoji: string): Promise<void>;
   listChatReactions(messageIds: string[]): Promise<ChatReaction[]>;
+  /** 「確認しました」を付ける（同じ人が何度押しても1件。取り消しはしない） */
+  acknowledgeChatMessage(messageId: string, staffId: string): Promise<void>;
+  listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]>;
 
   // ---- AIしもん（相談の記録。アプリで読めるのは代表だけ） ----
   /** 相談と返答を記録する */
@@ -1189,6 +1212,10 @@ export interface DataStore {
     userAgent: string;
   }): Promise<void>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  /** 通知の受け取り設定（行が無い人は返さない＝すべて受け取る） */
+  listPushPreferences(staffIds: string[]): Promise<PushPreference[]>;
+  /** 止める通知の種類を丸ごと入れ替える */
+  setPushPreference(staffId: string, disabledKinds: string[]): Promise<void>;
 
   // ---- 社内SNS（サンクスカード） ----
   createThanksPost(input: Omit<ThanksPost, "id" | "createdAt">): Promise<ThanksPost>;

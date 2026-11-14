@@ -18,6 +18,7 @@ import type {
   AiShimonThread,
   AppSetting,
   PushSubscriptionRow,
+  PushPreference,
   AppointmentPatch,
   AssignmentStatus,
   Attendance,
@@ -29,6 +30,7 @@ import type {
   ChatMessage,
   ChatMessageInput,
   ChatReaction,
+  ChatAcknowledgement,
   ChatRoom,
   Committee,
   CounselingInvite,
@@ -121,12 +123,14 @@ interface MockDb {
   chatMembers: ChatMember[];
   chatMessages: ChatMessage[];
   chatReactions: ChatReaction[];
+  chatAcknowledgements: ChatAcknowledgement[];
   aiShimonMessages: AiShimonMessage[];
   committees: Committee[];
   managerRoutines: ManagerRoutine[];
   managerRoutineChecks: ManagerRoutineCheck[];
   appSettings: AppSetting[];
   pushSubscriptions: PushSubscriptionRow[];
+  pushPreferences: PushPreference[];
   thanksPosts: ThanksPost[];
   thanksLikes: ThanksLike[];
   thanksComments: ThanksComment[];
@@ -1169,12 +1173,14 @@ function seed(): MockDb {
     chatMembers,
     chatMessages,
     chatReactions: [],
+    chatAcknowledgements: [],
     aiShimonMessages,
     committees: committeesFromTemplates().map((c) => ({ id: randomUUID(), ...c })),
     managerRoutines,
     managerRoutineChecks,
     appSettings: [],
     pushSubscriptions: [],
+    pushPreferences: [],
     thanksPosts,
     thanksLikes,
     thanksComments,
@@ -1362,6 +1368,7 @@ class MockStore implements DataStore {
       d.chatMembers = d.chatMembers.filter((m) => m.staffId !== id);
       d.aiShimonMessages = d.aiShimonMessages.filter((m) => m.staffId !== id);
       d.chatReactions = d.chatReactions.filter((r) => r.staffId !== id);
+      d.chatAcknowledgements = d.chatAcknowledgements.filter((a) => a.staffId !== id);
       d.thanksPosts = d.thanksPosts.filter((t) => t.fromStaffId !== id && t.toStaffId !== id);
       d.thanksLikes = d.thanksLikes.filter((l) => l.staffId !== id);
       d.thanksComments = d.thanksComments.filter((c) => c.staffId !== id);
@@ -1369,6 +1376,7 @@ class MockStore implements DataStore {
       d.idealSchedules = d.idealSchedules.filter((i) => i.staffId !== id);
       d.managerRoutineChecks = d.managerRoutineChecks.filter((c) => c.staffId !== id);
       d.pushSubscriptions = d.pushSubscriptions.filter((ps) => ps.staffId !== id);
+      d.pushPreferences = d.pushPreferences.filter((pp) => pp.staffId !== id);
       d.staff = d.staff.filter((st) => st.id !== id);
       return;
     }
@@ -2807,6 +2815,16 @@ class MockStore implements DataStore {
       .map((r) => ({ ...r }));
   }
 
+  async acknowledgeChatMessage(messageId: string, staffId: string): Promise<void> {
+    const exists = this.db.chatAcknowledgements.some((a) => a.messageId === messageId && a.staffId === staffId);
+    if (!exists) this.db.chatAcknowledgements.push({ messageId, staffId, acknowledgedAt: new Date() });
+  }
+
+  async listChatAcknowledgements(messageIds: string[]): Promise<ChatAcknowledgement[]> {
+    const ids = new Set(messageIds);
+    return this.db.chatAcknowledgements.filter((a) => ids.has(a.messageId)).map((a) => ({ ...a }));
+  }
+
   // ---- AIしもん（相談の記録） ----
 
   async addAiShimonMessages(rows: Omit<AiShimonMessage, "id">[]): Promise<void> {
@@ -2941,6 +2959,24 @@ class MockStore implements DataStore {
 
   async deletePushSubscription(endpoint: string): Promise<void> {
     this.db.pushSubscriptions = this.db.pushSubscriptions.filter((p) => p.endpoint !== endpoint);
+  }
+
+  async listPushPreferences(staffIds: string[]): Promise<PushPreference[]> {
+    const ids = new Set(staffIds);
+    return this.db.pushPreferences
+      .filter((p) => ids.has(p.staffId))
+      .map((p) => ({ ...p, disabledKinds: [...p.disabledKinds] }));
+  }
+
+  async setPushPreference(staffId: string, disabledKinds: string[]): Promise<void> {
+    const found = this.db.pushPreferences.find((p) => p.staffId === staffId);
+    const kinds = [...new Set(disabledKinds)];
+    if (found) {
+      found.disabledKinds = kinds;
+      found.updatedAt = new Date();
+    } else {
+      this.db.pushPreferences.push({ staffId, disabledKinds: kinds, updatedAt: new Date() });
+    }
   }
 
   async setAppSetting(key: string, value: string): Promise<void> {

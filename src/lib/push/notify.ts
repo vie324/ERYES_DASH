@@ -5,6 +5,7 @@
 
 import webpush from "web-push";
 import { env, isPushConfigured } from "@/lib/env";
+import { filterByPreference, type PushKind } from "@/lib/push/kinds";
 import type { DataStore } from "@/lib/data/types";
 
 export interface PushPayload {
@@ -14,8 +15,13 @@ export interface PushPayload {
   url: string;
   /** 同じ tag の通知は置き換える（トークルームごと等。連投で溢れないように） */
   tag?: string;
-  /** アプリアイコンに出す件数（省略時は「点」だけ付く） */
+  /** アプリアイコンに出す件数（省略時は端末側でサーバーに聞き直す。public/sw.js） */
   badge?: number;
+  /**
+   * 通知の種類（lib/push/kinds.ts）。本人が「通知の設定」で止めている種類なら送らない。
+   * 省略すると設定に関係なく送る（テスト通知など）。
+   */
+  kind?: PushKind;
 }
 
 let configured = false;
@@ -39,8 +45,18 @@ export async function sendPush(
   staffIds: string[],
   payload: PushPayload
 ): Promise<{ sent: number; failed: number }> {
-  const targets = [...new Set(staffIds)].filter(Boolean);
+  let targets = [...new Set(staffIds)].filter(Boolean);
   if (targets.length === 0 || !ensureVapid()) return { sent: 0, failed: 0 };
+
+  // 本人が止めている種類の通知は送らない（設定が読めないときは送る＝届かない事故を防ぐ）
+  if (payload.kind) {
+    try {
+      targets = filterByPreference(targets, await db.listPushPreferences(targets), payload.kind);
+    } catch (e) {
+      console.error(`[push] 通知の設定の取得に失敗: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (targets.length === 0) return { sent: 0, failed: 0 };
+  }
 
   let subs;
   try {
