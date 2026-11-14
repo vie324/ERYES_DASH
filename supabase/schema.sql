@@ -639,6 +639,20 @@ create table if not exists push_preferences (
   updated_at timestamptz not null default now()
 );
 
+-- 2026-11 依頼3：閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録にも使い回せる共通の形。
+-- target_type: 'weekly_report'（週報）など ／ target_id: 見たもののID（週報＝eni_reports.id）
+-- owner_staff_id: 見たものの持ち主（週報を書いた人）／ period_key: 集計用（週報＝その週の月曜）
+-- 自分の週報を見た分は記録しない。集計を見られるのは幹部・管理者だけ（画面・サーバーアクションで制限）
+create table if not exists view_logs (
+  id uuid primary key default gen_random_uuid(),
+  target_type text not null,
+  target_id text not null,
+  owner_staff_id uuid references staff(id) on delete cascade,
+  period_key text not null default '',
+  viewer_staff_id uuid not null references staff(id) on delete cascade,
+  viewed_at timestamptz not null default now()
+);
+
 -- AIしもんへの相談の記録（相談した人の発言とAIしもんの返答を1件ずつ）。
 -- アプリで読めるのは代表（staff.is_owner）だけ。スタッフを削除すると本人の相談も消える。
 create table if not exists ai_shimon_messages (
@@ -807,6 +821,9 @@ create unique index if not exists idx_manager_routine_checks_subject on manager_
 create index if not exists idx_manager_routine_checks_store on manager_routine_checks (store_id, period_key);
 create index if not exists idx_staff_tasks_type on staff_tasks (task_type, status);
 create index if not exists idx_chat_acknowledgements_staff on chat_acknowledgements (staff_id);
+create index if not exists idx_view_logs_period on view_logs (target_type, period_key);
+create index if not exists idx_view_logs_target on view_logs (target_type, target_id, viewer_staff_id, viewed_at desc);
+create index if not exists idx_view_logs_viewer on view_logs (viewer_staff_id, viewed_at desc);
 create index if not exists idx_push_subscriptions_staff on push_subscriptions (staff_id);
 create index if not exists idx_eni_report_comments_report on eni_report_comments (report_id, created_at);
 create index if not exists idx_company_events_period on company_events (start_date, end_date);
@@ -864,6 +881,7 @@ alter table app_settings enable row level security;
 alter table push_subscriptions enable row level security;
 alter table chat_acknowledgements enable row level security;
 alter table push_preferences enable row level security;
+alter table view_logs enable row level security;
 alter table ai_shimon_messages enable row level security;
 
 -- ---- 初期データ（重複しないようガード付き。何度実行しても安全）----

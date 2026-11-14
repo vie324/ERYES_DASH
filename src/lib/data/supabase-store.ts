@@ -82,6 +82,7 @@ import type {
   ThanksLike,
   ThanksPost,
   WorkPatternDay,
+  ViewLog,
 } from "@/lib/data/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -1669,6 +1670,62 @@ class SupabaseStore implements DataStore {
   async deleteCompanyEvent(id: string): Promise<void> {
     const { error } = await this.sb.from("company_events").delete().eq("id", id);
     if (error) throw new Error(`[supabase] 会社の予定削除: ${error.message}`);
+  }
+
+  async recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean> {
+    if (opts?.dedupeMinutes) {
+      const since = new Date(Date.now() - opts.dedupeMinutes * 60_000).toISOString();
+      const { data, error } = await this.sb
+        .from("view_logs")
+        .select("id")
+        .eq("target_type", input.targetType)
+        .eq("target_id", input.targetId)
+        .eq("viewer_staff_id", input.viewerStaffId)
+        .gte("viewed_at", since)
+        .limit(1);
+      if (isMissingTable(error)) return false; // schema.sql を流し直す前のDB（記録しない）
+      if (error) throw new Error(`[supabase] 閲覧の記録の確認: ${error.message}`);
+      if ((data ?? []).length > 0) return false;
+    }
+    const { error } = await this.sb.from("view_logs").insert({
+      target_type: input.targetType,
+      target_id: input.targetId,
+      owner_staff_id: input.ownerStaffId,
+      period_key: input.periodKey,
+      viewer_staff_id: input.viewerStaffId,
+    });
+    if (isMissingTable(error)) return false;
+    if (error) throw new Error(`[supabase] 閲覧の記録: ${error.message}`);
+    return true;
+  }
+
+  async listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]> {
+    if (filter.periodKeys?.length === 0 || filter.targetIds?.length === 0) return [];
+    let query = this.sb
+      .from("view_logs")
+      .select("*")
+      .eq("target_type", filter.targetType)
+      .order("viewed_at", { ascending: false })
+      .limit(5000);
+    if (filter.periodKeys) query = query.in("period_key", filter.periodKeys);
+    if (filter.targetIds) query = query.in("target_id", filter.targetIds);
+    if (filter.viewerStaffId) query = query.eq("viewer_staff_id", filter.viewerStaffId);
+    const { data, error } = await query;
+    if (isMissingTable(error)) return [];
+    return must(data, error, "閲覧の記録").map((r: Row) => ({
+      id: r.id,
+      targetType: r.target_type,
+      targetId: r.target_id,
+      ownerStaffId: r.owner_staff_id ?? null,
+      periodKey: r.period_key ?? "",
+      viewerStaffId: r.viewer_staff_id,
+      viewedAt: new Date(r.viewed_at),
+    }));
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {

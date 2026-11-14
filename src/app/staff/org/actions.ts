@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import { isExecutive } from "@/lib/eni/access";
+import { canAccessOrgChart } from "@/lib/eni/access";
 import { ORG_CHARTS, makeUnitKey } from "@/lib/eni/org";
 
 async function requireExec(): Promise<void> {
   const session = await requireSession();
-  if (!(await isExecutive(session))) redirect("/staff/org?error=forbidden");
+  if (!(await canAccessOrgChart(session))) redirect("/staff/org?error=forbidden");
 }
 
 /** 部署・チームの追加（管理者・幹部のみ） */

@@ -2,13 +2,56 @@
 
 import { getDataStore } from "@/lib/data";
 import type { Session } from "@/lib/auth/session";
-import { findCommitteeTemplate, isAllHands } from "@/lib/eni/committees";
-import type { Committee, Meeting } from "@/lib/data/types";
+import { findCommitteeTemplate, isAllHands, joinsCommittee, participantsOf } from "@/lib/eni/committees";
+import type { Committee, Meeting, OrgMember, Staff } from "@/lib/data/types";
 
 export async function isExecutive(session: Session): Promise<boolean> {
   if (session.role === "admin") return true;
   const me = await getDataStore().getStaff(session.staffId);
   return me?.isExecutive ?? false;
+}
+
+/**
+ * 組織図・組織メニュー・幹部メニューを開けるか（幹部と管理者だけ）。
+ * 8月の打ち合わせで「組織図は幹部以上」と決定。画面・サーバーアクションの両方でこの判定を使う。
+ */
+export async function canAccessOrgChart(session: Session): Promise<boolean> {
+  return isExecutive(session);
+}
+
+// ── 会議体の見える範囲 ────────────────────────────────────────────────
+// 会議体の一覧は、その会議体の参加者だけに見せる（管理者はすべて）。
+// 参加者＝個別指定 → 組織図のチーム → どちらも無ければ全員参加（lib/eni/committees.ts）。
+// 実際に開催された回に司会・相手・参加者として入っていた人も「参加者」に含める。
+
+export interface CommitteeRow {
+  committee: Committee;
+  participants: string[];
+  /** 見ている人が参加者か */
+  mine: boolean;
+}
+
+/**
+ * 見ている人に出してよい会議体（参加者つき）。
+ *  ・管理者 …… すべて（停止中も含む）
+ *  ・それ以外 … 運用中の会議体のうち、自分が参加者のもの
+ */
+export function visibleCommittees(
+  committees: Committee[],
+  viewer: { staffId: string; isAdmin: boolean },
+  ctx: { orgMembers: OrgMember[]; activeStaff: Staff[]; meetings: Meeting[] }
+): CommitteeRow[] {
+  return committees
+    .filter((c) => c.isActive || viewer.isAdmin)
+    .map((committee) => {
+      const participants = participantsOf(committee, ctx.orgMembers, ctx.activeStaff);
+      return {
+        committee,
+        participants,
+        mine: joinsCommittee(committee, viewer.staffId, participants, ctx.meetings),
+      };
+    })
+    .filter((row) => viewer.isAdmin || row.mine);
 }
 
 /** 練習時間（分）の表示："90 → 1h30" "60 → 1h" "30 → 30m" */

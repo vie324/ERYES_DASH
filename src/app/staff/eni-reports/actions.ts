@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
+import { recordWeeklyReportView } from "@/lib/views";
 
 function revalidateReports(): void {
   revalidatePath("/staff/eni-reports");
@@ -42,4 +43,28 @@ export async function deleteReportCommentAction(formData: FormData): Promise<voi
   await getDataStore().deleteEniReportComment(commentId, session.staffId);
   revalidateReports();
   redirect(`${back}&commented=deleted`);
+}
+
+/**
+ * 週報を開いたことを記録する（「みんなの週報」で週報をタップして開いたとき）。
+ * 週報を見られる人（アシスタント・スタイリスト・幹部・管理者）の分だけ記録し、自分の週報は数えない。
+ * 画面を作り直さない（読んでいる位置が動かない）よう、再検証はしない。
+ */
+export async function recordReportViewAction(reportId: string): Promise<void> {
+  const session = await requireSession();
+  if (typeof reportId !== "string" || !reportId) return;
+  const db = getDataStore();
+  const [me, report] = await Promise.all([db.getStaff(session.staffId), db.getEniReportById(reportId)]);
+  if (!me || !report) return;
+  const canSeeWeekly =
+    session.role === "admin" || me.isExecutive || me.jobType === "stylist" || me.jobType === "assistant";
+  if (!canSeeWeekly) return;
+  // 週報（kind=weekly）であることを確かめる（日報のIDを渡されても記録しない）
+  const weekly = await db.listEniReports("weekly", {
+    staffId: report.staffId,
+    from: report.periodKey,
+    to: report.periodKey,
+  });
+  if (!weekly.some((r) => r.id === report.id)) return;
+  await recordWeeklyReportView(db, session.staffId, report);
 }

@@ -4,7 +4,7 @@
 
 import { randomBytes, randomUUID } from "crypto";
 import { hashPassword } from "@/lib/auth/password";
-import { addDays, addMonths, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst } from "@/lib/date";
+import { addDays, addMonths, jstDayBoundsUtc, monthRange, thisMonthJst, todayJst, weekStartOf } from "@/lib/date";
 import { generateAssignments } from "@/lib/shift/assign";
 import { currentTargetMonth } from "@/lib/shift/period";
 import { buildMonthSchedule, workingDatesOf } from "@/lib/shift/month";
@@ -82,6 +82,7 @@ import type {
   ThanksLike,
   ThanksPost,
   WorkPatternDay,
+  ViewLog,
 } from "@/lib/data/types";
 
 interface MockDb {
@@ -136,6 +137,7 @@ interface MockDb {
   thanksComments: ThanksComment[];
   eniReportComments: EniReportComment[];
   companyEvents: CompanyEvent[];
+  viewLogs: ViewLog[];
 }
 
 /**
@@ -605,6 +607,45 @@ function seed(): MockDb {
       comment: "",
       commentedBy: null,
       updatedAt: jstAt(addDays(today, -1), 20),
+    },
+    // アシスタントの週報（今週ぶん。週報の閲覧状況の確認用）
+    {
+      id: "eni-weekly-1",
+      kind: "weekly",
+      staffId: "staff-5",
+      periodKey: weekStartOf(today),
+      answers: {
+        _rank: "first",
+        practice_hours: 6,
+        sns_hours: 2,
+        other_hours: 1,
+        watched_by: "山本さん2回",
+        done_well: "ワインディングを時間内に巻き切れた",
+        struggle: "ブローの面がまだ揃わない",
+        next_goal: "ブロー練習を3回、モデル1名",
+      },
+      comment: "",
+      commentedBy: null,
+      updatedAt: jstAt(today, 9),
+    },
+    {
+      id: "eni-weekly-2",
+      kind: "weekly",
+      staffId: "staff-6",
+      periodKey: weekStartOf(today),
+      answers: {
+        _rank: "middle",
+        practice_hours: 4,
+        sns_hours: 3,
+        other_hours: 1,
+        model_count: 1,
+        sns_posts: 3,
+        done_well: "モデルさんに次回も来たいと言ってもらえた",
+        next_goal: "SNS投稿を週4本",
+      },
+      comment: "",
+      commentedBy: null,
+      updatedAt: jstAt(today, 10),
     },
   ];
   const practicePairs: PracticePair[] = [
@@ -1186,6 +1227,7 @@ function seed(): MockDb {
     thanksComments,
     eniReportComments: [],
     companyEvents: [],
+    viewLogs: [],
   };
 }
 
@@ -1377,6 +1419,7 @@ class MockStore implements DataStore {
       d.managerRoutineChecks = d.managerRoutineChecks.filter((c) => c.staffId !== id);
       d.pushSubscriptions = d.pushSubscriptions.filter((ps) => ps.staffId !== id);
       d.pushPreferences = d.pushPreferences.filter((pp) => pp.staffId !== id);
+      d.viewLogs = d.viewLogs.filter((v) => v.viewerStaffId !== id && v.ownerStaffId !== id);
       d.staff = d.staff.filter((st) => st.id !== id);
       return;
     }
@@ -2007,6 +2050,38 @@ class MockStore implements DataStore {
 
   async deleteCompanyEvent(id: string): Promise<void> {
     this.db.companyEvents = this.db.companyEvents.filter((e) => e.id !== id);
+  }
+
+  async recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean> {
+    const since = Date.now() - (opts?.dedupeMinutes ?? 0) * 60_000;
+    const recent = this.db.viewLogs.some(
+      (v) =>
+        v.targetType === input.targetType &&
+        v.targetId === input.targetId &&
+        v.viewerStaffId === input.viewerStaffId &&
+        v.viewedAt.getTime() >= since
+    );
+    if (opts?.dedupeMinutes && recent) return false;
+    this.db.viewLogs.push({ ...input, id: randomUUID(), viewedAt: new Date() });
+    return true;
+  }
+
+  async listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]> {
+    return this.db.viewLogs
+      .filter(
+        (v) =>
+          v.targetType === filter.targetType &&
+          (!filter.periodKeys || filter.periodKeys.includes(v.periodKey)) &&
+          (!filter.targetIds || filter.targetIds.includes(v.targetId)) &&
+          (!filter.viewerStaffId || v.viewerStaffId === filter.viewerStaffId)
+      )
+      .sort((a, b) => b.viewedAt.getTime() - a.viewedAt.getTime())
+      .map((v) => ({ ...v }));
   }
 
   async listEniReportComments(reportIds: string[]): Promise<EniReportComment[]> {

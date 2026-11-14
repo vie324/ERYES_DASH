@@ -716,6 +716,25 @@ export interface AiShimonThread {
 }
 
 /**
+ * 閲覧の記録（だれが・いつ・何を見たか）。週報から使い始め、日報・議事録などにも使い回せる共通の形。
+ * 集計（例：週報を先輩がどれだけ見ているか）は lib/views.ts。見られるのは幹部・管理者だけ。
+ */
+export interface ViewLog {
+  id: string;
+  /** 何を見たか（"weekly_report" など。lib/views.ts の VIEW_TARGETS） */
+  targetType: string;
+  /** 見たもののID（週報＝eni_reports.id） */
+  targetId: string;
+  /** 見たものの持ち主（週報を書いた人）。持ち主の無いものは null */
+  ownerStaffId: string | null;
+  /** 集計用の期間（週報＝その週の月曜。無ければ空文字） */
+  periodKey: string;
+  /** 見た人 */
+  viewerStaffId: string;
+  viewedAt: Date;
+}
+
+/**
  * 会社のイベント・全体で共有しておきたい予定（全員が見る。登録は幹部・管理者）。
  * 出勤シフトとは別で、勉強会・全体ミーティング・ENi会・研修などを置く場所。
  */
@@ -1020,6 +1039,18 @@ export interface DataStore {
   deleteCompanyEvent(id: string): Promise<void>;
 
   commentEniReport(id: string, comment: string, commentedBy: string): Promise<void>;
+  /**
+   * 閲覧を記録する。同じ人が同じものを dedupeMinutes 分以内に見直した分は数えない（再読み込みで増えないように）。
+   * 記録したら true。
+   */
+  recordView(input: Omit<ViewLog, "id" | "viewedAt">, opts?: { dedupeMinutes?: number }): Promise<boolean>;
+  /** 閲覧の記録（種類で絞り、期間・持ち主・見た人でさらに絞れる。新しい順） */
+  listViewLogs(filter: {
+    targetType: string;
+    periodKeys?: string[];
+    targetIds?: string[];
+    viewerStaffId?: string;
+  }): Promise<ViewLog[]>;
   /** 日報・週報のコメント（複数人が書ける。古い順） */
   listEniReportComments(reportIds: string[]): Promise<EniReportComment[]>;
   addEniReportComment(reportId: string, staffId: string, body: string): Promise<EniReportComment>;
