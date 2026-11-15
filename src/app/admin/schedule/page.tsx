@@ -21,6 +21,7 @@ import {
   isRequestEditable,
   remainingLabel,
 } from "@/lib/shift/period";
+import { requestTargets } from "@/lib/shift/requests";
 import { MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -139,8 +140,12 @@ export default async function AdminSchedulePage({
     schedule,
     storeParam: params.store,
     brandLabel: BRAND_INFO[brand].label,
+    // 希望休で「勤務できる店舗」に選んだ人も、その店舗の表に出す（所属店舗がほかの店舗のままでも見落とさない）
+    chosenStores: inputs.chosenStores,
   });
   const { filterKey, storeFilter, defaultStores } = view;
+  // 表示中の店舗に所属している人が1人もいない（ENiの人の所属店舗が EREYS のままになっている、など）
+  const homeless = multiStore && filterKey !== "all" && view.homeCount === 0;
   const shownStores = stores.filter((s) => storeFilter.includes(s.id));
   const jobOrder = { stylist: 0, assistant: 1, "": 2 } as const;
   const boardMembers = view.members
@@ -270,7 +275,8 @@ export default async function AdminSchedulePage({
   // ---- 希望休の集まり具合 ----
   const rosterIds = new Set(inputs.staffIds);
   const requestEditable = isRequestEditable(month, rules, today);
-  const relevantStaff = boardMembers.filter((s) => rosterIds.has(s.id) || requestStatuses.has(s.id));
+  // 希望休を出してもらう人（管理者以外の全員）と、管理者でも出した人・シフトに入る人
+  const relevantStaff = requestTargets(boardMembers, rosterIds, requestStatuses);
   const submittedCount = relevantStaff.filter((s) => requestStatuses.get(s.id)?.submitted).length;
   const unsubmitted = relevantStaff.filter((s) => !requestStatuses.get(s.id)?.submitted);
   const excluded = boardMembers.filter((s) => inputs.excludedStaffIds.includes(s.id));
@@ -340,6 +346,32 @@ export default async function AdminSchedulePage({
         prevHref={href({ month: addMonths(month, -1) })}
         nextHref={href({ month: addMonths(month, 1) })}
       />
+
+      {/* ---- 所属店舗のずれ。直すまで、希望休を出していない人はこの表に出ない ---- */}
+      {multiStore && (homeless || view.chosenOnly.length > 0) && (
+        <div className="note note-warn !font-normal mb-4 text-sm space-y-1">
+          <p className="font-bold">所属店舗を確かめてください</p>
+          {homeless && (
+            <p>
+              {shownStores.map((st) => st.name).join("・")}に所属しているスタッフがいません。
+              {filterKey === "" ? `${BRAND_INFO[brand].label}で働く人` : "この店舗で働く人"}
+              の所属店舗が、ほかの店舗のままになっていないか確かめてください。
+            </p>
+          )}
+          {view.chosenOnly.length > 0 && (
+            <p>
+              所属店舗がほかの店舗の人も、希望休でこの店舗を選んでいるので表に出しています：
+              {view.chosenOnly.map((st) => st.name).join("、")}
+            </p>
+          )}
+          <p className="text-xs">
+            所属店舗は「マスタ設定」のスタッフ一覧で直せます。直すまで、希望休を出していない人はこの表に出ません。
+          </p>
+          <Link href="/admin/settings#staff-list" className="inline-block text-xs font-bold underline">
+            マスタ設定のスタッフ一覧を開く
+          </Link>
+        </div>
+      )}
 
       {/* ---- 進め方と状態 ---- */}
       <section className="card mb-4">
@@ -620,7 +652,9 @@ export default async function AdminSchedulePage({
           <p className="note note-warn !font-normal mb-3 text-xs">
             <span className="font-bold">未提出：{unsubmitted.map((s) => s.name).join("、")}</span>
             <span className="block mt-0.5">
-              未提出の人は、基本パターン（いつもの出勤日）どおりで作ります。{requestEditable ? "声をかけてください。" : ""}
+              未提出の人は、基本パターン（いつもの出勤日）どおりで作ります
+              {unsubmitted.some((st) => !inputs.patterns.has(st.id)) ? "（基本パターンも無い人は、自動では入りません）" : ""}。
+              {requestEditable ? "声をかけてください。" : ""}
             </span>
           </p>
         )}
@@ -642,7 +676,7 @@ export default async function AdminSchedulePage({
           {relevantStaff.map((s) => {
             const st = requestStatuses.get(s.id);
             const offs = (dayoffsByStaff.get(s.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
-            const chosen = inputs.explicitStores.has(s.id) ? [...(inputs.availableStores.get(s.id) ?? [])] : [];
+            const chosen = [...(inputs.chosenStores.get(s.id) ?? [])];
             return (
               <div key={s.id} className="card-quiet">
                 <div className="flex items-center gap-2">

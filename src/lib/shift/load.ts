@@ -1,7 +1,7 @@
 // シフトの画面で使う「その月の表」をDBから読み込む（スタッフ・管理者・スケジュール画面で共通）。
 
 import { monthRange } from "@/lib/date";
-import { buildMonthSchedule, type MonthSchedule } from "@/lib/shift/month";
+import { buildMonthSchedule, chosenStoresOf, type MonthSchedule } from "@/lib/shift/month";
 import { listDayoffsWithLegacy } from "@/lib/shift/requests";
 import type {
   DataStore,
@@ -22,18 +22,21 @@ export interface LoadedMonth {
   overrides: ScheduleOverride[];
   assignments: ShiftAssignment[];
   schedule: MonthSchedule;
+  /** その月に本人が選んだ「勤務できる店舗」（staffId → 店舗ID。店舗の表に出す人を決めるのに使う） */
+  chosenStores: Map<string, Set<string>>;
 }
 
 /** その月の表を読み込む。showDraft＝下書きのシフト表も出す（管理者の画面だけ true） */
 export async function loadMonthSchedule(db: DataStore, month: string, showDraft: boolean): Promise<LoadedMonth> {
   const range = monthRange(month);
-  const [stores, staffList, patterns, dayoffs, overrides, assignments] = await Promise.all([
+  const [stores, staffList, patterns, dayoffs, overrides, assignments, available] = await Promise.all([
     db.listStores(),
     db.listStaff(),
     db.listWorkPatterns(),
     listDayoffsWithLegacy(db, range),
     db.listScheduleOverrides(range),
     db.listShiftAssignments(month),
+    db.listAvailableStores(month),
   ]);
   const activeStaff = staffList.filter((s) => s.isActive);
   const schedule = buildMonthSchedule({
@@ -45,7 +48,8 @@ export async function loadMonthSchedule(db: DataStore, month: string, showDraft:
     assignments,
     showDraft,
   });
-  return { stores, staffList, activeStaff, patterns, dayoffs, overrides, assignments, schedule };
+  const chosenStores = chosenStoresOf(available, stores.map((s) => s.id));
+  return { stores, staffList, activeStaff, patterns, dayoffs, overrides, assignments, schedule, chosenStores };
 }
 
 /** 1日分だけの予定（スケジュール画面の「みんなの予定」など）。シフト表は公開中のものだけ使う */

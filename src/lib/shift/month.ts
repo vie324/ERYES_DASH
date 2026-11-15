@@ -240,7 +240,37 @@ export function brandStoreIds(stores: { id: string; name: string }[], brandLabel
 }
 
 /**
- * 表に出すスタッフ：所属店舗が絞り込みの店舗に入っている人と、その月にその店舗で出勤する人。
+ * その月に本人が「勤務できる店舗」として選んだ店舗（staffId → 店舗ID。いまある店舗だけ）。
+ * 希望休の画面で選ぶ。選んでいない人はキーが無い。
+ */
+export function chosenStoresOf(
+  rows: { staffId: string; storeId: string }[],
+  storeIds: Iterable<string>
+): Map<string, Set<string>> {
+  const valid = new Set(storeIds);
+  const map = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (!valid.has(r.storeId)) continue;
+    if (!map.has(r.staffId)) map.set(r.staffId, new Set());
+    map.get(r.staffId)!.add(r.storeId);
+  }
+  return map;
+}
+
+/** その人が、その月に絞り込みの店舗のどれかを「勤務できる店舗」に選んだか */
+export function choseAnyStore(
+  chosenStores: Map<string, Set<string>> | undefined,
+  staffId: string,
+  storeIds: Set<string>
+): boolean {
+  for (const id of chosenStores?.get(staffId) ?? []) if (storeIds.has(id)) return true;
+  return false;
+}
+
+/**
+ * 表に出すスタッフ：所属店舗が絞り込みの店舗に入っている人と、その月にその店舗で出勤する人、
+ * その月の希望休で、その店舗を「勤務できる店舗」に選んだ人（chosenStores）。
+ * 所属店舗がほかの店舗のままになっていても、出した希望休がその店舗の表から抜け落ちないようにする。
  * 基本パターンもシフトも無く、1日も出勤しない人（シフトに関わらない管理用アカウントなど）は出さない。
  * keepIds に入っている人（自分）は必ず出す。includeIdle なら関わりのない人も出す（管理者の表）。
  */
@@ -248,11 +278,12 @@ export function staffForStores<T extends Pick<Staff, "id" | "storeId">>(
   staff: T[],
   schedule: MonthSchedule,
   storeIds: string[],
-  opts: { keepIds?: string[]; includeIdle?: boolean } = {}
+  opts: { keepIds?: string[]; includeIdle?: boolean; chosenStores?: Map<string, Set<string>> } = {}
 ): T[] {
   const inStores = new Set(storeIds);
   return staff.filter((s) => {
     if (opts.keepIds?.includes(s.id)) return true;
+    if (choseAnyStore(opts.chosenStores, s.id, inStores)) return true;
     const cells = schedule.dates.map((d) => schedule.cell(s.id, d));
     const involved = cells.some((c) => c.working || c.source === "pattern" || c.source === "override" || c.dayoff);
     if (!involved && !opts.includeIdle) return false;

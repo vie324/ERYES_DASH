@@ -12,7 +12,7 @@ import {
   remainingLabel,
   requestDeadline,
 } from "@/lib/shift/period";
-import type { DataStore, DayoffRequest } from "@/lib/data/types";
+import type { DataStore, DayoffRequest, Staff } from "@/lib/data/types";
 
 /**
  * 希望休の一覧（dayoff_requests）に、まだ移していない旧「シフト希望」の休み（shift_requests の off）を足す。
@@ -101,6 +101,21 @@ export async function listRequestStatuses(db: DataStore, month: string): Promise
     if (d.paidLeave) s.paidDays++;
   }
   return map;
+}
+
+/**
+ * 希望休の集まり具合（「提出 ◯ / ◯人」・未提出の人）の対象。表に出ている人のうち、
+ *  ・管理者以外の全員（スタッフには「希望休を出してください」のお知らせが出るので、出してもらう人）
+ *  ・管理者でも、希望休を出した人・基本パターンなどでシフトに入る人（rosterIds）
+ * 以前は「基本パターンのある人か、出した人」だけを数えていたため、基本パターンを使っていないお店では
+ * 出していない人が数に入らず、「提出 4 / 4人」のように全員出したように見えていた。
+ */
+export function requestTargets<T extends Pick<Staff, "id" | "role">>(
+  members: T[],
+  rosterIds: Set<string>,
+  statuses: Map<string, RequestStatus>
+): T[] {
+  return members.filter((s) => s.role !== "admin" || rosterIds.has(s.id) || statuses.has(s.id));
 }
 
 export interface DayoffNotice {

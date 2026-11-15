@@ -46,7 +46,11 @@ export default async function StaffSchedulePage({
         : defaultStores;
   const filterKey = params.store === "all" || stores.some((s) => s.id === params.store) ? params.store! : "";
   const shownStores = stores.filter((s) => storeFilter.includes(s.id));
-  const members = staffForStores(activeStaff, schedule, storeFilter, { keepIds: [session.staffId] }).sort(
+  // 希望休でこの店舗を選んだ人も出す（管理者の表と同じ人が並ぶように）
+  const members = staffForStores(activeStaff, schedule, storeFilter, {
+    keepIds: [session.staffId],
+    chosenStores: loaded.chosenStores,
+  }).sort(
     (a, b) => Number(b.id === session.staffId) - Number(a.id === session.staffId)
   );
 

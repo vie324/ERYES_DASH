@@ -56,6 +56,7 @@ async function loadView(db: DataStore, month: string, storeParam: string) {
     schedule: loaded.schedule,
     storeParam,
     brandLabel: await currentBrandLabel(),
+    chosenStores: loaded.chosenStores,
   });
   return { loaded, view };
 }
