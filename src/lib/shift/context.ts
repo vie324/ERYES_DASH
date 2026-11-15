@@ -6,7 +6,7 @@
 import { addMonths, monthRange } from "@/lib/date";
 import { isAllHands, participantsOf } from "@/lib/eni/committees";
 import { normalizeTiers } from "@/lib/eni/forms";
-import { buildMonthSchedule, workingDatesOf } from "@/lib/shift/month";
+import { buildMonthSchedule, chosenStoresOf, workingDatesOf } from "@/lib/shift/month";
 import { listDayoffsWithLegacy, listRequestStatuses, type RequestStatus } from "@/lib/shift/requests";
 import type {
   AssistantRank,
@@ -39,6 +39,8 @@ export interface ShiftMonthInputs extends AssignContext {
   unsubmittedStaffIds: string[];
   /** 勤務できる店舗を本人が選んだ人（それ以外は所属店舗に入れる） */
   explicitStores: Set<string>;
+  /** 本人が選んだ「勤務できる店舗」そのもの（staffId → 店舗ID。店舗の表に出す人を決めるのに使う） */
+  chosenStores: Map<string, Set<string>>;
   /** 希望休の提出状況（staffId → 状況。未提出の人はキーが無い） */
   requestStatuses: Map<string, RequestStatus>;
   /** 画面表示用の元データ */
@@ -134,12 +136,7 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
   const unsubmittedStaffIds = roster.filter((s) => !submitted(s.id)).map((s) => s.id);
 
   // 勤務できる店舗：本人が選んだ店舗。選んでいなければ所属店舗（所属店舗が無効なら全店舗）
-  const explicit = new Map<string, Set<string>>();
-  for (const a of available) {
-    if (!storeIdSet.has(a.storeId)) continue;
-    if (!explicit.has(a.staffId)) explicit.set(a.staffId, new Set());
-    explicit.get(a.staffId)!.add(a.storeId);
-  }
+  const explicit = chosenStoresOf(available, storeIdSet);
   const availableStores = new Map<string, Set<string>>();
   for (const s of roster) {
     const chosen = explicit.get(s.id);
@@ -212,6 +209,7 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     excludedStaffIds,
     unsubmittedStaffIds,
     explicitStores,
+    chosenStores: explicit,
     requestStatuses,
     assignments,
     dayoffs,

@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
+import { getBrand, BRAND_INFO } from "@/lib/brand";
+import { brandStoreIds } from "@/lib/shift/month";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import {
@@ -60,6 +62,10 @@ export default async function AdminSettingsPage({
     db.listAppSettings(),
   ]);
   const settings = settingsMap(appSettings);
+  // 新しいスタッフの所属店舗の初期値：いま選んでいる業態の店舗
+  // （以前は一覧の先頭の店舗だったため、ENiの人が EREYS の店舗の所属になり、ENiのシフト表に出なかった）
+  const brand = (await getBrand()) ?? "eni";
+  const newStaffStoreId = brandStoreIds(stores, BRAND_INFO[brand].label)[0] ?? stores[0]?.id ?? "";
   // AIしもんの準備状況（知識ファイルは「番号の有無」だけを出す。本文・ファイル名は画面に出さない）
   const aiShimon = {
     apiKey: isAnthropicConfigured(),
@@ -193,8 +199,13 @@ export default async function AdminSettingsPage({
         </details>
       </section>
 
-      <section className="mb-5">
+      <section id="staff-list" className="mb-5 scroll-mt-20">
         <h2 className="font-display text-lg font-bold text-ink-900 mb-3">スタッフ一覧</h2>
+        {stores.length > 1 && (
+          <p className="hint !mt-0 mb-3">
+            所属店舗は、シフトの表（業態ごと）・幹部のルーティン業務・店舗ごとの集計に使います。名前をタップすると変えられます。
+          </p>
+        )}
         <div className="space-y-3">
           {staffList.map((s) => (
             <details key={s.id} className="card group">
@@ -436,14 +447,14 @@ export default async function AdminSettingsPage({
           </div>
           <div>
             <label className="label" htmlFor="new_store">所属店舗</label>
-            <select id="new_store" name="store_id" className="input" defaultValue={stores[0]?.id ?? ""}>
+            <select id="new_store" name="store_id" className="input" defaultValue={newStaffStoreId}>
               {stores.map((st) => (
                 <option key={st.id} value={st.id}>
                   {st.name}
                 </option>
               ))}
             </select>
-            <p className="hint">幹部のルーティン業務（店舗ごと）や、店舗ごとの集計に使います。</p>
+            <p className="hint">シフトの表（業態ごと）・幹部のルーティン業務・店舗ごとの集計に使います。</p>
           </div>
           <fieldset>
             <legend className="label">担当店舗（店舗の管理者にする人だけ）</legend>
