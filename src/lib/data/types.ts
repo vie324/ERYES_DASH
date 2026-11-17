@@ -28,6 +28,28 @@ export interface Store {
   lng: number;
   gpsRadiusM: number;
   attendanceEnabled: boolean;
+  /** 定休日の曜日（0=日〜6=土）。シフトのカレンダーで「定休日」になり、その日はシフトを入れない */
+  closedWeekdays: number[];
+  /**
+   * 1人の月の休みの数（定休日を含む。例：月曜定休4日を含めて8休なら 8）。
+   * 0 なら決めない＝これまでどおり、基本パターン・連勤上限で休みが決まる
+   */
+  monthlyDaysOff: number;
+}
+
+/**
+ * 店舗の日ごとの設定（シフトのカレンダー）。行が無い日は「いつもどおり」。
+ *  ・dayStatus：""＝いつもどおり（定休日の曜日なら休み）／closed＝この日はお店の休み／open＝定休日の曜日だけど営業する
+ *  ・countsAsDayOff：お店の休みを「月の休みの数」に入れるか（特別休暇は入れない）
+ *  ・note：その日の行事・連絡（カレンダーに赤字で出る）
+ */
+export interface StoreCalendarDay {
+  storeId: string;
+  date: string; // "YYYY-MM-DD"
+  dayStatus: "" | "closed" | "open";
+  closedLabel: string;
+  countsAsDayOff: boolean;
+  note: string;
 }
 
 // 職種：''=未設定（アイサロン等）/ stylist=スタイリスト / assistant=アシスタント
@@ -59,6 +81,8 @@ export interface Staff {
   isActive: boolean;
   /** 担当店舗（店舗の管理者が見る店舗。管理者・スタッフは空でよい） */
   managedStoreIds: string[];
+  /** 呼び名（シフトのカレンダーなどに出す。空なら名前） */
+  nickname: string;
 }
 
 /** 認証時のみ使用（パスワードハッシュ付き） */
@@ -906,6 +930,7 @@ export interface StaffInput {
   tiers?: number;
   fixedOvertimeHours: number;
   managedStoreIds?: string[];
+  nickname?: string;
 }
 
 /** イーリスの日報（daily_reports）へのコメント・返信（1件＝1行。店舗の管理者・管理者がコメントし、本人が返信する） */
@@ -986,6 +1011,7 @@ export interface DataStore {
         | "fixedOvertimeHours"
         | "isActive"
         | "managedStoreIds"
+        | "nickname"
       >
     > & {
       passwordHash?: string;
@@ -1164,6 +1190,10 @@ export interface DataStore {
   listScheduleOverrides(filter: { staffId?: string; from: string; to: string }): Promise<ScheduleOverride[]>;
   upsertScheduleOverride(input: Omit<ScheduleOverride, "id">): Promise<void>;
   deleteScheduleOverride(staffId: string, date: string): Promise<void>;
+  /** 店舗の日ごとの設定（お店の休み・行事メモ）。from〜to の日付範囲 */
+  listStoreCalendarDays(filter: { from: string; to: string; storeId?: string }): Promise<StoreCalendarDay[]>;
+  /** 店舗の日ごとの設定を保存（いつもどおり・メモなしなら行を消す） */
+  saveStoreCalendarDay(day: StoreCalendarDay): Promise<void>;
 
   // ---- ENi（ヘアサロン）向け機能 ----
   // スタイリスト日報／アシスタント週報（kind で区別。periodKey は日付または週の月曜）

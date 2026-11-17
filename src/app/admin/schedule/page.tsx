@@ -320,6 +320,13 @@ export default async function AdminSchedulePage({
         description="希望休の確認 → 下書きを自動で作る → タップで調整 → スタッフに公開"
         actions={
           <>
+            <Link
+              href={`/admin/schedule/calendar?${new URLSearchParams({ month, ...(filterKey && filterKey !== "all" ? { store: filterKey } : {}) }).toString()}`}
+              className="btn-ghost !text-xs"
+            >
+              <Icon name="calendar" className="w-4 h-4" />
+              カレンダー
+            </Link>
             <Link href="/admin/schedule/patterns" className="btn-ghost !text-xs">
               <Icon name="repeat" className="w-4 h-4" />
               基本パターン
@@ -334,6 +341,18 @@ export default async function AdminSchedulePage({
 
       {flash && <p className="note note-ok mb-4">{flash}</p>}
       {params.error && <p className="note note-danger mb-4">{ERRORS[params.error] ?? ERRORS.input}</p>}
+
+      <Link
+        href={`/admin/schedule/calendar?${new URLSearchParams({ month, ...(filterKey && filterKey !== "all" ? { store: filterKey } : {}) }).toString()}`}
+        className="card mb-4 flex items-center gap-3 !py-3 hover:border-brand-400"
+      >
+        <Icon name="calendar" className="w-6 h-6 text-brand-600 shrink-0" />
+        <span className="flex-1 min-w-0">
+          <span className="block font-bold text-ink-900">カレンダーで作る</span>
+          <span className="block text-xs text-ink-500">休みの人・休みの中身・行事を、カレンダーに打ち込むように入れて作れます（印刷も）</span>
+        </span>
+        <Icon name="chevronRight" className="w-5 h-5 text-ink-400 shrink-0" />
+      </Link>
 
       <div className="flex gap-1.5 flex-wrap mb-2">
         {monthChip(thisMonth, "今月")}

@@ -75,6 +75,7 @@ import type {
   StaffTask,
   StaffWithSecret,
   Store,
+  StoreCalendarDay,
   TaskCompletion,
   TaskKind,
   TaskType,
@@ -104,6 +105,20 @@ const mapStore = (r: Row): Store => ({
   lng: Number(r.lng),
   gpsRadiusM: r.gps_radius_m,
   attendanceEnabled: r.attendance_enabled,
+  // 列が無い（schema.sql を流し直す前の）DBでは、定休日なし・月の休みの数は決めない
+  closedWeekdays: Array.isArray(r.closed_weekdays)
+    ? r.closed_weekdays.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 6)
+    : [],
+  monthlyDaysOff: Number(r.monthly_days_off ?? 0) || 0,
+});
+
+const mapStoreCalendarDay = (r: Row): StoreCalendarDay => ({
+  storeId: r.store_id,
+  date: r.date,
+  dayStatus: r.day_status === "closed" || r.day_status === "open" ? r.day_status : "",
+  closedLabel: r.closed_label ?? "",
+  countsAsDayOff: r.counts_as_day_off === true,
+  note: r.note ?? "",
 });
 
 const mapStaff = (r: Row): Staff => ({
@@ -124,6 +139,8 @@ const mapStaff = (r: Row): Staff => ({
   isActive: r.is_active,
   // 列が無い（schema.sql を流し直す前の）DBでは担当店舗なし
   managedStoreIds: Array.isArray(r.managed_store_ids) ? r.managed_store_ids.map(String) : [],
+  // 列が無いDBでは呼び名なし（名前を出す）
+  nickname: r.nickname ?? "",
 });
 
 const mapCustomer = (r: Row): Customer => ({
@@ -711,12 +728,18 @@ class SupabaseStore implements DataStore {
     if (patch.lng !== undefined) row.lng = patch.lng;
     if (patch.gpsRadiusM !== undefined) row.gps_radius_m = patch.gpsRadiusM;
     if (patch.attendanceEnabled !== undefined) row.attendance_enabled = patch.attendanceEnabled;
+    if (patch.closedWeekdays !== undefined) row.closed_weekdays = patch.closedWeekdays;
+    if (patch.monthlyDaysOff !== undefined) row.monthly_days_off = patch.monthlyDaysOff;
     const { data, error } = await this.sb
       .from("stores")
       .update(row)
       .eq("id", id)
       .select()
       .single();
+    if (error && isMissingColumn(error) && ("closed_weekdays" in row || "monthly_days_off" in row)) {
+      // 列が無いDB（schema.sql を流し直す前）では、定休日・月の休みの数は保存できない
+      throw new Error("定休日・月の休みの数を保存するには、データベースの更新（schema.sql の再実行）が必要です");
+    }
     return mapStore(must(data, error, "店舗更新"));
   }
 
@@ -767,6 +790,7 @@ class SupabaseStore implements DataStore {
         tiers: input.tiers ?? 1,
         fixed_overtime_hours: input.fixedOvertimeHours,
         ...(input.managedStoreIds && input.managedStoreIds.length > 0 ? { managed_store_ids: input.managedStoreIds } : {}),
+        ...(input.nickname ? { nickname: input.nickname } : {}),
       })
       .select()
       .single();
@@ -791,12 +815,14 @@ class SupabaseStore implements DataStore {
         | "fixedOvertimeHours"
         | "isActive"
         | "managedStoreIds"
+        | "nickname"
       >
     > & {
       passwordHash?: string;
     }
   ): Promise<Staff> {
     const row: Row = {};
+    if (patch.nickname !== undefined) row.nickname = patch.nickname;
     if (patch.managedStoreIds !== undefined) row.managed_store_ids = patch.managedStoreIds;
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.storeId !== undefined) row.store_id = patch.storeId;
@@ -811,9 +837,9 @@ class SupabaseStore implements DataStore {
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     if (patch.passwordHash !== undefined) row.password_hash = patch.passwordHash;
     let { data, error } = await this.sb.from("staff").update(row).eq("id", id).select().single();
-    // 担当店舗の列がまだ無いDB（schema.sql を流す前）でも、ほかの項目は保存できるようにする
-    if (error && isMissingColumn(error) && "managed_store_ids" in row) {
-      const { managed_store_ids: _skip, ...rest } = row;
+    // 担当店舗・呼び名の列がまだ無いDB（schema.sql を流す前）でも、ほかの項目は保存できるようにする
+    if (error && isMissingColumn(error) && ("managed_store_ids" in row || "nickname" in row)) {
+      const { managed_store_ids: _skip, nickname: _skipNickname, ...rest } = row;
       ({ data, error } = await this.sb.from("staff").update(rest).eq("id", id).select().single());
     }
     return mapStaff(must(data, error, "スタッフ更新"));
@@ -1792,6 +1818,48 @@ class SupabaseStore implements DataStore {
       .eq("staff_id", staffId)
       .eq("date", date);
     if (error) throw new Error(`[supabase] 個別調整削除: ${error.message}`);
+  }
+
+  async listStoreCalendarDays(filter: { from: string; to: string; storeId?: string }): Promise<StoreCalendarDay[]> {
+    let q = this.sb
+      .from("store_calendar_days")
+      .select("*")
+      .gte("date", filter.from)
+      .lte("date", filter.to)
+      .order("date");
+    if (filter.storeId) q = q.eq("store_id", filter.storeId);
+    const { data, error } = await q;
+    if (isMissingTable(error)) return []; // schema.sql を流し直す前のDB（お店の休み・行事メモはまだ無い）
+    return must(data, error, "店舗の日ごとの設定").map(mapStoreCalendarDay);
+  }
+
+  async saveStoreCalendarDay(day: StoreCalendarDay): Promise<void> {
+    // いつもどおり・メモなしなら行を残さない
+    if (day.dayStatus === "" && day.note.trim() === "") {
+      const { error } = await this.sb
+        .from("store_calendar_days")
+        .delete()
+        .eq("store_id", day.storeId)
+        .eq("date", day.date);
+      if (error && !isMissingTable(error)) throw new Error(`[supabase] 店舗の日ごとの設定の削除: ${error.message}`);
+      return;
+    }
+    const { error } = await this.sb.from("store_calendar_days").upsert(
+      {
+        store_id: day.storeId,
+        date: day.date,
+        day_status: day.dayStatus,
+        closed_label: day.closedLabel,
+        counts_as_day_off: day.countsAsDayOff,
+        note: day.note,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "store_id,date" }
+    );
+    if (isMissingTable(error)) {
+      throw new Error("お店の休み・行事メモを保存するには、データベースの更新（schema.sql の再実行）が必要です");
+    }
+    if (error) throw new Error(`[supabase] 店舗の日ごとの設定の保存: ${error.message}`);
   }
 
   // ---- ENi（ヘアサロン）向け機能 ----

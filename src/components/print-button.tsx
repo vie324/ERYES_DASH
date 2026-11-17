@@ -8,9 +8,11 @@ import { useEffect } from "react";
 export function PrintButton({
   label = "PDFで保存（印刷）",
   auto = false,
+  className = "btn-primary w-full",
 }: {
   label?: string;
   auto?: boolean;
+  className?: string;
 }) {
   useEffect(() => {
     if (!auto) return;
@@ -20,7 +22,7 @@ export function PrintButton({
   }, [auto]);
 
   return (
-    <button type="button" onClick={() => window.print()} className="btn-primary w-full print:hidden">
+    <button type="button" onClick={() => window.print()} className={`${className} print:hidden`}>
       {label}
     </button>
   );

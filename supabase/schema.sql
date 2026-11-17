@@ -246,6 +246,21 @@ create table if not exists shift_assignments (
   unique (staff_id, date)
 );
 
+-- 店舗の日ごとの設定（シフトのカレンダー）：お店の休み（特別休暇・臨時休業など）と、その日の行事メモ。
+-- day_status: ''＝いつもどおり（定休日の曜日なら休み）／closed＝この日はお店の休み／open＝定休日の曜日だけど営業する
+-- counts_as_day_off: お店の休みを、スタッフの「月の休みの数」に入れるか（特別休暇は入れない）
+-- note: その日の行事・連絡（カレンダーに赤字で出る。例：ENi初詣（昼から））
+create table if not exists store_calendar_days (
+  store_id uuid not null references stores(id) on delete cascade,
+  date date not null,
+  day_status text not null default '' check (day_status in ('', 'closed', 'open')),
+  closed_label text not null default '',
+  counts_as_day_off boolean not null default false,
+  note text not null default '',
+  updated_at timestamptz not null default now(),
+  primary key (store_id, date)
+);
+
 -- ============================================================
 -- ENi（ヘアサロン）向け機能
 -- ============================================================
@@ -847,6 +862,16 @@ alter table staff add constraint staff_role_check check (role in ('admin', 'mana
 alter table staff add column if not exists managed_store_ids uuid[] not null default '{}';
 alter table customers add column if not exists phone text not null default '';
 
+-- 2026-11 シフトのカレンダー：店舗の定休日・月の休みの数、スタッフの呼び名
+-- closed_weekdays：定休日の曜日（0=日〜6=土。例：月曜定休なら {1}）
+-- monthly_days_off：1人の月の休みの数（定休日を含む。例：月曜定休4日を含めて8休なら 8）。
+--   0 のあいだは決めない＝これまでどおり（基本パターン・連勤上限で休みが決まる）
+alter table stores add column if not exists closed_weekdays smallint[] not null default '{}';
+alter table stores add column if not exists monthly_days_off integer not null default 0
+  check (monthly_days_off between 0 and 31);
+-- シフトのカレンダーなどに出す呼び名（空なら名前を出す）
+alter table staff add column if not exists nickname text not null default '';
+
 -- ---- インデックス ----
 -- DMの重複防止と、全体共有ルームが1つだけになるようにする（上で列を足したあとに作る）
 create unique index if not exists idx_chat_rooms_dm_key on chat_rooms (dm_key) where dm_key <> '';
@@ -879,6 +904,7 @@ create index if not exists idx_daily_plans_date on daily_plans (plan_date);
 create index if not exists idx_shift_requests_month on shift_requests (target_month);
 create index if not exists idx_shift_available_month on staff_available_stores (target_month);
 create index if not exists idx_shift_assignments_month on shift_assignments (target_month, date);
+create index if not exists idx_store_calendar_days_date on store_calendar_days (date);
 create index if not exists idx_staff_tasks_assignee on staff_tasks (assignee_staff_id, status);
 create index if not exists idx_staff_tasks_kind on staff_tasks (kind, status);
 create index if not exists idx_task_completions_date on task_completions (date);
@@ -935,6 +961,7 @@ alter table shift_assignments enable row level security;
 alter table work_patterns enable row level security;
 alter table dayoff_requests enable row level security;
 alter table schedule_overrides enable row level security;
+alter table store_calendar_days enable row level security;
 alter table eni_reports enable row level security;
 alter table practice_records enable row level security;
 alter table practice_pairs enable row level security;

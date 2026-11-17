@@ -3,6 +3,7 @@ import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatMonthJa, todayJst } from "@/lib/date";
 import { buildTargetMonth, currentTargetMonth, requestDeadline } from "@/lib/shift/period";
 import { PageHeader } from "@/components/ui";
+import { StoreRulesForm } from "./store-rules-form";
 import { updateShiftRulesAction } from "../actions";
 
 // シフトのルール設定（希望休の締切・自動作成・警告に使われる）
@@ -13,7 +14,8 @@ export default async function ShiftRulesPage({
 }) {
   await requireAdmin();
   const params = await searchParams;
-  const rules = await getDataStore().getShiftRules();
+  const db = getDataStore();
+  const [rules, stores] = await Promise.all([db.getShiftRules(), db.listStores()]);
   const today = todayJst();
   const openMonth = currentTargetMonth(rules, today);
   const buildMonth = buildTargetMonth(rules, today);
@@ -22,8 +24,16 @@ export default async function ShiftRulesPage({
     <div className="page-narrow">
       <PageHeader title="シフトのルール" backHref="/admin/schedule" backLabel="シフトへ戻る" />
 
-      {params.saved && <p className="note note-ok mb-4">保存しました（次の自動作成・希望休の締切から反映されます）</p>}
-      {params.error && <p className="note note-danger mb-4">入力内容を確認してください</p>}
+      {params.saved === "rules" && <p className="note note-ok mb-4">お店の休みの決まりを保存しました（次の自動作成から反映されます）</p>}
+      {params.saved && params.saved !== "rules" && (
+        <p className="note note-ok mb-4">保存しました（次の自動作成・希望休の締切から反映されます）</p>
+      )}
+      {params.error === "rules_db" && (
+        <p className="note note-danger mb-4">
+          保存できませんでした。お店の休みの決まりを使うには、データベースの更新（supabase/schema.sql の再実行）が必要です。
+        </p>
+      )}
+      {params.error && params.error !== "rules_db" && <p className="note note-danger mb-4">入力内容を確認してください</p>}
 
       <div className="card-quiet mb-4 text-sm text-ink-700 space-y-0.5">
         <p className="font-bold">いまの設定だと</p>
@@ -106,6 +116,19 @@ export default async function ShiftRulesPage({
         </div>
         <button type="submit" className="btn-primary w-full">保存する</button>
       </form>
+
+      {/* 店舗ごとの休みの決まり（定休日・月の休みの数）。シフトのカレンダー・休みの数で作る自動作成に使う */}
+      <section className="mt-6 space-y-3">
+        <h2 className="section-title">お店の休みの決まり</h2>
+        <p className="hint !mt-0">
+          定休日の曜日と、1人の月の休みの数（定休日を含む）を店舗ごとに決めます。月の休みの数を決めた店舗は、
+          「自動で作る」が<strong>休みの数で作る</strong>になります（希望休を出していない人も含めて全員。定休日・希望休・管理者が入れた休みを数えて、足りない分を自動で入れます）。
+          特別休暇などの日ごとのお店の休みは、シフトのカレンダーで日をタップして入れます。
+        </p>
+        {stores.map((st) => (
+          <StoreRulesForm key={st.id} store={st} back="" month="" />
+        ))}
+      </section>
     </div>
   );
 }

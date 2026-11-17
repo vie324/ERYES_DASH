@@ -75,6 +75,7 @@ import type {
   StaffTask,
   StaffWithSecret,
   Store,
+  StoreCalendarDay,
   TaskCompletion,
   TaskKind,
   TaskType,
@@ -112,6 +113,7 @@ interface MockDb {
   workPatterns: WorkPatternDay[];
   dayoffRequests: DayoffRequest[];
   scheduleOverrides: ScheduleOverride[];
+  storeCalendarDays: StoreCalendarDay[];
   eniReports: (EniReport & { kind: "stylist" | "weekly" })[];
   practiceRecords: PracticeRecord[];
   practicePairs: PracticePair[];
@@ -214,6 +216,8 @@ function seed(): MockDb {
       lng: 139.701636,
       gpsRadiusM: 100,
       attendanceEnabled: true,
+      closedWeekdays: [],
+      monthlyDaysOff: 0,
     },
     {
       id: "store-2",
@@ -223,6 +227,8 @@ function seed(): MockDb {
       lng: 139.712135,
       gpsRadiusM: 100,
       attendanceEnabled: true,
+      closedWeekdays: [],
+      monthlyDaysOff: 0,
     },
     {
       id: "store-3",
@@ -232,6 +238,8 @@ function seed(): MockDb {
       lng: 139.710106,
       gpsRadiusM: 100,
       attendanceEnabled: true,
+      closedWeekdays: [],
+      monthlyDaysOff: 0,
     },
     // ENi（ヘアサロン）の店舗。ENiのスタッフはここに所属（シフトの店舗の絞り込みの確認用）
     {
@@ -242,6 +250,9 @@ function seed(): MockDb {
       lng: 139.670152,
       gpsRadiusM: 100,
       attendanceEnabled: true,
+      // 月曜定休・定休日を含めて1人8休（シフトのカレンダーと「休みの数で作る」の確認用）
+      closedWeekdays: [1],
+      monthlyDaysOff: 8,
     },
   ];
   const store = stores[0]; // 本店（勤怠・リマインドの既定店舗）
@@ -264,6 +275,7 @@ function seed(): MockDb {
       fixedOvertimeHours: 20,
       isActive: true,
       managedStoreIds: [],
+      nickname: "",
       passwordHash: hashPassword("admin1234"),
     },
     {
@@ -283,6 +295,7 @@ function seed(): MockDb {
       fixedOvertimeHours: 10,
       isActive: true,
       managedStoreIds: [],
+      nickname: "",
       passwordHash: hashPassword("staff1234"),
     },
     {
@@ -301,6 +314,7 @@ function seed(): MockDb {
       fixedOvertimeHours: 20,
       isActive: true,
       managedStoreIds: [],
+      nickname: "",
       passwordHash: hashPassword("staff1234"),
     },
     // 店舗の管理者（イーリスを見る管理者のデモ）。判定は名前ではなく、ロール（manager）と担当店舗で行う
@@ -320,6 +334,7 @@ function seed(): MockDb {
       fixedOvertimeHours: 20,
       isActive: true,
       managedStoreIds: stores.filter((st) => st.name.includes("EREYS")).map((st) => st.id),
+      nickname: "",
       passwordHash: hashPassword("staff1234"),
     },
     // ENi（ヘアサロン）デモ用スタッフ：スタイリスト2名（1名は幹部）＋アシスタント2名
@@ -374,6 +389,8 @@ function seed(): MockDb {
         fixedOvertimeHours: 20,
         isActive: true,
         managedStoreIds: [],
+        // 呼び名（シフトのカレンダーに出る名前）。本番は管理者がマスタ設定で入れる
+        nickname: ({ "staff-3": "だいき", "staff-4": "ゆいな", "staff-5": "あおい", "staff-6": "ひかり" } as Record<string, string>)[id] ?? "",
         passwordHash: hashPassword("staff1234"),
       })
     ),
@@ -1245,6 +1262,7 @@ function seed(): MockDb {
     workPatterns,
     dayoffRequests,
     scheduleOverrides: [],
+    storeCalendarDays: [],
     eniReports,
     practiceRecords,
     practicePairs,
@@ -1354,6 +1372,8 @@ class MockStore implements DataStore {
       lng: base?.lng ?? 139.767125,
       gpsRadiusM: 100,
       attendanceEnabled: true,
+      closedWeekdays: [],
+      monthlyDaysOff: 0,
     };
     this.db.stores.push(created);
     return { ...created };
@@ -1418,6 +1438,7 @@ class MockStore implements DataStore {
       fixedOvertimeHours: input.fixedOvertimeHours,
       isActive: true,
       managedStoreIds: input.managedStoreIds ?? [],
+      nickname: input.nickname ?? "",
       passwordHash: input.passwordHash,
     };
     this.db.staff.push(created);
@@ -1442,6 +1463,7 @@ class MockStore implements DataStore {
         | "fixedOvertimeHours"
         | "isActive"
         | "managedStoreIds"
+        | "nickname"
       >
     > & {
       passwordHash?: string;
@@ -2175,6 +2197,22 @@ class MockStore implements DataStore {
     } else {
       this.db.scheduleOverrides.push({ id: randomUUID(), ...input });
     }
+  }
+
+  async listStoreCalendarDays(filter: { from: string; to: string; storeId?: string }): Promise<StoreCalendarDay[]> {
+    return this.db.storeCalendarDays
+      .filter((d) => d.date >= filter.from && d.date <= filter.to && (!filter.storeId || d.storeId === filter.storeId))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d) => ({ ...d }));
+  }
+
+  async saveStoreCalendarDay(day: StoreCalendarDay): Promise<void> {
+    this.db.storeCalendarDays = this.db.storeCalendarDays.filter(
+      (d) => !(d.storeId === day.storeId && d.date === day.date)
+    );
+    // いつもどおり・メモなしなら行を残さない
+    if (day.dayStatus === "" && day.note.trim() === "") return;
+    this.db.storeCalendarDays.push({ ...day });
   }
 
   async deleteScheduleOverride(staffId: string, date: string): Promise<void> {

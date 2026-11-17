@@ -419,6 +419,8 @@ export async function updateStaffAction(formData: FormData): Promise<void> {
   const current = await getDataStore().getStaff(id);
   await getDataStore().updateStaff(id, {
     name,
+    // 呼び名（シフトのカレンダーなどに出す名前）。欄が無いフォームから来たときは変えない
+    ...(formData.has("nickname") ? { nickname: String(formData.get("nickname") ?? "").trim().slice(0, 12) } : {}),
     storeId: await storeField(formData, current?.storeId ?? ""),
     role: lockSelf ? "admin" : role,
     jobType: jobTypeField(formData),
