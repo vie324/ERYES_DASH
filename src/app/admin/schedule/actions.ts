@@ -12,8 +12,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatMonthJa } from "@/lib/date";
-import { generateAssignments } from "@/lib/shift/assign";
 import { buildShiftMonthInputs } from "@/lib/shift/context";
+import { generateForView } from "@/lib/shift/generate";
 import { loadMonthSchedule } from "@/lib/shift/load";
 import { buildMonthSchedule, SHIFT_TYPE_NAME, shortStoreName } from "@/lib/shift/month";
 import { currentBrandLabel, resolveShiftView, viewStatus } from "@/lib/shift/view";
@@ -33,15 +33,17 @@ function monthParam(formData: FormData): string {
   return month;
 }
 
-/** 戻り先（同じ月・同じ店舗の絞り込み） */
-function backTo(month: string, storeKey: string, extra: string): string {
+/** 戻り先（同じ月・同じ店舗の絞り込み）。カレンダーから押したときはカレンダーへ戻る */
+function backTo(month: string, storeKey: string, extra: string, back: string = ""): string {
   const q = new URLSearchParams({ month });
   if (storeKey) q.set("store", storeKey);
-  return `/admin/schedule?${q.toString()}&${extra}`;
+  const path = back === "calendar" ? "/admin/schedule/calendar" : "/admin/schedule";
+  return `${path}?${q.toString()}&${extra}`;
 }
 
 function revalidateShift() {
   revalidatePath("/admin/schedule");
+  revalidatePath("/admin/schedule/calendar");
   revalidatePath("/staff/schedule");
   revalidatePath("/staff/plan");
   revalidatePath("/staff");
@@ -68,23 +70,24 @@ export async function generateShiftAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const month = monthParam(formData);
   const storeKey = String(formData.get("store") ?? "");
+  const back = String(formData.get("back") ?? "");
   const db = getDataStore();
   const { loaded, view } = await loadView(db, month, storeKey);
   if (viewStatus(loaded.assignments, view.memberIds) === "confirmed") {
-    redirect(backTo(month, storeKey, "error=confirmed"));
+    redirect(backTo(month, storeKey, "error=confirmed", back));
   }
 
-  // 希望休・基本パターン・個別調整・段数・会議の参加者など、組み方に必要な前提をまとめて取る
-  // （画面の警告計算と共通）。作るのは表に出ている人の分だけ
+  // 希望休・基本パターン・個別調整・段数・会議の参加者・お店の休みなど、組み方に必要な前提をまとめて取る
+  // （画面の警告計算と共通）。作るのは表に出ている人の分だけ。
+  // 月の休みの数が決まっている店舗の人は「休みの数で作る」（希望休を出していない人も含めて全員）
   const inputs = await buildShiftMonthInputs(db, month);
-  const staffIds = inputs.staffIds.filter((id) => view.memberIds.has(id));
-  if (staffIds.length === 0) {
-    redirect(backTo(month, storeKey, "error=nostaff"));
+  const generated = generateForView(inputs, view);
+  if (generated.quotaStaffIds.length + generated.otherStaffIds.length === 0) {
+    redirect(backTo(month, storeKey, "error=nostaff", back));
   }
-  const { assignments } = generateAssignments({ ...inputs, staffIds });
-  await db.replaceMonthAssignments(month, assignments, { staffIds: [...view.memberIds] });
+  await db.replaceMonthAssignments(month, generated.assignments, { staffIds: [...view.memberIds] });
   revalidateShift();
-  redirect(backTo(month, storeKey, "done=generated"));
+  redirect(backTo(month, storeKey, "done=generated", back));
 }
 
 /** スタッフに公開する（シフトの確定）。表に出ている人の分を公開し、その人たちに通知する */
@@ -92,10 +95,11 @@ export async function publishShiftAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const month = monthParam(formData);
   const storeKey = String(formData.get("store") ?? "");
+  const back = String(formData.get("back") ?? "");
   const db = getDataStore();
   const { loaded, view } = await loadView(db, month, storeKey);
   if (viewStatus(loaded.assignments, view.memberIds) === "none") {
-    redirect(backTo(month, storeKey, "error=empty"));
+    redirect(backTo(month, storeKey, "error=empty", back));
   }
   await db.setMonthAssignmentStatus(month, "confirmed", [...view.memberIds]);
   await notifyQuietly(db, [...view.memberIds], {
@@ -106,7 +110,7 @@ export async function publishShiftAction(formData: FormData): Promise<void> {
     kind: "shift",
   });
   revalidateShift();
-  redirect(backTo(month, storeKey, "done=published"));
+  redirect(backTo(month, storeKey, "done=published", back));
 }
 
 /** 公開をやめて下書きに戻す（スタッフにはいつもどおりの予定が出る。自動作成のやり直しもできる） */
@@ -114,11 +118,12 @@ export async function unpublishShiftAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const month = monthParam(formData);
   const storeKey = String(formData.get("store") ?? "");
+  const back = String(formData.get("back") ?? "");
   const db = getDataStore();
   const { view } = await loadView(db, month, storeKey);
   await db.setMonthAssignmentStatus(month, "draft", [...view.memberIds]);
   revalidateShift();
-  redirect(backTo(month, storeKey, "done=unpublished"));
+  redirect(backTo(month, storeKey, "done=unpublished", back));
 }
 
 /** 下書きのシフト表を削除して、いつもどおりの予定（基本パターン＋希望休）に戻す */
@@ -126,14 +131,15 @@ export async function discardDraftAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const month = monthParam(formData);
   const storeKey = String(formData.get("store") ?? "");
+  const back = String(formData.get("back") ?? "");
   const db = getDataStore();
   const { loaded, view } = await loadView(db, month, storeKey);
   if (viewStatus(loaded.assignments, view.memberIds) === "confirmed") {
-    redirect(backTo(month, storeKey, "error=confirmed"));
+    redirect(backTo(month, storeKey, "error=confirmed", back));
   }
   await db.replaceMonthAssignments(month, [], { staffIds: [...view.memberIds] });
   revalidateShift();
-  redirect(backTo(month, storeKey, "done=discarded"));
+  redirect(backTo(month, storeKey, "done=discarded", back));
 }
 
 // ---------------------------------------------------------------- 表のマス
@@ -342,4 +348,38 @@ export async function updateShiftRulesAction(formData: FormData): Promise<void> 
   revalidatePath("/staff/tasks");
   revalidateShift();
   redirect("/admin/schedule/settings?saved=1");
+}
+
+/**
+ * 店舗の休みの決まり（定休日の曜日・月の休みの数）を保存する。
+ * 月の休みの数を決めた店舗は、自動作成が「休みの数で作る」になる（希望休を出していない人も含めて全員）。
+ */
+export async function saveStoreShiftRulesAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const storeId = String(formData.get("store_id") ?? "");
+  const back = String(formData.get("back") ?? "");
+  const month = String(formData.get("month") ?? "");
+  const closedWeekdays = [...new Set(formData.getAll("closed_weekdays").map(Number))]
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+    .sort();
+  const monthlyDaysOff = Number(formData.get("monthly_days_off") ?? 0);
+  const backUrl = (extra: string) =>
+    back === "calendar"
+      ? `/admin/schedule/calendar?${new URLSearchParams({ ...(/^\d{4}-\d{2}$/.test(month) ? { month } : {}), store: storeId }).toString()}&${extra}#rules`
+      : `/admin/schedule/settings?${extra}#store-${storeId}`;
+  if (!Number.isInteger(monthlyDaysOff) || monthlyDaysOff < 0 || monthlyDaysOff > 31) {
+    redirect(backUrl("error=rules"));
+  }
+  const db = getDataStore();
+  const stores = await db.listStores();
+  if (!stores.some((s) => s.id === storeId)) redirect(backUrl("error=rules"));
+  try {
+    await db.updateStoreById(storeId, { closedWeekdays, monthlyDaysOff });
+  } catch (e) {
+    console.error(`[shift] 店舗の休みの決まりの保存に失敗: ${e instanceof Error ? e.message : String(e)}`);
+    redirect(backUrl("error=rules_db"));
+  }
+  revalidatePath("/admin/schedule/settings");
+  revalidateShift();
+  redirect(backUrl("saved=rules"));
 }

@@ -124,7 +124,7 @@ export function AppShell({
         </div>
       )}
 
-      <div className="lg:pl-64 flex flex-col min-h-dvh">
+      <div className="lg:pl-64 print:pl-0 flex flex-col min-h-dvh">
         {!immersive && banner}
         {/* ---------------- 上部バー ---------------- */}
         {!immersive && (
@@ -198,7 +198,7 @@ export function AppShell({
           className={
             immersive
               ? "flex-1 w-full"
-              : "flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16 animate-fade-up"
+              : "flex-1 mx-auto w-full max-w-6xl px-3 sm:px-5 py-5 sm:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-16 animate-fade-up print:max-w-none print:p-0 print:animate-none"
           }
         >
           {children}

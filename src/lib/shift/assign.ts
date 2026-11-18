@@ -77,6 +77,8 @@ export interface AssignContext {
   patterns?: Map<string, Map<number, PatternDay>>;
   /** staffId → 日付 → 個別調整（管理者が先に決めた日）。休みなら入れない、出勤なら必ず入れる */
   overrides?: Map<string, Map<string, OverrideDay>>;
+  /** storeId → お店の休みの日（定休日・特別休暇など）。その日はその店舗に入れない・人数不足にしない */
+  closedStoreDates?: Map<string, Set<string>>;
 }
 
 /**
@@ -163,10 +165,11 @@ export function stylistStoresOf(
  * その店舗に入れる人が全員、基本パターンでその曜日はお休み＝定休日として、人数不足にしない。
  */
 export function isStoreOpenOn(
-  ctx: Pick<AssignContext, "staffIds" | "availableStores" | "patterns">,
+  ctx: Pick<AssignContext, "staffIds" | "availableStores" | "patterns" | "closedStoreDates">,
   storeId: string,
   date: string
 ): boolean {
+  if (ctx.closedStoreDates?.get(storeId)?.has(date)) return false;
   return ctx.staffIds.some(
     (s) => (ctx.availableStores.get(s)?.has(storeId) ?? false) && !isPatternOff(ctx, s, date)
   );
@@ -262,6 +265,13 @@ export function generateAssignments(ctx: AssignContext): {
   const inRoster = (staffId: string) => (ctx.availableStores.get(staffId)?.size ?? 0) > 0;
   const fixedOff = (staffId: string, d: string) => isFixedOff(ctx, staffId, d);
   const forcedOn = (staffId: string, d: string) => ctx.overrides?.get(staffId)?.get(d)?.isWorking === true;
+  /** その店舗がその日お休み（定休日・特別休暇など） */
+  const storeClosed = (storeId: string, d: string) => ctx.closedStoreDates?.get(storeId)?.has(d) ?? false;
+  /** 入れる店舗がその日すべてお休み */
+  const allStoresClosed = (staffId: string, d: string) => {
+    const stores = [...(ctx.availableStores.get(staffId) ?? [])];
+    return stores.length > 0 && stores.every((st) => storeClosed(st, d));
+  };
   const stylistStores = stylistStoresOf(ctx);
   /** スタイリストのいない店舗（アイサロンなど）にしか入れない人 */
   const plainOnly = new Set(
@@ -339,7 +349,7 @@ export function generateAssignments(ctx: AssignContext): {
     /** 今日働ける人（決まっている休み・連勤上限を除く。個別調整で出勤の人は別枠） */
     const canWorkToday = (staffId: string): boolean => {
       if (!inRoster(staffId) || forcedOn(staffId, date)) return false;
-      if (fixedOff(staffId, date)) return false;
+      if (fixedOff(staffId, date) || allStoresClosed(staffId, date)) return false;
       return runBefore(staffId) < ctx.rules.maxConsecutiveDays;
     };
     /** この日入れると、次の「必ず出たい日」（土日・イベント・会議など）に連勤上限で入れなくなるか */
@@ -505,6 +515,7 @@ export function generateAssignments(ctx: AssignContext): {
       while (progress && pool.length > 0) {
         progress = false;
         for (const storeId of storeOrder) {
+          if (storeClosed(storeId, date)) continue;
           if (pickedByStore.get(storeId)!.length >= targetOf(storeId)) continue;
           const cands = pool.filter((s) => ctx.availableStores.get(s)!.has(storeId));
           if (cands.length === 0) continue;
@@ -520,7 +531,12 @@ export function generateAssignments(ctx: AssignContext): {
     for (const s of forcedToday) {
       const allowed = ctx.availableStores.get(s)!;
       const home = ctx.homeStores?.get(s);
-      const storeId = home && allowed.has(home) ? home : (storeOrder.find((st) => allowed.has(st)) ?? [...allowed][0]);
+      // 管理者が出勤にした日は、お休みの店舗でも入れる（開いている店舗があればそちら）
+      const openHome = home && allowed.has(home) && !storeClosed(home, date) ? home : null;
+      const storeId =
+        openHome ??
+        storeOrder.find((st) => allowed.has(st) && !storeClosed(st, date)) ??
+        (home && allowed.has(home) ? home : (storeOrder.find((st) => allowed.has(st)) ?? [...allowed][0]));
       if (!pickedByStore.has(storeId)) continue; // 店舗一覧に無い店舗（削除済みなど）
       place(s, storeId);
     }
@@ -551,16 +567,17 @@ export function generateAssignments(ctx: AssignContext): {
       const rest: string[] = [];
       for (const s of onlyPlain) {
         const home = ctx.homeStores?.get(s);
-        if (home && ctx.availableStores.get(s)!.has(home) && pickedByStore.has(home)) place(s, home);
+        if (home && ctx.availableStores.get(s)!.has(home) && pickedByStore.has(home) && !storeClosed(home, date)) place(s, home);
         else rest.push(s);
       }
       fillRoundRobin(rest, () => Number.POSITIVE_INFINITY);
       const countAt = (storeId: string) => pickedByStore.get(storeId)!.length;
       for (const short of plainStores) {
+        if (storeClosed(short, date)) continue;
         while (countAt(short) < ctx.rules.minStaffPerStoreDay) {
           let moved = false;
           const donors = plainStores
-            .filter((d) => d !== short && countAt(d) > countAt(short) + 1)
+            .filter((d) => d !== short && !storeClosed(d, date) && countAt(d) > countAt(short) + 1)
             .sort((a, b) => countAt(b) - countAt(a));
           for (const donor of donors) {
             const donorPicked = pickedByStore.get(donor)!;
@@ -691,7 +708,7 @@ export type BoardContext = Pick<AssignContext, "storeIds" | "prefs" | "available
 } & Partial<
     Pick<
       AssignContext,
-      "staffIds" | "jobTypes" | "tiers" | "requiredByDate" | "allHandsDates" | "patterns" | "overrides"
+      "staffIds" | "jobTypes" | "tiers" | "requiredByDate" | "allHandsDates" | "patterns" | "overrides" | "closedStoreDates"
     >
   > & {
     /** 勤務できる店舗を本人が選んだ人（この人だけ「店舗の外」を警告する） */
@@ -732,7 +749,18 @@ export function computeBoardWarnings(
   const isStylist = (staffId: string) => jobTypeOf(staffId) === "stylist";
   const inRoster = (staffId: string) => (ctx.availableStores.get(staffId)?.size ?? 0) > 0;
   const roster = ctx.staffIds ?? [...ctx.availableStores.keys()];
-  const rosterCtx = { staffIds: roster, availableStores: ctx.availableStores, patterns: ctx.patterns };
+  const rosterCtx = {
+    staffIds: roster,
+    availableStores: ctx.availableStores,
+    patterns: ctx.patterns,
+    closedStoreDates: ctx.closedStoreDates,
+  };
+  const storeClosed = (storeId: string, d: string) => ctx.closedStoreDates?.get(storeId)?.has(d) ?? false;
+  /** 入れる店舗がその日すべてお休み（定休日・特別休暇など）。休みの重なり・会議の欠席に数えない */
+  const allStoresClosed = (staffId: string, d: string) => {
+    const stores = [...(ctx.availableStores.get(staffId) ?? [])];
+    return stores.length > 0 && stores.every((st) => storeClosed(st, d));
+  };
   const stylistStores = stylistStoresOf({ ...rosterCtx, jobTypes: ctx.jobTypes });
   /** その月に誰か入れる店舗（誰も入れない店舗の人数不足は出さない） */
   const activeStores = ctx.storeIds.filter((storeId) => roster.some((s) => ctx.availableStores.get(s)?.has(storeId)));
@@ -745,6 +773,7 @@ export function computeBoardWarnings(
   }
   for (const date of dates) {
     for (const storeId of activeStores) {
+      if (storeClosed(storeId, date)) continue;
       const assigned = countByStoreDate.get(`${date}|${storeId}`) ?? 0;
       if (assigned < ctx.rules.minStaffPerStoreDay && (assigned > 0 || isStoreOpenOn(rosterCtx, storeId, date))) {
         warnings.coverage.push({
@@ -814,7 +843,9 @@ export function computeBoardWarnings(
     const allHands = ctx.allHandsDates?.has(date) ?? false;
 
     // スタイリストの休みが重なっていないか（3段同士は必ず別々）。基本パターンでお休みの曜日（定休日）は数えない
-    const stylistsOff = rosterStylists.filter((s) => !assignedSet.has(s) && !isPatternOff(ctx, s, date));
+    const stylistsOff = rosterStylists.filter(
+      (s) => !assignedSet.has(s) && !isPatternOff(ctx, s, date) && !allStoresClosed(s, date)
+    );
     if (stylistsOff.length >= 2) {
       const top = stylistsOff.filter((s) => tierOf(s) >= TOP_TIER).length >= 2;
       warnings.stylistOffOverlap.push({ date, staffIds: stylistsOff, top });
@@ -822,7 +853,7 @@ export function computeBoardWarnings(
 
     // 人はいるのにスタイリストがいない店舗（スタイリストが入る店舗だけ）
     for (const storeId of ctx.storeIds) {
-      if (!stylistStores.has(storeId)) continue;
+      if (!stylistStores.has(storeId) || storeClosed(storeId, date)) continue;
       const here = todays.filter((a) => a.storeId === storeId);
       if (here.length > 0 && !here.some((a) => isStylist(a.staffId))) {
         warnings.noStylist.push({ date, storeId });
@@ -831,12 +862,14 @@ export function computeBoardWarnings(
 
     // 会議の参加者なのに休み
     for (const staffId of ctx.requiredByDate?.get(date) ?? []) {
-      if (!assignedSet.has(staffId) && inRoster(staffId)) warnings.meetingAbsent.push({ date, staffId });
+      if (!assignedSet.has(staffId) && inRoster(staffId) && !allStoresClosed(staffId, date)) {
+        warnings.meetingAbsent.push({ date, staffId });
+      }
     }
 
     // 余り（有休候補）：スタイリストの入る各店舗のアシスタントが「段数の合計＋2」に達していて、
     // まだ出られる人が残っている日
-    const capped = ctx.storeIds.filter((storeId) => stylistStores.has(storeId));
+    const capped = ctx.storeIds.filter((storeId) => stylistStores.has(storeId) && !storeClosed(storeId, date));
     if (!allHands && capped.length > 0) {
       const full = capped.every((storeId) => {
         const here = todays.filter((a) => a.storeId === storeId);

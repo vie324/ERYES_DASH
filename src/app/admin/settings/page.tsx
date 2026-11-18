@@ -239,6 +239,10 @@ export default async function AdminSettingsPage({
                     <input name="name" defaultValue={s.name} className="input" required />
                   </div>
                   <div>
+                    <label className="label">呼び名</label>
+                    <input name="nickname" defaultValue={s.nickname} maxLength={12} placeholder="例）たかひろ" className="input" />
+                  </div>
+                  <div>
                     <label className="label">所属店舗</label>
                     <select name="store_id" defaultValue={s.storeId} className="input">
                       {stores.map((st) => (

@@ -23,6 +23,7 @@ const person = (id: string, isActive = true): Staff => ({
   fixedOvertimeHours: 20,
   isActive,
   managedStoreIds: [],
+  nickname: "",
 });
 
 describe("全体共有に投稿できる人", () => {

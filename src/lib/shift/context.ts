@@ -8,8 +8,10 @@ import { isAllHands, participantsOf } from "@/lib/eni/committees";
 import { normalizeTiers } from "@/lib/eni/forms";
 import { buildMonthSchedule, chosenStoresOf, workingDatesOf } from "@/lib/shift/month";
 import { listDayoffsWithLegacy, listRequestStatuses, type RequestStatus } from "@/lib/shift/requests";
+import { closuresByStore, type Closure } from "@/lib/shift/calendar";
 import type {
   AssistantRank,
+  CompanyEvent,
   DataStore,
   DayoffRequest,
   JobType,
@@ -19,6 +21,7 @@ import type {
   ShiftPreference,
   Staff,
   Store,
+  StoreCalendarDay,
   WorkPatternDay,
 } from "@/lib/data/types";
 import type { AssignContext, OverrideDay, PatternDay } from "@/lib/shift/assign";
@@ -43,6 +46,11 @@ export interface ShiftMonthInputs extends AssignContext {
   chosenStores: Map<string, Set<string>>;
   /** 希望休の提出状況（staffId → 状況。未提出の人はキーが無い） */
   requestStatuses: Map<string, RequestStatus>;
+  /** 店舗の日ごとの設定（お店の休み・行事メモ）と、その月の会社のイベント */
+  calendarDays: StoreCalendarDay[];
+  companyEvents: CompanyEvent[];
+  /** storeId → date → お店の休み（定休日・特別休暇など） */
+  closures: Map<string, Map<string, Closure>>;
   /** 画面表示用の元データ */
   assignments: ShiftAssignment[];
   dayoffs: DayoffRequest[];
@@ -71,6 +79,8 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     meetings,
     committees,
     orgMembers,
+    calendarDays,
+    companyEvents,
   ] = await Promise.all([
     db.listStores(),
     db.listStaff(),
@@ -88,6 +98,8 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     db.listMeetings(range),
     db.listCommittees(),
     db.listOrgMembers(),
+    db.listStoreCalendarDays(range),
+    db.listCompanyEvents(range),
   ]);
 
   const activeStaff = staffList.filter((s) => s.isActive);
@@ -186,6 +198,10 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     for (const id of ids) requiredByDate.get(m.meetingDate)!.add(id);
   }
 
+  // お店の休み（定休日・特別休暇など）。その日はその店舗にシフトを入れない
+  const closures = closuresByStore(stores, calendarDays, month);
+  const closedStoreDates = new Map([...closures].map(([storeId, m]) => [storeId, new Set(m.keys())]));
+
   return {
     targetMonth: month,
     storeIds: stores.map((s) => s.id),
@@ -202,6 +218,7 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     requiredByDate,
     patterns,
     overrides,
+    closedStoreDates,
     stores,
     staffList,
     activeStaff,
@@ -211,6 +228,9 @@ export async function buildShiftMonthInputs(db: DataStore, month: string): Promi
     explicitStores,
     chosenStores: explicit,
     requestStatuses,
+    calendarDays,
+    companyEvents,
+    closures,
     assignments,
     dayoffs,
     patternRows,

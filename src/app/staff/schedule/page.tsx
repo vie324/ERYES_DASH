@@ -10,6 +10,7 @@ import { getMyRequestStatus } from "@/lib/shift/requests";
 import { MonthNav, PageHeader, ScrollHint, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { MyShiftList, ShiftPersonTable, ShiftStoreTable } from "@/components/shift-table";
+import { StaffShiftCalendar } from "./staff-calendar";
 
 // シフト（スタッフ用）：自分の1ヶ月・みんなのシフト・希望休の提出への入口を1画面に。
 // 以前は「出勤スケジュール」と「旧シフト機能（早番・遅番）」の2画面に分かれていて、
@@ -23,7 +24,7 @@ export default async function StaffSchedulePage({
   const params = await searchParams;
   const today = todayJst();
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
-  const view = params.view === "store" ? "store" : "person";
+  const view = params.view === "store" ? "store" : params.view === "calendar" ? "calendar" : "person";
 
   const db = getDataStore();
   const brand = (await getBrand()) ?? "eni";
@@ -62,7 +63,7 @@ export default async function StaffSchedulePage({
   const href = (patch: { month?: string; view?: string; store?: string }) => {
     const q = new URLSearchParams();
     q.set("month", patch.month ?? month);
-    const v = patch.view ?? (view === "store" ? "store" : "");
+    const v = patch.view ?? (view === "person" ? "" : view);
     if (v) q.set("view", v);
     const st = patch.store ?? filterKey;
     if (st) q.set("store", st);
@@ -151,17 +152,20 @@ export default async function StaffSchedulePage({
       {/* ---- みんなのシフト ---- */}
       <section className="card">
         <div className="flex items-center gap-2 flex-wrap mb-3">
-          <h2 className="section-title !mb-0 flex-1">みんなのシフト</h2>
-          {multiStore && (
-            <div className="flex gap-1.5">
-              <Link href={href({ view: "" })} className={`chip ${view === "person" ? "chip-active" : ""}`}>
-                人ごと
-              </Link>
+          <h2 className="section-title !mb-0 w-full sm:w-auto sm:flex-1">みんなのシフト</h2>
+          <div className="flex gap-1.5">
+            <Link href={href({ view: "" })} className={`chip ${view === "person" ? "chip-active" : ""}`}>
+              人ごと
+            </Link>
+            {multiStore && (
               <Link href={href({ view: "store" })} className={`chip ${view === "store" ? "chip-active" : ""}`}>
                 店舗ごと
               </Link>
-            </div>
-          )}
+            )}
+            <Link href={href({ view: "calendar" })} className={`chip ${view === "calendar" ? "chip-active" : ""}`}>
+              カレンダー
+            </Link>
+          </div>
         </div>
         {multiStore && (
           <div className="flex gap-1.5 flex-wrap mb-3">
@@ -185,7 +189,17 @@ export default async function StaffSchedulePage({
             )}
           </div>
         )}
-        {view === "store" && multiStore ? (
+        {view === "calendar" ? (
+          <StaffShiftCalendar
+            month={month}
+            storeParam={
+              filterKey && filterKey !== "all"
+                ? filterKey
+                : (activeStaff.find((s) => s.id === session.staffId)?.storeId ?? undefined)
+            }
+            brandLabel={BRAND_INFO[brand].label}
+          />
+        ) : view === "store" && multiStore ? (
           <ShiftStoreTable schedule={schedule} staff={members} stores={shownStores} viewerId={session.staffId} />
         ) : (
           <ShiftPersonTable
@@ -200,8 +214,8 @@ export default async function StaffSchedulePage({
             }
           />
         )}
-        <ScrollHint text="横にスクロールすると他のスタッフも見られます" />
-        <p className="text-xs text-ink-400 mt-2 leading-relaxed">
+        {view !== "calendar" && <ScrollHint text="横にスクロールすると他のスタッフも見られます" />}
+        <p className={`text-xs text-ink-400 mt-2 leading-relaxed ${view === "calendar" ? "hidden" : ""}`}>
           「10-19」＝10:00〜19:00の出勤、「早」「遅」＝早番・遅番、「休」＝休み（希＝希望休・有＝有休）。
           {multiStore && view === "person" && "色の点は出勤する店舗です（「店舗ごと」で店舗別に見られます）。"}
         </p>

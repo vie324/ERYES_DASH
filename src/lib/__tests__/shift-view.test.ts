@@ -22,6 +22,8 @@ const store = (id: string, name: string): Store => ({
   lng: 139.6,
   gpsRadiusM: 100,
   attendanceEnabled: true,
+  closedWeekdays: [],
+  monthlyDaysOff: 0,
 });
 const EREYS = store("s-eyes", "EREYS 自由が丘店");
 const ENI = store("s-eni", "ENi 自由が丘店");
@@ -44,6 +46,7 @@ function person(id: string, patch: Partial<Staff> = {}): Staff {
     fixedOvertimeHours: 20,
     isActive: true,
     managedStoreIds: [],
+    nickname: "",
     ...patch,
   };
 }
