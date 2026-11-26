@@ -45,3 +45,16 @@ describe("在庫（18）", () => {
     expect(open.length).toBeGreaterThan(0);
   });
 });
+
+describe("棚卸しの照らし合わせ（18）", () => {
+  it("確定した棚卸しの数から、これからの在庫を数える", async () => {
+    const { listProducts } = await import("@/lib/orders");
+    const p = (await listProducts()).find((x) => x.name.startsWith("ヘアオイル"))!;
+    const st = await fx().stocktakes.insert({ storeId: "store-4", status: "confirmed", countedOn: "2026-11-01", confirmedAt: new Date() });
+    await fx().stocktakeLines.insert({ stocktakeId: st.id, productId: p.id, theoretical: 5, counted: 7, countedSet: true });
+    // 確定のあとに入荷2
+    await new Promise((r) => setTimeout(r, 5));
+    await recordMovement({ storeId: "store-4", productId: p.id, kind: "receive", quantity: 2, createdBy: "staff-3" });
+    expect((await currentStock("store-4")).get(p.id)).toBe(9);
+  });
+});
