@@ -306,13 +306,23 @@ function buildViewerBlock(viewer: Viewer): string {
 /**
  * system に渡すブロックを組み立てる。
  *  1. 土台（システムプロンプト＋02/04/06/07/08/15）…… 毎回同じなのでキャッシュ対象
+ *  1-2. 代表の教育（依頼11。教育の画面で代表だけが足す）…… めったに変わらないのでキャッシュ対象
  *  2. 話題ぶん（キーワードで選んだ知識）…… 同じ組み合わせが続く間はキャッシュが効く
- *  3. 相談者の情報（呼び名）…… 人ごとに違うのでキャッシュしない（最後に置く）
+ *  3. 相談者の情報（呼び名）…… 人ごとに違うのでキャッシュしない
+ *  4. 社内Wikiの関連ページ（ルールの質問のとき。依頼11）…… 相談ごとに違うので最後に置く
+ * ほかの人の相談や、前の会話の中身は入れない（会話をまたぐ記憶は作らない）。
  */
-export function buildSystemBlocks(turns: ChatTurn[], viewer: Viewer): SystemBlock[] {
+export function buildSystemBlocks(
+  turns: ChatTurn[],
+  viewer: Viewer,
+  extra: { training?: string; wiki?: string } = {}
+): SystemBlock[] {
   const { system, knowledge } = load();
   const core = system + CORE_KNOWLEDGE.map((n) => knowledge.get(n) ?? "").join("");
   const blocks: SystemBlock[] = [{ type: "text", text: core, cache_control: { type: "ephemeral" } }];
+  if (extra.training) {
+    blocks.push({ type: "text", text: extra.training, cache_control: { type: "ephemeral" } });
+  }
 
   const extraText = pickExtras(turns)
     .map((n) => knowledge.get(n) ?? "")
@@ -322,5 +332,6 @@ export function buildSystemBlocks(turns: ChatTurn[], viewer: Viewer): SystemBloc
   }
 
   blocks.push({ type: "text", text: buildViewerBlock(viewer) });
+  if (extra.wiki) blocks.push({ type: "text", text: extra.wiki });
   return blocks;
 }

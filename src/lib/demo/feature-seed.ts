@@ -58,7 +58,57 @@ async function seedSns(put: DemoPut, today: string) {
   );
 }
 
+async function seedAiAndWiki(put: DemoPut) {
+  put(t.aiTrainings, [
+    {
+      kind: "philosophy",
+      title: "失敗したとき",
+      body: "失敗した話を聞いたら、まず「話してくれてありがとう」と受け止める。責めずに、次の一歩を一緒に1つだけ決める。",
+      isActive: true,
+      sortOrder: 10,
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      kind: "ng",
+      title: "",
+      body: "「普通は」「みんなできてる」と比べる言い方はしない。",
+      isActive: true,
+      sortOrder: 10,
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+  ]);
+  put(t.wikiPages, [
+    {
+      title: "遅刻・欠勤の連絡のしかた",
+      category: "就業ルール",
+      visibility: "all",
+      body: "# 遅刻・欠勤の連絡\n\n1. 分かった時点で、すぐに店長へ電話する（LINEだけで済ませない）\n2. 出られる時間の目安を伝える\n3. 当日の予約のお客様の対応は、店長と一緒に決める\n\n**開店30分前まで**に連絡がない場合は、店長から本人に電話します。",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      title: "シャンプーの基本の流れ",
+      category: "技術",
+      visibility: "all",
+      body: "## 流れ\n\n- お湯の温度をお客様の手首で確かめる\n- 生え際から後ろへ、指の腹で洗う\n- すすぎは2回。耳の後ろの流し残しに気をつける\n\n| 工程 | 目安の時間 |\n| --- | --- |\n| 予洗い | 1分 |\n| シャンプー | 3分 |\n| すすぎ | 2分 |",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      title: "店長会議の進め方（幹部用）",
+      category: "店舗運営",
+      visibility: "exec",
+      body: "幹部だけが見られるページの例です。数字の振り返り → 来月の重点 → 決めたことの担当と期限、の順で進めます。",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+  ]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
   const today = todayJst();
   await seedSns(put, today);
+  await seedAiAndWiki(put);
 });
