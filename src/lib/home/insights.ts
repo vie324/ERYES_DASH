@@ -3,7 +3,7 @@
 // 見せてよい分だけをここで組み立てて返す。名前つきのデータは、見せない人の分は最初から作らない
 // （画面で隠すだけにしない。この関数の戻り値をそのままAPIで返しても漏れないようにする）。
 
-import { addDays, jstDayBoundsUtc, weekStartOf } from "@/lib/date";
+import { addDays, weekStartOf } from "@/lib/date";
 import { brandStoreIds, shortStoreName } from "@/lib/shift/month";
 import { isTaskOverdue, routineAchievementByAssignee } from "@/lib/tasks";
 import { buildRoutineStatuses } from "@/lib/eni/routines";
@@ -14,6 +14,7 @@ import {
   type InsightLevel,
   type InsightVisibility,
 } from "@/lib/home/visibility";
+import { listThanks } from "@/lib/sns";
 import type { DataStore, Staff, Store } from "@/lib/data/types";
 
 export interface InsightViewer {
@@ -114,20 +115,18 @@ async function thanksCard(
   nameOf: (id: string) => string
 ): Promise<InsightCard> {
   const weekStart = weekStartOf(today);
-  const posts = await db.listThanksPosts({
-    from: jstDayBoundsUtc(weekStart).start,
-    to: jstDayBoundsUtc(addDays(weekStart, 6)).end,
-  });
+  // 社内SNS（依頼10）と同じデータ（今のサンクスカード＋取り込んだ昔のカード）で数える
+  const posts = await listThanks(db, { from: weekStart, to: addDays(weekStart, 6) });
   const senders = new Map<string, number>();
   const receivers = new Map<string, number>();
   for (const p of posts) {
-    senders.set(p.fromStaffId, (senders.get(p.fromStaffId) ?? 0) + 1);
-    receivers.set(p.toStaffId, (receivers.get(p.toStaffId) ?? 0) + 1);
+    if (p.fromStaffId) senders.set(p.fromStaffId, (senders.get(p.fromStaffId) ?? 0) + 1);
+    if (p.toStaffId) receivers.set(p.toStaffId, (receivers.get(p.toStaffId) ?? 0) + 1);
   }
   const sorted = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]);
   return {
     ...base,
-    href: "/staff/thanks",
+    href: "/staff/sns?tab=thanks",
     self: showSelf
       ? {
           text: `今週あなたは 送った ${senders.get(viewer.staffId) ?? 0}枚・もらった ${receivers.get(viewer.staffId) ?? 0}枚`,

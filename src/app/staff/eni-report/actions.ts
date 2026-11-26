@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst } from "@/lib/date";
+import { recordSubmission } from "@/lib/required-inputs/submissions";
 import {
   computeStylistCalc,
   normalizeTiers,
@@ -69,6 +70,9 @@ export async function saveStylistReportAction(formData: FormData): Promise<void>
       ...(calc.rebookRate !== null ? { rebook_rate: calc.rebookRate } : {}),
     },
   });
+  // 入力した日時（依頼14：インセンティブは締め日までに入力したものだけ）。日報と売上の両方
+  await recordSubmission(session.staffId, "daily_report", date);
+  await recordSubmission(session.staffId, "sales", date);
   revalidatePath("/staff/eni-report");
   revalidatePath("/staff/eni-reports");
   redirect(`/staff/eni-report?date=${date}&saved=1`);

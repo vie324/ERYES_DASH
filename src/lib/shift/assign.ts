@@ -713,6 +713,8 @@ export type BoardContext = Pick<AssignContext, "storeIds" | "prefs" | "available
   > & {
     /** 勤務できる店舗を本人が選んだ人（この人だけ「店舗の外」を警告する） */
     explicitStores?: Set<string>;
+    /** 1日ごとの必要人数（"日付|店舗" → 人数。依頼12。無い日は rules.minStaffPerStoreDay） */
+    requiredStaff?: Map<string, number>;
   };
 
 /** 警告の件数（有休候補は参考なので数えない） */
@@ -775,12 +777,13 @@ export function computeBoardWarnings(
     for (const storeId of activeStores) {
       if (storeClosed(storeId, date)) continue;
       const assigned = countByStoreDate.get(`${date}|${storeId}`) ?? 0;
-      if (assigned < ctx.rules.minStaffPerStoreDay && (assigned > 0 || isStoreOpenOn(rosterCtx, storeId, date))) {
+      const required = ctx.requiredStaff?.get(`${date}|${storeId}`) ?? ctx.rules.minStaffPerStoreDay;
+      if (assigned < required && (assigned > 0 || isStoreOpenOn(rosterCtx, storeId, date))) {
         warnings.coverage.push({
           date,
           storeId,
           assigned,
-          required: ctx.rules.minStaffPerStoreDay,
+          required,
         });
       }
     }

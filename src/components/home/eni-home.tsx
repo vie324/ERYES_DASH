@@ -26,6 +26,7 @@ import { InboxBanner } from "@/components/inbox-banner";
 import { Icon, type IconName } from "@/components/icons";
 import { InsightCardView, ReminderTiles, ShortcutGrid, UpcomingEvents } from "@/components/home/parts";
 import { MorningCard, MorningCardButton } from "@/components/home/morning-card";
+import { RequiredInputsCard } from "@/components/required-inputs-card";
 
 /** 直近の全体スケジュールをホームに出す件数 */
 const UPCOMING_EVENTS = 3;
@@ -79,6 +80,9 @@ export async function EniHome({ session }: { session: Session }) {
         <h1 className="ios-large-title mt-1 break-words">{session.name}さん</h1>
         <p className="text-[15px] ios-secondary mt-0.5">おつかれさまです</p>
       </header>
+
+      {/* 依頼14：まだの入力（入力するまで消えない。いちばん上） */}
+      <RequiredInputsCard staffId={session.staffId} variant="ios" />
 
       {/* アナウンス欄（全体共有で固定した投稿。タップで元の投稿へ） */}
       <div className="mt-4 empty:hidden">

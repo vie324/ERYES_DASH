@@ -11,12 +11,15 @@ import { getDayoffNotice } from "@/lib/shift/requests";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary } from "@/lib/tasks";
 import { countExecAttention } from "@/lib/home/badges";
+import { pendingApprovals } from "@/lib/approvals";
 import { countUncommentedReports, isReportReviewer } from "@/lib/eyes/report-comments";
 import { getAppLinks } from "@/lib/settings";
 import { AppShell } from "@/components/app-shell";
 import { PushSetup } from "@/components/push-setup";
 import { DemoBanner } from "@/components/ui";
 import { env } from "@/lib/env";
+import { pendingGateItems } from "@/lib/confirm-gate";
+import { ConfirmGate } from "@/components/confirm-gate";
 import type { Session } from "@/lib/auth/session";
 
 export async function AppFrame({
@@ -116,6 +119,15 @@ export async function AppFrame({
   if (isExecutive) {
     badges.exec = await countExecAttention(db, me, brand, today);
   }
+  // 依頼12・14：承認のお願い（締切後の希望休・打刻の修正・締め日後の救済）。読めないときは出さない
+  if (isExecutive || session.role === "admin" || (session.role === "manager" && reviewer)) {
+    badges.approvals = await pendingApprovals(db, me)
+      .then((list) => list.length)
+      .catch(() => 0);
+  }
+
+  // 依頼14：予定の確認（新しい予定・変更があると、確認するまでほかの画面に進めない）。読めないときは出さない
+  const gateItems = await pendingGateItems(db, session.staffId).catch(() => []);
 
   const navContext: NavContext = {
     role: session.role === "admin" ? "admin" : "staff",
@@ -147,6 +159,7 @@ export async function AppFrame({
       inbox={{ href: "/staff/inbox", count: unreadInbox }}
       banner={<DemoBanner show={isDemoMode()} />}
     >
+      <ConfirmGate items={gateItems} />
       {/* 通知の案内（未許可のときだけ出る）と、アプリアイコンのバッジ（未読トーク＋今日のタスク） */}
       <PushSetup
         publicKey={env.vapidPublicKey}

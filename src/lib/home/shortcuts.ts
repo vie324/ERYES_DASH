@@ -56,7 +56,7 @@ export const SHORTCUT_CATALOG: ShortcutDef[] = [
   { key: "practice", label: "練習時間", href: "/staff/practice", icon: "clock", accent: "gold" },
   { key: "meetings", label: "議事録", href: "/staff/meetings", icon: "users", accent: "sage", badge: "meetings" },
   { key: "eniReports", label: "日報週報", href: "/staff/eni-reports", icon: "fileText", accent: "clay", only: "member" },
-  { key: "thanks", label: "サンクス", href: "/staff/thanks", icon: "heart", accent: "plum" },
+  { key: "thanks", label: "社内SNS", href: "/staff/sns", icon: "heart", accent: "plum" },
   { key: "events", label: "全体予定", href: "/staff/plan?tab=all", icon: "megaphone", accent: "lavender" },
   { key: "schedule", label: "シフト", href: "/staff/schedule", icon: "calendar", accent: "lavender", badge: "schedule" },
   { key: "aiShimon", label: "AIしもん", href: "/staff/ai-shimon", icon: "bot", accent: "gold" },

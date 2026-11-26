@@ -365,6 +365,14 @@ html {
     @apply border-brand-600 bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_2px_8px_rgba(148,129,90,0.3)]
       hover:text-white hover:border-brand-600 hover:brightness-105;
   }
+  /* ラジオ・チェックボックスをチップの見た目で選ぶとき（<input class="peer sr-only"> のすぐ次の .chip）。
+     自作のクラスには peer-checked: などの変化形が効かないため、選んでいる見た目はここでつける */
+  .peer:checked + .chip {
+    @apply border-brand-600 bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_2px_8px_rgba(148,129,90,0.3)];
+  }
+  .peer:focus-visible + .chip {
+    @apply ring-2 ring-brand-400 ring-offset-2;
+  }
 
   /* ---- セグメント（iPhoneの切り替えボタン。「ルーティン／タスク」などの二択・三択）---- */
   .segmented {

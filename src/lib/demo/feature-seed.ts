@@ -1,0 +1,322 @@
+// デモモード（Supabase未設定）で、追加機能（依頼10〜23）を触って確かめられるようにするための見本のデータ。
+// 起動のたびに入り直す（本番では使われない）。スタッフ・店舗は lib/data/mock-store.ts のデモデータ
+// （staff-admin・staff-1〜6・staff-manager／store-1〜4）に合わせている。機能ごとに seedXxx に分けた。
+
+import { registerDemoSeeder, type DemoPut } from "@/lib/data/collections";
+import * as t from "@/lib/data/tables";
+import { addDays, addMonths, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
+import { DEMO_CAPTIONS, demoDay, seeded } from "@/lib/instagram/demo";
+
+/** 日本時間のその日の h 時 */
+function at(date: string, h: number, m = 0): Date {
+  return new Date(jstDayBoundsUtc(date).start.getTime() + (h * 60 + m) * 60_000);
+}
+
+const ENI = "store-4";
+
+async function seedSns(put: DemoPut, today: string) {
+  const prev = addMonths(thisMonthJst(), -1);
+  put(t.snsPosts, [
+    {
+      kind: "case",
+      authorStaffId: "staff-3",
+      storeId: ENI,
+      category: "接客",
+      body: "ご新規のお客様に、仕上げの前にスタイリングの仕方を一緒に練習しました。「家でも同じようにできそう！」と喜んでいただけて、次回のご予約もいただけました。",
+      createdAt: at(addDays(today, -1), 19),
+      pinnedAt: at(addDays(today, -1), 20),
+      pinnedBy: "staff-admin",
+    },
+    {
+      kind: "case",
+      authorStaffId: "staff-1",
+      storeId: "store-1",
+      category: "チームワーク",
+      body: "予約が重なった時間帯、表参道店のスタッフが応援に来てくれて、お待たせせずにご案内できました。",
+      createdAt: at(addDays(today, -2), 18),
+    },
+  ]);
+  // 前月のサンクス（月間表彰の候補が出るように。取り込んだ昔のカードとして入れる）
+  put(
+    t.thanksExtras,
+    [
+      ["staff-4", "staff-5", "シャンプーの回し方が上手になって助かっています！"],
+      ["staff-3", "staff-5", "練習の後片付け、いつもありがとう"],
+      ["staff-6", "staff-5", "朝の準備を全部やってくれていて感動しました"],
+      ["staff-5", "staff-4", "カットの練習を見てくれてありがとうございます"],
+      ["staff-3", "staff-4", "新人さんへの声かけ、さすがです"],
+      ["staff-1", "staff-2", "急なシフト交代、本当に助かりました"],
+    ].map(([from, to, body], i) => ({
+      thanksId: null,
+      fromStaffId: from,
+      toStaffId: to,
+      body,
+      cardColor: ["gold", "rose", "sky", "mint"][i % 4],
+      points: [10, 5, 20, 10, 5, 0][i],
+      originalDate: `${prev}-${String(3 + i * 4).padStart(2, "0")}`,
+      source: "import" as const,
+    }))
+  );
+}
+
+async function seedAiAndWiki(put: DemoPut) {
+  put(t.aiTrainings, [
+    {
+      kind: "philosophy",
+      title: "失敗したとき",
+      body: "失敗した話を聞いたら、まず「話してくれてありがとう」と受け止める。責めずに、次の一歩を一緒に1つだけ決める。",
+      isActive: true,
+      sortOrder: 10,
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      kind: "ng",
+      title: "",
+      body: "「普通は」「みんなできてる」と比べる言い方はしない。",
+      isActive: true,
+      sortOrder: 10,
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+  ]);
+  put(t.wikiPages, [
+    {
+      title: "遅刻・欠勤の連絡のしかた",
+      category: "就業ルール",
+      visibility: "all",
+      body: "# 遅刻・欠勤の連絡\n\n1. 分かった時点で、すぐに店長へ電話する（LINEだけで済ませない）\n2. 出られる時間の目安を伝える\n3. 当日の予約のお客様の対応は、店長と一緒に決める\n\n**開店30分前まで**に連絡がない場合は、店長から本人に電話します。",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      title: "シャンプーの基本の流れ",
+      category: "技術",
+      visibility: "all",
+      body: "## 流れ\n\n- お湯の温度をお客様の手首で確かめる\n- 生え際から後ろへ、指の腹で洗う\n- すすぎは2回。耳の後ろの流し残しに気をつける\n\n| 工程 | 目安の時間 |\n| --- | --- |\n| 予洗い | 1分 |\n| シャンプー | 3分 |\n| すすぎ | 2分 |",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+    {
+      title: "店長会議の進め方（幹部用）",
+      category: "店舗運営",
+      visibility: "exec",
+      body: "幹部だけが見られるページの例です。数字の振り返り → 来月の重点 → 決めたことの担当と期限、の順で進めます。",
+      createdBy: "staff-admin",
+      updatedBy: "staff-admin",
+    },
+  ]);
+}
+
+async function seedShift(put: DemoPut, today: string) {
+  // 締切後の希望休（承認待ち）と、打刻の修正の申請（承認待ち）。店長（山本さん・daiki）か管理者で承認できる
+  put(t.dayoffLateRequests, [
+    { staffId: "staff-5", date: addDays(today, 12), reason: "親戚の結婚式が決まった", paidLeave: true, status: "pending", createdAt: at(addDays(today, -1), 21) },
+  ]);
+  put(t.attendanceCorrections, [
+    { staffId: "staff-6", date: addDays(today, -1), punchType: "out", time: "18:40", reason: "退勤の打刻を忘れました", status: "pending", createdAt: at(today, 9) },
+  ]);
+  // 1日ごとの必要人数（ENi：土日は4人）
+  put(t.shiftStaffingRules, [
+    { storeId: ENI, weekday: 6, date: "", required: 4 },
+    { storeId: ENI, weekday: 0, date: "", required: 4 },
+  ]);
+}
+
+async function seedCash(put: DemoPut, today: string) {
+  // ENi 自由が丘店の、きのうまでの3日分のレジ締め（1日は差額あり・確認済み）
+  const days = [3, 2, 1].map((n) => addDays(today, -n));
+  put(
+    t.registerClosings,
+    days.map((date, i) => {
+      const cashSales = [42000, 38500, 51200][i];
+      const diff = i === 1 ? -100 : 0;
+      const counted = 30000 + cashSales + diff - (i === 2 ? 1200 : 0);
+      return {
+        storeId: ENI,
+        date,
+        changeFund: 30000,
+        cashSales,
+        denominations: { "10000": Math.floor(counted / 10000), "1000": Math.floor((counted % 10000) / 1000), "100": Math.floor((counted % 1000) / 100) },
+        countedTotal: counted,
+        expectedTotal: counted - diff,
+        diff,
+        diffReason: diff ? "お釣りの渡し間違い（100円多く渡した）" : "",
+        salesSource: "manual" as const,
+        closedBy: "staff-3",
+        closedAt: at(date, 19, 10),
+        confirmedBy: i < 2 ? "staff-admin" : null,
+        confirmedAt: i < 2 ? at(date, 20) : null,
+      };
+    })
+  );
+  put(t.cashMovements, [
+    { storeId: ENI, date: days[2], kind: "expense", direction: "out" as const, description: "タオルの洗剤", amount: 1200, createdBy: "staff-3" },
+  ]);
+}
+
+async function seedOrders(put: DemoPut, today: string) {
+  const [beauty, wigShop] = put(t.suppliers, [
+    { name: "ビューティーサプライ（デモ）", orderUrl: "https://example.com/order", contact: "担当 佐々木・03-0000-0000", method: "Web", deadlineNote: "毎週火曜12時", leadDays: 3, sortOrder: 10 },
+    { name: "ウィッグ専門店（デモ）", orderUrl: "https://example.com/wig", contact: "", method: "電話", deadlineNote: "", leadDays: 7, sortOrder: 20 },
+  ]);
+  const products = put(t.products, [
+    { name: "ENi シャンプー 300ml", category: "retail", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 3300, staffPrice: 2310, costPrice: 1200, barcode: "4900000000011", reorderPoint: 5, reorderQty: 12, sortOrder: 10 },
+    { name: "ENi トリートメント 250g", category: "retail", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 3850, staffPrice: 2695, costPrice: 1400, barcode: "4900000000028", reorderPoint: 4, reorderQty: 10, sortOrder: 20 },
+    { name: "カラー剤 7レベル ブラウン", category: "material", brand: "デモカラー", supplierId: beauty.id, unit: "本", retailPrice: 0, staffPrice: 0, costPrice: 650, barcode: "", reorderPoint: 10, reorderQty: 24, sortOrder: 30 },
+    { name: "カットウィッグ（レディース）", category: "wig", brand: "", supplierId: wigShop.id, unit: "体", retailPrice: 0, staffPrice: 4400, costPrice: 3000, barcode: "", reorderPoint: 2, reorderQty: 5, sortOrder: 40 },
+    { name: "ヘアオイル 100ml", category: "staff_sale", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 2970, staffPrice: 2079, costPrice: 1000, barcode: "4900000000035", reorderPoint: 3, reorderQty: 6, sortOrder: 50 },
+  ]);
+  // はじめの在庫（入荷として入れる）と、減った分
+  put(
+    t.inventoryMovements,
+    products.flatMap((p, i) => [
+      { storeId: ENI, productId: p.id, kind: "receive" as const, quantity: [10, 8, 20, 3, 6][i], occurredOn: addDays(today, -20), refType: "demo", createdAt: at(addDays(today, -20), 10) },
+      { storeId: ENI, productId: p.id, kind: (i === 2 ? "use" : "sale") as "use" | "sale", quantity: [6, 2, 12, 2, 1][i], occurredOn: addDays(today, -5), refType: "demo", createdAt: at(addDays(today, -5), 15) },
+    ])
+  );
+  put(t.purchaseOrders, [
+    { storeId: ENI, productId: products[1].id, supplierId: beauty.id, quantity: 10, status: "ordered" as const, orderedBy: "staff-3", orderedAt: at(addDays(today, -1), 11), createdAt: at(addDays(today, -1), 11) },
+  ]);
+  put(t.staffPurchases, [
+    { staffId: "staff-5", storeId: ENI, productId: products[3].id, itemName: products[3].name, category: "wig" as const, quantity: 1, unitPrice: 4400, total: 4400, purchasedOn: addDays(today, -3), recordedBy: "staff-5" },
+    { staffId: "staff-4", storeId: ENI, productId: products[0].id, itemName: products[0].name, category: "staff_sale" as const, quantity: 2, unitPrice: 2310, total: 4620, purchasedOn: addDays(today, -2), recordedBy: "staff-3" },
+  ]);
+}
+
+async function seedGoals(put: DemoPut, today: string) {
+  const month = today.slice(0, 7);
+  const [vision] = put(t.goals, [
+    { level: "company", periodType: "vision", periodKey: String(Number(today.slice(0, 4)) + 5), title: "5年で売上10億（仮。ENiから届き次第差し替え）", targetValue: 1000000000, unit: "円", createdBy: "staff-admin" },
+    { level: "store", storeId: ENI, periodType: "kgi", periodKey: today.slice(0, 4), title: "自由が丘店：今期の売上 1億2千万", targetValue: 120000000, unit: "円", createdBy: "staff-admin" },
+  ]);
+  const [g1] = put(t.goals, [
+    { level: "personal", staffId: "staff-5", storeId: ENI, periodType: "month", periodKey: month, title: "カットのテストに合格する", area: "技術", parentId: vision.id, createdBy: "staff-5" },
+    { level: "personal", staffId: "staff-5", storeId: ENI, periodType: "year", periodKey: today.slice(0, 4), title: "来年の春にデビューする", area: "技術", createdBy: "staff-5" },
+  ]);
+  put(t.reflections, [
+    { staffId: "staff-5", weekKey: addDays(today, -7 - ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7)), done: "ワインディングを毎朝続けられた", notDone: "SNSの投稿ができなかった", next: "週2回は投稿する" },
+  ]);
+  void g1;
+}
+
+async function seedGrowth(put: DemoPut, today: string) {
+  // 動画は試し用の公開サンプル（本番は Cloudflare Stream に上げる）
+  const [hls, mp4] = put(t.curriculumVideos, [
+    { title: "シャンプーの基本（見本の動画）", description: "試し用の公開サンプル動画です。本番ではENiのカリキュラム動画に差し替えます。", provider: "url", providerRef: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", durationSec: 596, status: "ready", createdBy: "staff-admin" },
+    { title: "ブローの手の動き（見本の動画）", description: "試し用の公開サンプル動画（短い動画）です。", provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", durationSec: 5, status: "ready", createdBy: "staff-admin" },
+  ]);
+  const stages = put(t.growthStages, [
+    { name: "入社オリエンテーション", jobType: "assistant", sortOrder: 1, targetMonth: 1, description: "ENiの考え方と、お店の1日の流れを覚える", competencies: "あいさつ・身だしなみ・時間を守る\nENiの理念を自分の言葉で話せる" },
+    { name: "シャンプーデビュー", jobType: "assistant", sortOrder: 2, targetMonth: 3, description: "お客様にシャンプーを任せてもらえる", competencies: "お客様に自分から声をかけられる\n施術中の会話で、お客様の好みを聞き出せる" },
+    { name: "カラーアシスト", jobType: "assistant", sortOrder: 3, targetMonth: 9, description: "カラーの塗布・流しを任せてもらえる", competencies: "薬剤の基本を説明できる\n時間を見ながら、自分から次の準備ができる" },
+    { name: "スタイリストデビュー", jobType: "assistant", sortOrder: 4, targetMonth: 30, description: "カット・カラーでお客様を担当する", competencies: "指名のお客様を月20名\n後輩の練習を見られる" },
+    { name: "まつげ施術デビュー", jobType: "eyes", sortOrder: 1, targetMonth: 3, description: "イーリスの基本の施術を任せてもらえる", competencies: "カウンセリングで希望を聞き取れる\n衛生の決まりを守れる" },
+  ]);
+  const [ori, sham, color] = stages;
+  const items = put(t.curriculumItems, [
+    { stageId: ori.id, title: "理念・ルールのテスト", description: "ENiの考え方と、お店の決まり", sortOrder: 1 },
+    { stageId: ori.id, title: "掃除・準備のチェック", description: "開店前・閉店後の流れ", sortOrder: 2 },
+    { stageId: sham.id, title: "シャンプー 合格", description: "店長にお客様役をしてもらい、10項目すべてできたら合格", videoId: hls.id, requiredPracticeMinutes: 1200, sortOrder: 1 },
+    { stageId: sham.id, title: "ブロー 合格", description: "根元から乾かし、まとまりを出す", videoId: mp4.id, requiredPracticeMinutes: 600, sortOrder: 2 },
+    { stageId: color.id, title: "カラー塗布 合格", description: "根元のリタッチを時間内に", requiredPracticeMinutes: 1800, sortOrder: 1 },
+    { stageId: stages[4].id, title: "まつげ 基本の装着 合格", sortOrder: 1 },
+  ]);
+  put(t.staffProfiles, [
+    { staffId: "staff-3", joinedOn: addMonths(today.slice(0, 7), -40) + "-01", note: "" },
+    { staffId: "staff-4", joinedOn: addMonths(today.slice(0, 7), -26) + "-01", note: "" },
+    { staffId: "staff-5", joinedOn: addMonths(today.slice(0, 7), -5) + "-10", note: "" },
+    { staffId: "staff-6", joinedOn: addMonths(today.slice(0, 7), -10) + "-01", note: "" },
+    { staffId: "staff-1", joinedOn: addMonths(today.slice(0, 7), -14) + "-01", note: "" },
+  ]);
+  const judged = { judgedBy: "staff-3", judgedAt: at(addDays(today, -10), 19) };
+  put(t.curriculumResults, [
+    { staffId: "staff-5", itemId: items[0].id, status: "passed", comment: "よく覚えています！", ...judged },
+    { staffId: "staff-5", itemId: items[1].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-5", itemId: items[2].id, status: "retry", comment: "流しのときの手の向きを、動画の4分あたりで確認しよう", ...judged },
+    { staffId: "staff-6", itemId: items[0].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-6", itemId: items[1].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-6", itemId: items[2].id, status: "passed", comment: "お客様からも好評でした", ...judged },
+    { staffId: "staff-6", itemId: items[3].id, status: "passed", comment: "", ...judged },
+  ]);
+  put(t.videoProgress, [
+    { staffId: "staff-5", videoId: hls.id, maxPositionSec: 240, durationSec: 596, completed: false, lastWatchedAt: at(addDays(today, -2), 21) },
+    { staffId: "staff-6", videoId: hls.id, maxPositionSec: 596, durationSec: 596, completed: true, lastWatchedAt: at(addDays(today, -30), 21) },
+  ]);
+}
+
+async function seedInstagram(put: DemoPut, today: string) {
+  const people: [string, string, number][] = [
+    ["staff-3", "daiki_eni_hair", 2400],
+    ["staff-4", "yuina_eni", 1300],
+    ["staff-1", "misaki_ereys_lash", 900],
+  ];
+  for (const [staffId, username, base] of people) {
+    const [acc] = put(t.instagramAccounts, [
+      { staffId, igUserId: `demo-${staffId}`, username, accountType: "MEDIA_CREATOR", status: "demo", connectedAt: at(addDays(today, -40), 12), lastFetchedAt: at(today, 5) },
+    ]);
+    put(
+      t.instagramDaily,
+      Array.from({ length: 30 }, (_, i) => addDays(today, i - 30)).map((date, i) => ({ staffId, accountId: acc.id, date, ...demoDay(staffId, date, base, i) }))
+    );
+    const rnd = seeded(staffId);
+    put(
+      t.instagramMedia,
+      DEMO_CAPTIONS.map((caption, i) => {
+        const views = Math.round(base * (1 + rnd() * 3));
+        return {
+          staffId,
+          accountId: acc.id,
+          mediaId: `demo-${staffId}-${i}`,
+          caption,
+          mediaType: i % 2 === 0 ? "REELS" : "CAROUSEL_ALBUM",
+          postedAt: at(addDays(today, -(i * 4 + 1)), 20),
+          metrics: { views, reach: Math.round(views * 0.6), likes: Math.round(views * 0.06), comments: Math.round(rnd() * 8), saved: Math.round(rnd() * 20), shares: Math.round(rnd() * 10) },
+          fetchedAt: at(today, 5),
+        };
+      })
+    );
+  }
+}
+
+async function seedRecruit(put: DemoPut, today: string) {
+  const [hanako, taro, jiro] = put(t.applicants, [
+    { name: "見本 花子", appliedOn: addDays(today, -10), source: "katibito", stage: "1次面接", storeId: ENI, status: "active", note: "スタイリスト志望（デモの応募者）", createdBy: "staff-admin" },
+    { name: "見本 太郎", appliedOn: addDays(today, -30), source: "Instagram", stage: "最終面接", storeId: ENI, status: "active", note: "アシスタント志望（デモの応募者）", createdBy: "staff-admin" },
+    { name: "見本 次郎", appliedOn: addDays(today, -260), source: "Indeed", stage: "1次面接", storeId: ENI, status: "rejected", selectionEndedOn: addDays(today, -200), note: "選考が終わった人（録画の自動削除の確かめ用）", createdBy: "staff-admin" },
+  ]);
+  const [i1, i2] = put(t.interviews, [
+    { applicantId: hanako.id, date: addDays(today, 1), startTime: "10:00", endTime: "11:00", place: "自由が丘店", interviewerIds: ["staff-3", "staff-4", "staff-admin"], status: "scheduled", createdBy: "staff-admin" },
+    { applicantId: taro.id, date: addDays(today, -7), startTime: "14:00", endTime: "15:00", place: "オンライン", interviewerIds: ["staff-3", "staff-admin"], status: "done", createdBy: "staff-admin" },
+    { applicantId: jiro.id, date: addDays(today, -230), startTime: "11:00", endTime: "12:00", place: "自由が丘店", interviewerIds: ["staff-3"], status: "done", createdBy: "staff-admin" },
+  ]);
+  put(
+    t.personalEvents,
+    i1.interviewerIds.map((staffId) => ({ staffId, date: i1.date, startTime: "10:00", endTime: "11:00", title: "面接：見本 花子さん（1次面接）・自由が丘店", sourceType: "interview", sourceId: i1.id }))
+  );
+  const sc = (a: number, b: number, c: number, d: number, e: number) => ({ impression: a, communication: b, values: c, motivation: d, skill: e });
+  put(t.interviewEvaluations, [
+    { interviewId: i1.id, applicantId: hanako.id, interviewerId: "staff-3", scores: sc(4, 4, 5, 5, 3), comment: "笑顔がよく、ENiの考え方に共感していた", submittedAt: at(today, 9) },
+    { interviewId: i1.id, applicantId: hanako.id, interviewerId: "staff-admin", scores: sc(4, 3, 4, 5, 3), comment: "意欲が高い", submittedAt: at(today, 9) },
+    { interviewId: i2.id, applicantId: taro.id, interviewerId: "staff-3", scores: sc(5, 4, 4, 4, 2), comment: "素直で、練習を続けられそう", submittedAt: at(addDays(today, -7), 16) },
+    { interviewId: i2.id, applicantId: taro.id, interviewerId: "staff-admin", scores: sc(4, 4, 5, 4, 2), comment: "", submittedAt: at(addDays(today, -7), 17) },
+  ]);
+  put(t.interviewRecordings, [
+    { applicantId: taro.id, interviewId: i2.id, provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", fileName: "面接の録画（見本）.mp4", consentChecked: true, consentNote: "面接の始めに口頭で確認", deleteAfter: "", uploadedBy: "staff-3" },
+    { applicantId: jiro.id, provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", fileName: "保存期間を過ぎた録画（見本）.mp4", consentChecked: true, deleteAfter: addDays(today, -20), uploadedBy: "staff-3" },
+  ]);
+  put(t.katibitoResults, [{ applicantId: taro.id, interviewId: i2.id, score: 78, summary: "表情が明るく、落ち着いて話せている（デモの結果）", createdBy: "staff-admin" }]);
+}
+
+registerDemoSeeder(async (put: DemoPut) => {
+  await seedRecruit(put, todayJst());
+  await seedInstagram(put, todayJst());
+  await seedGrowth(put, todayJst());
+  await seedGoals(put, todayJst());
+  await seedOrders(put, todayJst());
+  await seedCash(put, todayJst());
+  const today = todayJst();
+  await seedSns(put, today);
+  await seedAiAndWiki(put);
+  await seedShift(put, today);
+});

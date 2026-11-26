@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { distanceMeters } from "@/lib/geo";
+import { todayJst } from "@/lib/date";
 import type { PunchType } from "@/lib/data/types";
+import { recordSubmission } from "@/lib/required-inputs/submissions";
 
 export interface PunchResult {
   ok: boolean;
@@ -50,6 +52,7 @@ export async function punchAction(punchType: PunchType, lat: number, lng: number
   });
 
   revalidatePath("/staff/attendance");
+  if (isValid) await recordSubmission(session.staffId, `attendance_${punchType}`, todayJst());
 
   const label = punchType === "in" ? "出勤" : "退勤";
   return isValid

@@ -9,12 +9,15 @@ export function ConfirmSubmit({
   message,
   className,
   pendingLabel = "処理しています…",
+  formAction,
   children,
 }: {
   /** 確認のダイアログに出す文（空なら確認しない） */
   message?: string;
   className?: string;
   pendingLabel?: string;
+  /** 同じフォームの中で、別の処理に送るとき（保存と確定を並べるなど） */
+  formAction?: (formData: FormData) => void | Promise<void>;
   children: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
@@ -24,6 +27,7 @@ export function ConfirmSubmit({
       disabled={pending}
       aria-busy={pending}
       className={className}
+      formAction={formAction}
       onClick={(e) => {
         if (message && !window.confirm(message)) e.preventDefault();
       }}

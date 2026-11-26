@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst, weekStartOf } from "@/lib/date";
 import { getWeeklyItems, validateEniAnswers } from "@/lib/eni/forms";
+import { recordSubmission } from "@/lib/required-inputs/submissions";
 
 /** アシスタント週報の保存（スタッフ×週でユニーク。再保存は上書き。ランク別の項目） */
 export async function saveWeeklyReportAction(formData: FormData): Promise<void> {
@@ -37,6 +38,8 @@ export async function saveWeeklyReportAction(formData: FormData): Promise<void> 
     periodKey: week,
     answers: { ...result.answers, _rank: me?.rank ?? "" },
   });
+  // 入力した日時（依頼14：インセンティブは締め日までに入力したものだけ）
+  await recordSubmission(session.staffId, "weekly_report", week);
   revalidatePath("/staff/weekly-report");
   revalidatePath("/staff/eni-reports");
   redirect(`/staff/weekly-report?week=${week}&saved=1`);

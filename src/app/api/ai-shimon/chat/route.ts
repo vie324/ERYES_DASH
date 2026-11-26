@@ -11,6 +11,9 @@ import { getDataStore } from "@/lib/data";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { RANK_LABEL } from "@/lib/eni/forms";
 import { buildSystemBlocks, isPromptAvailable, type ChatTurn } from "@/lib/ai-shimon/prompt";
+import { listTrainings, trainingPromptOf } from "@/lib/ai-shimon/training";
+import { relatedWikiPages } from "@/lib/wiki/ask";
+import { getAiLimits, isOverDailyLimit, logAiUsage } from "@/lib/ai/run";
 
 export const dynamic = "force-dynamic";
 // 返答は短いが、ストリーミング中に切れないよう余裕を持たせる（Vercelの既定は短い）
@@ -108,9 +111,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     typeof body.threadId === "string" && THREAD_ID_RE.test(body.threadId) ? body.threadId : randomUUID();
   const question = turns[turns.length - 1].content;
   const askedAt = new Date();
+  const db = getDataStore();
+
+  // 1人・1日あたりの上限（管理画面の「AIの使用量」で変える。0は上限なし）
+  if (await isOverDailyLimit(db, "ai_shimon", session.staffId).catch(() => false)) {
+    const limit = (await getAiLimits(db))["ai_shimon"];
+    return sseError(`今日の相談の上限（${limit}回）に達しました。続きはまた明日、相談してね。`);
+  }
 
   // 相談者の立場（職種・ランク）。トーンの参考にだけ使う
-  const me = await getDataStore().getStaff(session.staffId);
+  const me = await db.getStaff(session.staffId);
   const roleLabel =
     me?.jobType === "stylist"
       ? "スタイリスト"
@@ -118,8 +128,27 @@ export async function POST(req: NextRequest): Promise<Response> {
         ? `アシスタント${me.rank ? `（${RANK_LABEL[me.rank]}）` : ""}`
         : "";
 
+  // 代表の教育（使っている項目だけ）と、ルールの質問のときの社内Wikiの関連ページ（その人が見られるページだけ）。
+  // どちらも失敗したら無しで続ける（相談そのものは止めない）
+  const [trainingText, wikiHits] = await Promise.all([
+    listTrainings().then(trainingPromptOf).catch(() => ""),
+    relatedWikiPages(question, {
+      isAdmin: session.role === "admin",
+      isExec: session.role === "admin" || session.role === "manager" || Boolean(me?.isExecutive),
+    }).catch(() => []),
+  ]);
+  const wikiLinks = wikiHits.map((h) => ({ title: h.page.title, href: `/staff/wiki/${h.page.id}` }));
+  const wikiText =
+    wikiHits.length > 0
+      ? [
+          "【社内のルール・マニュアル（ENi Wikipedia）】",
+          "相談がルール・決まり・手順に関するときは、下のページの内容に沿って答え、最後に「ENi Wikipediaの『ページ名』に詳しく書いてあるよ」とページ名を示す。ページに無いことは作らない。",
+          ...wikiHits.map((h) => `■ページ名「${h.page.title}」\n${h.page.body.slice(0, 1500)}`),
+        ].join("\n")
+      : "";
+
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
-  const system = buildSystemBlocks(turns, { name: me?.name ?? session.name, roleLabel });
+  const system = buildSystemBlocks(turns, { name: me?.name ?? session.name, roleLabel }, { training: trainingText, wiki: wikiText });
 
   const encoder = new TextEncoder();
   // 画面側で「止める」を押した（接続が切れた）ら、Claude への問い合わせも止める
@@ -139,6 +168,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       let answer = "";
       // この相談のID（端末はこれを覚えて、続きの相談でも同じIDを送ってくる）
       push(sse({ thread: threadId }));
+      // 社内Wikiの関連ページ（返答の下にリンクで出す）
+      if (wikiLinks.length > 0) push(sse({ wiki: wikiLinks }));
+      let usage: Anthropic.Messages.Usage | null = null;
+      let servedModel = env.aiShimonModel;
       try {
         const upstream = client.messages.stream(
           {
@@ -155,6 +188,9 @@ export async function POST(req: NextRequest): Promise<Response> {
             push(sse({ t: event.delta.text }));
           }
         }
+        const final = await upstream.finalMessage();
+        usage = final.usage;
+        servedModel = final.model;
       } catch (e) {
         if (!upstreamAbort.signal.aborted) {
           // 本文・知識ファイルの内容はログに残さない（エラー種別だけ）
@@ -164,6 +200,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       } finally {
         // 途中で止めた場合も、そこまでの返答といっしょに記録する
         await saveExchange({ staffId: session.staffId, threadId, question, askedAt, answer });
+        // 使った量（トークン数）を記録（管理画面の「AIの使用量」で月ごとに見る）
+        await logAiUsage({ feature: "ai_shimon", staffId: session.staffId, model: servedModel, usage, ok: Boolean(answer) });
         push("data: [DONE]\n\n");
         if (!closed) {
           closed = true;

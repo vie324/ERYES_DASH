@@ -82,8 +82,37 @@ function curriculumItem(ctx: NavContext): NavItem {
 function learningGroup(): NavGroup {
   return {
     label: "学び・相談",
-    items: [{ href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" }],
+    items: [
+      { href: "/staff/ai-shimon", label: "AIしもん（壁打ち相談）", short: "AIしもん", icon: "bot" },
+      // 依頼11・19・20
+      { href: "/staff/wiki", label: "ENi Wikipedia", short: "Wiki", icon: "book" },
+      { href: "/staff/growth", label: "成長ロードマップ・カリキュラム", short: "成長", icon: "trendingUp" },
+      { href: "/staff/goals", label: "目標・今週やること", short: "目標", icon: "sparkles" },
+    ],
   };
+}
+
+/** 依頼17・22：自分の数字（稼働率・Instagram） */
+function numbersGroup(): NavGroup {
+  return {
+    label: "自分の数字",
+    items: [
+      { href: "/staff/utilization", label: "稼働率", icon: "barChart" },
+      { href: "/staff/instagram", label: "Instagramの数字", short: "Instagram", icon: "heart" },
+    ],
+  };
+}
+
+/** 依頼12〜23：幹部（店長・副店長）・店舗の管理者が使う画面 */
+function execExtraItems(ctx: NavContext): NavItem[] {
+  const b = ctx.badges ?? {};
+  return [
+    { href: "/staff/approvals", label: "承認のお願い", short: "承認", icon: "checkCircle", badge: badge(b.approvals) },
+    ...(ctx.brand === "eni" ? [{ href: "/staff/cash", label: "レジ締め・現金出納帳", short: "レジ締め", icon: "banknote" as IconName }] : []),
+    { href: "/staff/inventory", label: "在庫・棚卸し", short: "在庫", icon: "layoutGrid" },
+    { href: "/staff/recruit", label: "面接・応募者", short: "面接", icon: "users" },
+    { href: "/staff/review", label: "追加開発の確認", short: "確認", icon: "clipboard" },
+  ];
 }
 
 /**
@@ -143,8 +172,11 @@ function staffNav(ctx: NavContext): NavGroup[] {
             icon: "crown",
             badge: badge(b.exec),
           },
+          ...execExtraItems(ctx),
         ]
-      : [],
+      : ctx.isReportReviewer
+        ? execExtraItems(ctx).filter((i) => i.href !== "/staff/recruit")
+        : [],
   };
 
   if (ctx.brand === "eyes") {
@@ -188,8 +220,9 @@ function staffNav(ctx: NavContext): NavGroup[] {
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-          { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
           { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
+          { href: "/staff/wiki", label: "ENi Wikipedia", short: "Wiki", icon: "book" },
         ],
       },
       execGroup,
@@ -200,6 +233,15 @@ function staffNav(ctx: NavContext): NavGroup[] {
           ...(ctx.attendanceEnabled
             ? [{ href: "/staff/attendance", label: "出勤・退勤の打刻", short: "打刻", icon: "mapPin" as IconName }]
             : []),
+          { href: "/staff/incentive", label: "インセンティブの締め日", short: "インセンティブ", icon: "banknote" },
+        ],
+      },
+      {
+        label: "成長・数字",
+        items: [
+          { href: "/staff/growth", label: "成長ロードマップ・カリキュラム", short: "成長", icon: "trendingUp" },
+          { href: "/staff/goals", label: "目標・今週やること", short: "目標", icon: "sparkles" },
+          ...numbersGroup().items,
         ],
       },
       support,
@@ -244,7 +286,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
       label: "チーム",
       items: [
         { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-        { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+        { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",
@@ -272,9 +314,14 @@ function staffNav(ctx: NavContext): NavGroup[] {
           ? [{ href: "/staff/absence", label: "欠勤・早退の報告", icon: "alertTriangle" as IconName }]
           : []),
         { href: "/staff/orders", label: "発注・購入申請", icon: "banknote" },
+        // 依頼12・14・15
+        ...(ctx.attendanceEnabled ? [{ href: "/staff/attendance", label: "出勤・退勤の打刻", short: "打刻", icon: "mapPin" as IconName }] : []),
+        { href: "/staff/purchases", label: "ウィッグ・社販の購入", short: "社販", icon: "fileText" },
+        { href: "/staff/incentive", label: "インセンティブの締め日", short: "インセンティブ", icon: "banknote" },
       ],
     },
     learningGroup(),
+    numbersGroup(),
     support,
   ]);
 }
@@ -290,6 +337,8 @@ function adminNav(ctx: NavContext): NavGroup[] {
       { href: "/staff/notifications", label: "通知の設定", short: "通知", icon: "bell" },
       { href: "/admin/help", label: "使い方ガイド", short: "使い方", icon: "help" },
       { href: "/admin/settings", label: "マスタ設定", icon: "sliders" },
+      // 依頼10〜23で足した機能の設定・定時実行・人ごとの権限・AIの使った量
+      { href: "/admin/features", label: "追加機能の設定", short: "追加機能", icon: "sliders" },
     ],
   };
   // 管理者は常に幹部メニューが見られる
@@ -303,6 +352,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         icon: "crown",
         badge: badge(b.exec),
       },
+      ...execExtraItems(ctx).map((i) => (i.href === "/staff/cash" ? { ...i, href: "/admin/cash" } : i)),
     ],
   };
 
@@ -341,7 +391,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-          { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
           { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         ],
       },
@@ -374,7 +424,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       items: [
         { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
         { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-        { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+        { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",
@@ -397,6 +447,13 @@ function adminNav(ctx: NavContext): NavGroup[] {
       ],
     },
     learningGroup(),
+    {
+      label: "数字",
+      items: [
+        { href: "/staff/utilization", label: "稼働率", icon: "barChart" },
+        { href: "/staff/instagram/team", label: "みんなのInstagram", short: "Instagram", icon: "heart" },
+      ],
+    },
     // ホームの設定（ショートカット・見える化・しもんさんの言葉）は ENi のホームだけに効く
     { ...support, items: [...support.items, { href: "/admin/home", label: "ホームの設定", icon: "layoutGrid" as IconName }] },
   ]);

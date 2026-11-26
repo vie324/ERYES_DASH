@@ -10,6 +10,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
+import { logShiftChange } from "@/lib/shift/extras";
 import { getDataStore } from "@/lib/data";
 import { formatDateJa, formatMonthJa } from "@/lib/date";
 import { buildShiftMonthInputs } from "@/lib/shift/context";
@@ -170,7 +171,7 @@ export type ShiftCellResult = { ok: true; message: string } | { ok: false; messa
  * 公開中の月を変えたときは、本人に通知を送る。
  */
 export async function saveShiftCellAction(input: ShiftCellInput): Promise<ShiftCellResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const { month, staffId, date } = input;
   if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !date.startsWith(`${month}-`)) {
     return { ok: false, message: "日付が正しくありません" };
@@ -270,6 +271,18 @@ export async function saveShiftCellAction(input: ShiftCellInput): Promise<ShiftC
 
     // 公開中のシフトを変えたら本人に知らせる（以前は通知が無く、口頭で伝える必要があった）
     if (status === "confirmed") {
+      // 変更の履歴（依頼12）：前の状態と、変えたあとの状態
+      const before = loaded.assignments.find((a) => a.staffId === staffId && a.date === date);
+      await logShiftChange({
+        staffId,
+        date,
+        before: before
+          ? { working: true, start: before.startTime, end: before.endTime, storeId: before.storeId }
+          : { working: false },
+        after: input.working ? { working: true, start: startTime, end: endTime, storeId: input.storeId } : { working: false },
+        changedBy: session.staffId,
+        note,
+      });
       const store = stores.find((s) => s.id === input.storeId);
       const what = input.working
         ? `出勤 ${startTime && endTime ? `${startTime}-${endTime}` : SHIFT_TYPE_NAME[input.shiftType === "late" ? "late" : "early"]}${

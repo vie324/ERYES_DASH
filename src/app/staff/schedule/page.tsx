@@ -8,6 +8,7 @@ import { loadMonthSchedule } from "@/lib/shift/load";
 import { currentTargetMonth, deadlineLabel, isNoticePeriod, remainingLabel } from "@/lib/shift/period";
 import { getMyRequestStatus } from "@/lib/shift/requests";
 import { MonthNav, PageHeader, ScrollHint, StatusBadge } from "@/components/ui";
+import { FirstGuide } from "@/components/first-guide";
 import { Icon } from "@/components/icons";
 import { MyShiftList, ShiftPersonTable, ShiftStoreTable } from "@/components/shift-table";
 import { StaffShiftCalendar } from "./staff-calendar";
@@ -75,6 +76,19 @@ export default async function StaffSchedulePage({
   return (
     <div>
       <PageHeader title="シフト" backHref="/staff" icon="calendar" description="自分の出勤予定・みんなのシフト・希望休" />
+      <FirstGuide guideKey="shift" />
+      {/* 依頼12：締切後の希望休（店長の承認制）・出退勤・使い方 */}
+      <div className="flex gap-2 overflow-x-auto scroll-slim pb-1 mb-4">
+        <Link href="/staff/schedule/late" className="chip shrink-0">
+          締切後の希望休（承認制）
+        </Link>
+        <Link href="/staff/attendance" className="chip shrink-0">
+          出退勤・打刻の修正
+        </Link>
+        <Link href="/staff/guide/shift" className="chip shrink-0">
+          使い方
+        </Link>
+      </div>
 
       {/* 希望休の提出（いま受け付けている月） */}
       <Link

@@ -5,6 +5,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { env, isAnthropicConfigured } from "@/lib/env";
+import { getDataStore } from "@/lib/data";
+import { isOverDailyLimit, logAiUsage, maskPersonalInfo } from "@/lib/ai/run";
 
 export interface MinutesInput {
   meetingName: string; // 会議名（種類・題名）
@@ -82,13 +84,17 @@ const OUTPUT_SCHEMA = {
 } as const;
 
 /** 生メモ → 整形済み議事録（Markdown）＋タスク一覧 */
-export async function generateMinutes(input: MinutesInput): Promise<MinutesResult> {
+export async function generateMinutes(input: MinutesInput, staffId: string | null = null): Promise<MinutesResult> {
   if (!isAnthropicConfigured()) return fallbackResult(input);
+  // 1人・1日あたりの上限（管理画面の「AIの使った量」で変える）。超えたらAIなしのテンプレートにする
+  if (await isOverDailyLimit(getDataStore(), "minutes", staffId).catch(() => false)) return fallbackResult(input);
 
-  const userContent =
+  // 電話番号・メールアドレスのようなものは、AIに送る前に伏せる
+  const userContent = maskPersonalInfo(
     `会議名：${input.meetingName}\n会議日：${input.meetingDate}（${input.dateLabel}）\n` +
-    `参加者：${input.participants || "（未記入）"}\n` +
-    `アジェンダ：\n${input.agenda || "（なし）"}\n\n--- 当日の生メモ ---\n${input.rawNotes}`;
+      `参加者：${input.participants || "（未記入）"}\n` +
+      `アジェンダ：\n${input.agenda || "（なし）"}\n\n--- 当日の生メモ ---\n${input.rawNotes}`
+  );
 
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
@@ -102,6 +108,7 @@ export async function generateMinutes(input: MinutesInput): Promise<MinutesResul
       },
       messages: [{ role: "user", content: userContent }],
     });
+    await logAiUsage({ feature: "minutes", staffId, model: response.model, usage: response.usage, ok: response.stop_reason !== "refusal" });
 
     // 安全側の判定：拒否や打ち切りのときはテンプレートに戻す
     if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
@@ -121,6 +128,7 @@ export async function generateMinutes(input: MinutesInput): Promise<MinutesResul
     return { markdown, tasks: normalizeTasks(parsed.tasks), ai: true };
   } catch (e) {
     console.error("[anthropic] 議事録生成エラー:", e);
+    await logAiUsage({ feature: "minutes", staffId, model: env.anthropicModel, usage: null, ok: false, note: e instanceof Error ? e.name : "error" });
     return fallbackResult(input);
   }
 }

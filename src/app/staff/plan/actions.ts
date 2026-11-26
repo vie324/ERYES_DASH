@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst } from "@/lib/date";
 import { normalizePlanDate } from "@/lib/eni/plan";
+import { recordSubmission } from "@/lib/required-inputs/submissions";
 import {
   PLAN_WEEK_SCOPES,
   parseBlocks,
@@ -35,6 +36,7 @@ export async function saveDayPlanAction(formData: FormData): Promise<void> {
     },
     photo,
   });
+  await recordSubmission(session.staffId, "daily_plan", date);
   revalidatePath("/staff/plan");
   redirect(`/staff/plan?date=${date}&saved=day`);
 }

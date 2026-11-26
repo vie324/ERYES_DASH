@@ -80,8 +80,8 @@ export function PhotoInput({
   );
 }
 
-/** 画像を最大辺 maxDim に縮小して JPEG の data URL にする */
-async function downscale(file: File, maxDim: number, quality: number): Promise<string> {
+/** 画像を最大辺 maxDim に縮小して JPEG の data URL にする（ほかの写真の欄でも使う） */
+export async function downscale(file: File, maxDim: number, quality: number): Promise<string> {
   const img = await loadImage(file);
   const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * scale));

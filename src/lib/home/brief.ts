@@ -6,6 +6,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { env, isAnthropicConfigured } from "@/lib/env";
+import { getDataStore } from "@/lib/data";
+import { isOverDailyLimit, logAiUsage } from "@/lib/ai/run";
 import { addDays, formatDateJa, weekStartOf } from "@/lib/date";
 import { getChatOverview } from "@/lib/chat";
 import { getMyTaskSummary, isTaskDueOn, type MyTaskSummary } from "@/lib/tasks";
@@ -122,8 +124,9 @@ export function briefPrompt(src: BriefSource): string {
  * モデルは HOME_BRIEF_MODEL（未設定なら ANTHROPIC_MODEL と同じ）。短い仕事なので effort は low。
  * お断り（refusal）になったときは、サーバー側の fallbacks で別のモデルが続ける。
  */
-export async function generateBriefItems(src: BriefSource): Promise<{ items: DailyBriefItem[]; model: string } | null> {
+export async function generateBriefItems(src: BriefSource, staffId: string | null = null): Promise<{ items: DailyBriefItem[]; model: string } | null> {
   if (!isAnthropicConfigured()) return null;
+  if (await isOverDailyLimit(getDataStore(), "home_brief", staffId).catch(() => false)) return null;
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.beta.messages.create({
@@ -135,6 +138,7 @@ export async function generateBriefItems(src: BriefSource): Promise<{ items: Dai
       output_config: { effort: "low", format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
       messages: [{ role: "user", content: briefPrompt(src) }],
     });
+    await logAiUsage({ feature: "home_brief", staffId, model: response.model, usage: response.usage, ok: response.stop_reason !== "refusal" });
     if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
       console.error(`[home-brief] 今日のタスクを作れませんでした: stop_reason=${response.stop_reason}`);
       return null;
@@ -156,6 +160,7 @@ export async function generateBriefItems(src: BriefSource): Promise<{ items: Dai
     return { items, model: response.model };
   } catch (e) {
     console.error("[home-brief] 今日のタスクの作成でエラー:", e instanceof Error ? e.message : e);
+    await logAiUsage({ feature: "home_brief", staffId, model: env.homeBriefModel || env.anthropicModel, usage: null, ok: false, note: e instanceof Error ? e.name : "error" });
     return null;
   }
 }
@@ -195,7 +200,7 @@ export async function getTodayBrief(db: DataStore, staffId: string, today: strin
     return { staffId, date: today, items: fallback, ai: false, model: "", createdAt: new Date() };
   }
 
-  const generated = isEmptySource(src) ? null : await generateBriefItems(src);
+  const generated = isEmptySource(src) ? null : await generateBriefItems(src, staffId);
   const brief = {
     staffId,
     date: today,

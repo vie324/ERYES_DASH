@@ -3,8 +3,10 @@
 // AIしもんのチャット画面。
 //  ・送信すると /api/ai-shimon/chat から返答がストリーミングで届き、1文字ずつ表示する
 //  ・画面の履歴は端末の localStorage に保存（人ごとにキーを分ける）。「新しく相談する」で画面から消せる
-//  ・相談文と返答はサーバーにも記録され、代表だけが読める（スタッフの画面には表示しない。代表の判断）。
+//  ・相談文と返答はサーバーにも記録され、代表だけが読める。2026-11（依頼11）から、画面に
+//    「相談内容は代表が見ることがあります」を常に出す（文言は管理画面で変えられる）。
 //    ひと続きの相談を同じIDでまとめるため、相談のIDも端末に覚えておく
+//  ・ルールに関する相談のときは、返答の下に ENi Wikipedia の関連ページへのリンクが出る
 //  ・知識ファイルの本文や出典は一切クライアントに来ない（返答の文字だけ）
 
 import Link from "next/link";
@@ -14,6 +16,8 @@ import { Icon } from "@/components/icons";
 interface Turn {
   role: "user" | "assistant";
   content: string;
+  /** 社内Wikiの関連ページ（AIしもんの返答の下に出す） */
+  links?: { title: string; href: string }[];
 }
 
 /** サーバーへ送る会話の上限（古いものから落とす。サーバー側の上限と揃える） */
@@ -40,11 +44,14 @@ export function AiShimonChat({
   staffId,
   ready,
   isAdmin,
+  notice,
 }: {
   staffId: string;
   /** APIキー・プロンプトが揃っていて使える状態か */
   ready: boolean;
   isAdmin: boolean;
+  /** 常に出す注意書き（「相談内容は代表が見ることがあります」） */
+  notice: string;
 }) {
   const storageKey = `ai-shimon:${staffId}`;
   const threadKey = `ai-shimon:${staffId}:thread`;
@@ -123,13 +130,18 @@ export function AiShimonChat({
     const controller = new AbortController();
     abortRef.current = controller;
     let received = "";
+    let links: { title: string; href: string }[] = [];
     // 新しい相談のはじめはIDを作る（続きの相談は同じIDで送って、記録を1つにまとめる）
     if (!threadRef.current || turns.length === 0) rememberThread(newThreadId());
     try {
       const res = await fetch("/api/ai-shimon/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-MAX_TURNS), threadId: threadRef.current }),
+        // 端末に残すリンクはサーバーへ送らない（文字のやりとりだけ）
+        body: JSON.stringify({
+          messages: next.slice(-MAX_TURNS).map((t) => ({ role: t.role, content: t.content })),
+          threadId: threadRef.current,
+        }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -155,7 +167,7 @@ export function AiShimonChat({
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (!raw || raw === "[DONE]") continue;
-          let ev: { t?: string; error?: string; thread?: string };
+          let ev: { t?: string; error?: string; thread?: string; wiki?: { title: string; href: string }[] };
           try {
             ev = JSON.parse(raw);
           } catch {
@@ -163,10 +175,11 @@ export function AiShimonChat({
           }
           if (ev.thread && ev.thread !== threadRef.current) rememberThread(ev.thread);
           if (ev.error) setError(ev.error);
+          if (Array.isArray(ev.wiki)) links = ev.wiki.filter((l) => typeof l.href === "string" && l.href.startsWith("/staff/wiki/"));
           if (ev.t) {
             received += ev.t;
             const snapshot = received;
-            setTurns([...next, { role: "assistant", content: snapshot }]);
+            setTurns([...next, { role: "assistant", content: snapshot, links }]);
           }
         }
       }
@@ -202,6 +215,11 @@ export function AiShimonChat({
 
   return (
     <div className="space-y-3">
+      {/* 常に出す注意書き（依頼11） */}
+      <p className="flex items-center gap-1.5 rounded-xl bg-ink-50 border border-ink-200 px-3 py-2 text-[12px] text-ink-600">
+        <Icon name="help" className="w-3.5 h-3.5 shrink-0" />
+        {notice}
+      </p>
       {!ready && (
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
           <p className="font-bold">AIしもんはまだ準備中です</p>
@@ -267,6 +285,17 @@ export function AiShimonChat({
                   {t.content}
                   {typing && (
                     <span className="inline-block w-2 h-4 align-middle ml-0.5 bg-brand-400 animate-pulse rounded-sm" aria-label="入力中" />
+                  )}
+                  {t.role === "assistant" && !typing && t.links && t.links.length > 0 && (
+                    <span className="mt-2 pt-2 border-t border-ink-100 flex flex-wrap gap-1.5">
+                      <span className="w-full text-[11px] font-bold text-ink-500">ENi Wikipedia の関連ページ</span>
+                      {t.links.map((l) => (
+                        <Link key={l.href} href={l.href} className="chip !min-h-8 !py-1 !text-[12px]">
+                          <Icon name="book" className="w-3.5 h-3.5" />
+                          {l.title}
+                        </Link>
+                      ))}
+                    </span>
                   )}
                 </div>
               </div>
