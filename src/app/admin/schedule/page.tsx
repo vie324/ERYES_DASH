@@ -5,6 +5,8 @@ import { getBrand, BRAND_INFO } from "@/lib/brand";
 import { resolveShiftView, viewStatus } from "@/lib/shift/view";
 import { addDays, addMonths, formatDateJa, formatDateTimeJa, formatMonthJa, thisMonthJst, todayJst, weekdayOf } from "@/lib/date";
 import { computeBoardWarnings, countBoardWarnings, TOP_TIER, type BoardWarnings } from "@/lib/shift/assign";
+import { listShiftTemplates, requiredStaffMap } from "@/lib/shift/extras";
+import { FirstGuide } from "@/components/first-guide";
 import { buildShiftMonthInputs, meetingNamesOn } from "@/lib/shift/context";
 import {
   brandStoreIds,
@@ -168,7 +170,12 @@ export default async function AdminSchedulePage({
       .filter((c) => c.working)
       .map((c) => ({ date: c.date, staffId: s.id, storeId: c.storeId }))
   );
-  const allWarnings = status === "none" ? null : computeBoardWarnings(month, effective, inputs);
+  // 1日ごとの必要人数（依頼12。管理画面「必要人数」で曜日・日付ごとに決める。決めていない日はルールの最低人数）
+  const requiredStaff = await requiredStaffMap(month, stores.map((s) => s.id), rules.minStaffPerStoreDay).catch(
+    () => new Map<string, number>()
+  );
+  const allWarnings = status === "none" ? null : computeBoardWarnings(month, effective, { ...inputs, requiredStaff });
+  const templates = await listShiftTemplates({ activeOnly: true }).catch(() => []);
 
   // 気になる所は、いま表に出している店舗・スタッフの分だけ（ほかの業態の店舗の人数不足まで並べない）
   const warnings: BoardWarnings | null = allWarnings && {
@@ -254,6 +261,12 @@ export default async function AdminSchedulePage({
       note(w.date, `${familyOf(w.staffId)}さんは${meetingNamesOn(inputs.meetings, w.date, committeeNames) || "会議"}の参加者`);
     }
   }
+  // 全体スケジュールの予定（依頼12：重なる日はシフト表にも出す）
+  for (const e of inputs.companyEvents) {
+    for (const d of schedule.dates) {
+      if (d >= e.startDate && d <= e.endDate) note(d, `📅 ${e.title}${e.required ? "（全員参加）" : ""}${e.startTime ? ` ${e.startTime}〜` : ""}`);
+    }
+  }
   const boardStaff: BoardStaff[] = boardMembers.map((s) => ({
     id: s.id,
     name: s.name,
@@ -335,10 +348,23 @@ export default async function AdminSchedulePage({
               <Icon name="sliders" className="w-4 h-4" />
               ルール
             </Link>
+            <Link href="/admin/schedule/templates" className="btn-ghost !text-xs">
+              <Icon name="clock" className="w-4 h-4" />
+              勤務パターン
+            </Link>
+            <Link href={`/admin/schedule/staffing?month=${month}`} className="btn-ghost !text-xs">
+              <Icon name="users" className="w-4 h-4" />
+              必要人数
+            </Link>
+            <Link href={`/admin/schedule/history?month=${month}`} className="btn-ghost !text-xs">
+              <Icon name="fileText" className="w-4 h-4" />
+              変更の履歴
+            </Link>
           </>
         }
       />
 
+      <FirstGuide guideKey="shift_manager" />
       {flash && <p className="note note-ok mb-4">{flash}</p>}
       {params.error && <p className="note note-danger mb-4">{ERRORS[params.error] ?? ERRORS.input}</p>}
 
@@ -656,6 +682,8 @@ export default async function AdminSchedulePage({
             storeConflict={(warnings?.storeConflicts ?? []).map((w) => `${w.staffId}|${w.date}`)}
             dayNotes={dayNotes}
             minStaff={rules.minStaffPerStoreDay}
+            required={Object.fromEntries(requiredStaff)}
+            templates={templates.map((t) => ({ name: t.name, s: t.startTime, e: t.endTime }))}
             initialEdit={initialEdit}
           />
         )}

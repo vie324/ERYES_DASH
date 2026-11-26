@@ -10,6 +10,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
+import { logShiftChange } from "@/lib/shift/extras";
 import { getDataStore } from "@/lib/data";
 import { datesOfMonth, formatDateJa } from "@/lib/date";
 import { closureOn } from "@/lib/shift/calendar";
@@ -189,7 +190,7 @@ async function setPersonDay(
 
 /** カレンダーの1日を保存する（お店の休み・行事メモ・スタッフの出勤と休み） */
 export async function saveCalendarDayAction(input: CalendarDayInput): Promise<CalendarDayResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
   const { month, date } = input;
   if (!/^\d{4}-\d{2}$/.test(month) || !DATE_RE.test(date) || !date.startsWith(`${month}-`)) {
     return { ok: false, message: "日付が正しくありません" };
@@ -276,9 +277,19 @@ export async function saveCalendarDayAction(input: CalendarDayInput): Promise<Ca
       }
     }
 
-    // 公開中のシフトを変えたら、本人に知らせる
+    // 公開中のシフトを変えたら、本人に知らせる（変更の履歴にも残す。依頼12）
     if (ctx.status === "confirmed") {
       for (const [staffId, list] of changes) {
+        for (const c of list) {
+          await logShiftChange({
+            staffId,
+            date: c.date,
+            before: { working: c.off },
+            after: { working: !c.off },
+            changedBy: session.staffId,
+            note: "カレンダーで変更",
+          });
+        }
         const text = list
           .slice(0, 3)
           .map((c) => `${formatDateJa(c.date)}は${c.off ? "休み" : "出勤"}`)

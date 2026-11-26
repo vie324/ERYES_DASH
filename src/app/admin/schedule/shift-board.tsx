@@ -70,6 +70,10 @@ export interface ShiftBoardProps {
   /** date → その日の注意（人数不足・スタイリストの休みの重なりなど） */
   dayNotes: Record<string, string[]>;
   minStaff: number;
+  /** 1日ごとの必要人数（"日付|店舗" → 人数。無い日は minStaff） */
+  required?: Record<string, number>;
+  /** 勤務パターン（時間帯のひな形） */
+  templates?: { name: string; s: string; e: string }[];
   /** 最初から開いておくマス（旧「個別調整」画面からの移動用） */
   initialEdit: { staffId: string; date: string } | null;
 }
@@ -324,7 +328,7 @@ export function ShiftBoard(props: ShiftBoardProps) {
                             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle ${storeColor(storeIndex.get(storeId) ?? 0).dot}`} />
                           )}
                           {n}
-                          {shiftMode && <span className="text-ink-300">/{props.minStaff}</span>}
+                          {shiftMode && <span className="text-ink-300">/{props.required?.[`${date}|${storeId}`] ?? props.minStaff}</span>}
                         </span>
                       );
                     })}
@@ -460,6 +464,21 @@ export function ShiftBoard(props: ShiftBoardProps) {
                 )}
                 <div>
                   <p className="label !text-xs">時間（空にすると時間なし）</p>
+                  {/* 勤務パターン（依頼12。管理画面「勤務パターン」で登録した時間帯をタップで当てはめる） */}
+                  {(props.templates ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(props.templates ?? []).map((t) => (
+                        <button
+                          key={t.name}
+                          type="button"
+                          onClick={() => patch({ startTime: t.s, endTime: t.e })}
+                          className={`chip !min-h-8 !py-1 ${draft.startTime === t.s && draft.endTime === t.e ? "chip-active" : ""}`}
+                        >
+                          {t.name} {t.s}-{t.e}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <input
                       type="time"

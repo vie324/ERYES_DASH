@@ -107,8 +107,24 @@ async function seedAiAndWiki(put: DemoPut) {
   ]);
 }
 
+async function seedShift(put: DemoPut, today: string) {
+  // 締切後の希望休（承認待ち）と、打刻の修正の申請（承認待ち）。店長（山本さん・daiki）か管理者で承認できる
+  put(t.dayoffLateRequests, [
+    { staffId: "staff-5", date: addDays(today, 12), reason: "親戚の結婚式が決まった", paidLeave: true, status: "pending", createdAt: at(addDays(today, -1), 21) },
+  ]);
+  put(t.attendanceCorrections, [
+    { staffId: "staff-6", date: addDays(today, -1), punchType: "out", time: "18:40", reason: "退勤の打刻を忘れました", status: "pending", createdAt: at(today, 9) },
+  ]);
+  // 1日ごとの必要人数（ENi：土日は4人）
+  put(t.shiftStaffingRules, [
+    { storeId: ENI, weekday: 6, date: "", required: 4 },
+    { storeId: ENI, weekday: 0, date: "", required: 4 },
+  ]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
   const today = todayJst();
   await seedSns(put, today);
   await seedAiAndWiki(put);
+  await seedShift(put, today);
 });

@@ -1,76 +1,60 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
-import {
-  aggregateAttendance,
-  formatMinutes,
-  formatPunchTime,
-  overtimeStatus,
-} from "@/lib/attendance";
-import { addMonths, formatDateJa, formatMonthJa, jstDayBoundsUtc, monthRange, thisMonthJst } from "@/lib/date";
+import { formatMinutes, overtimeStatus } from "@/lib/attendance";
+import { minutesLabel, monthAttendanceRecords, totalsOf } from "@/lib/attendance-shift";
+import { addMonths, formatDateJa, formatMonthJa, formatTimeJa, thisMonthJst } from "@/lib/date";
 import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
+import { Note } from "@/components/feature-ui";
+import { Icon } from "@/components/icons";
 
-// 勤怠管理（管理者用）：月次の労働時間と固定残業の超過アラート
-export default async function AdminAttendancePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ month?: string; staff?: string }>;
-}) {
+export const dynamic = "force-dynamic";
+
+// 勤怠管理（管理者用）。依頼12で、その日のシフトとひもづけた記録（遅刻・早退・シフト外・承認された打刻の修正）を読むように切り替えた。
+// 月の勤務時間はCSVで書き出せる（給与計算用）。
+export default async function AdminAttendancePage({ searchParams }: { searchParams: Promise<{ month?: string; staff?: string }> }) {
   await requireAdmin();
   const params = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
-  const { from, to } = monthRange(month);
-
   const db = getDataStore();
-  const [stores, staffList, punches] = await Promise.all([
-    db.listStores(),
-    db.listStaff(),
-    db.listAttendances({
-      from: jstDayBoundsUtc(from).start,
-      to: jstDayBoundsUtc(to).end,
-    }),
-  ]);
-  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
-
+  const [stores, staffList] = await Promise.all([db.listStores(), db.listStaff()]);
   const activeStaff = staffList.filter((s) => s.isActive);
+  const records = await monthAttendanceRecords(db, month, { staffIds: activeStaff.map((s) => s.id) });
+  const attendanceAvailable = stores.some((s) => s.attendanceEnabled);
   const summaries = activeStaff.map((s) => {
-    const own = punches.filter((p) => p.staffId === s.id);
-    const agg = aggregateAttendance(own);
-    return {
-      staff: s,
-      agg,
-      status: overtimeStatus(agg.overtimeMinutes, s.fixedOvertimeHours),
-      invalidCount: own.filter((p) => !p.isValid).length,
-    };
+    const days = records.get(s.id) ?? [];
+    const t = totalsOf(days);
+    // 残業の目安（これまでどおり：1日8時間を超えた分）
+    const overtime = days.reduce((sum, d) => sum + Math.max(0, d.netMinutes - 480), 0);
+    return { staff: s, days, t, overtime, status: overtimeStatus(overtime, s.fixedOvertimeHours) };
   });
-
-  const selectedStaffId =
-    params.staff && activeStaff.some((s) => s.id === params.staff)
-      ? params.staff
-      : (activeStaff[0]?.id ?? "");
-  const selected = summaries.find((s) => s.staff.id === selectedStaffId);
+  const selected = summaries.find((s) => s.staff.id === params.staff) ?? summaries[0];
 
   return (
     <div>
-      <PageHeader title="勤怠管理" backHref="/admin" />
-
-      {!attendanceAvailable && (
-        <p className="rounded-xl bg-amber-50 text-amber-800 text-xs font-bold px-4 py-3 mb-4">
-          勤怠運用は現在オフです（マスタ設定で変更できます）。過去の記録は閲覧できます。
-        </p>
-      )}
-
-      <MonthNav
-        month={month}
-        monthLabel={formatMonthJa(month)}
-        prevHref={`/admin/attendance?month=${addMonths(month, -1)}`}
-        nextHref={`/admin/attendance?month=${addMonths(month, 1)}`}
+      <PageHeader
+        title="勤怠管理"
+        backHref="/admin"
+        actions={
+          <>
+            <a href={`/api/admin/attendance-csv?month=${month}&type=summary`} className="btn-ghost !text-xs">
+              <Icon name="fileText" className="w-4 h-4" />
+              月の集計CSV
+            </a>
+            <a href={`/api/admin/attendance-csv?month=${month}&type=daily`} className="btn-ghost !text-xs">
+              <Icon name="fileText" className="w-4 h-4" />
+              日別CSV
+            </a>
+          </>
+        }
       />
+      {!attendanceAvailable && <Note tone="warn">打刻は現在オフです（マスタ設定で変更できます）。過去の記録は見られます。</Note>}
+      <MonthNav month={month} monthLabel={formatMonthJa(month)} prevHref={`/admin/attendance?month=${addMonths(month, -1)}`} nextHref={`/admin/attendance?month=${addMonths(month, 1)}`} />
 
       <section className="card mb-4">
-        <h2 className="section-title">月次集計（{formatMonthJa(month)}）</h2>
+        <h2 className="section-title">月の集計（{formatMonthJa(month)}）</h2>
         <p className="text-xs text-ink-400 mb-2">
-          残業＝1日8時間を超えた分の合計（仮ルール）。固定残業時間の80%で「注意」、超過で「超過」表示。
+          実働＝勤務時間から休憩を引いた時間（休憩の決まりは管理画面で変えられます）。遅刻・早退はその日のシフトと比べています。打刻の修正は承認されたものだけ数えます。
         </p>
         <div className="table-wrap">
           <table className="table-base">
@@ -78,35 +62,31 @@ export default async function AdminAttendancePage({
               <tr>
                 <th>スタッフ</th>
                 <th className="!text-right">出勤日数</th>
-                <th className="!text-right">労働時間</th>
-                <th className="!text-right">残業</th>
-                <th>固定残業</th>
-                <th>状態</th>
+                <th className="!text-right">実働</th>
+                <th className="!text-right">遅刻</th>
+                <th className="!text-right">早退</th>
+                <th className="!text-right">シフト外</th>
+                <th className="!text-right">打刻なし</th>
+                <th>残業の目安</th>
               </tr>
             </thead>
             <tbody>
-              {summaries.map(({ staff, agg, status, invalidCount }) => (
+              {summaries.map(({ staff, t, overtime, status }) => (
                 <tr key={staff.id}>
                   <td className="font-bold">
                     <Link href={`/admin/attendance?month=${month}&staff=${staff.id}`} className="underline">
                       {staff.name}
                     </Link>
                   </td>
-                  <td className="text-right">{agg.workDays}日</td>
-                  <td className="text-right font-bold">{formatMinutes(agg.totalMinutes)}</td>
-                  <td className="text-right">{formatMinutes(agg.overtimeMinutes)}</td>
-                  <td>{staff.fixedOvertimeHours}時間</td>
+                  <td className="text-right">{t.workDays}日</td>
+                  <td className="text-right font-bold">{formatMinutes(t.netMinutes)}</td>
+                  <td className="text-right">{t.lateCount}</td>
+                  <td className="text-right">{t.earlyCount}</td>
+                  <td className="text-right">{t.offShiftCount}</td>
+                  <td className="text-right">{t.missingCount}</td>
                   <td>
-                    {status === "over" ? (
-                      <StatusBadge label="超過" tone="danger" />
-                    ) : status === "warning" ? (
-                      <StatusBadge label="注意" tone="warning" />
-                    ) : (
-                      <StatusBadge label="OK" tone="ok" />
-                    )}
-                    {invalidCount > 0 && (
-                      <span className="text-xs text-ink-400 ml-1">不成立{invalidCount}件</span>
-                    )}
+                    {formatMinutes(overtime)}{" "}
+                    {status === "over" ? <StatusBadge label="超過" tone="danger" /> : status === "warning" ? <StatusBadge label="注意" tone="warning" /> : null}
                   </td>
                 </tr>
               ))}
@@ -117,42 +97,53 @@ export default async function AdminAttendancePage({
 
       {selected && (
         <section className="card">
-          <h2 className="section-title">
-            日別の打刻（{selected.staff.name}）
-          </h2>
-          {selected.agg.days.length === 0 ? (
-            <EmptyState message="この月の打刻はありません" />
+          <h2 className="section-title">日別（{selected.staff.name}）</h2>
+          {selected.days.length === 0 ? (
+            <EmptyState message="この月の記録はありません" />
           ) : (
             <div className="table-wrap">
               <table className="table-base">
                 <thead>
                   <tr>
                     <th>日付</th>
+                    <th>予定</th>
                     <th>出勤</th>
                     <th>退勤</th>
-                    <th className="!text-right">労働時間</th>
-                    <th></th>
+                    <th className="!text-right">実働</th>
+                    <th>印</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selected.agg.days.map((d) => (
-                    <tr key={d.date}>
-                      <td className="font-bold">{formatDateJa(d.date)}</td>
-                      <td>{formatPunchTime(d.inAt)}</td>
-                      <td>{formatPunchTime(d.outAt)}</td>
-                      <td className="text-right font-bold">{formatMinutes(d.workMinutes)}</td>
-                      <td>
-                        {d.hasOpenPunch && <StatusBadge label="退勤打刻なし" tone="warning" />}
-                      </td>
-                    </tr>
-                  ))}
+                  {selected.days
+                    .filter((d) => d.planned.working || d.inAt || d.outAt)
+                    .map((d) => (
+                      <tr key={d.date}>
+                        <td className="font-bold">{formatDateJa(d.date)}</td>
+                        <td>{d.planned.working ? `${d.planned.start || "—"}〜${d.planned.end || "—"}` : "休み"}</td>
+                        <td>
+                          {d.inAt ? formatTimeJa(d.inAt) : "—"}
+                          {d.inCorrected && "＊"}
+                        </td>
+                        <td>
+                          {d.outAt ? formatTimeJa(d.outAt) : "—"}
+                          {d.outCorrected && "＊"}
+                        </td>
+                        <td className="text-right font-bold">{minutesLabel(d.netMinutes)}</td>
+                        <td className="space-x-1">
+                          {d.late && <StatusBadge label={`遅刻${d.lateMinutes}分`} tone="warning" />}
+                          {d.early && <StatusBadge label={`早退${d.earlyMinutes}分`} tone="warning" />}
+                          {d.offShift && <StatusBadge label="シフト外" tone="pending" />}
+                          {d.missing && <StatusBadge label="打刻なし" tone="danger" />}
+                          {d.openPunch && <StatusBadge label="退勤なし" tone="danger" />}
+                          {d.pendingCorrection && <StatusBadge label="修正の申請中" tone="muted" />}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
           )}
-          <p className="text-xs text-ink-400 mt-2">
-            ※ 勤怠は任意運用のため、打刻が無い日があっても問題ありません。
-          </p>
+          <p className="text-xs text-ink-400 mt-2">＊は承認された打刻の修正で数えた時刻です。</p>
         </section>
       )}
     </div>
