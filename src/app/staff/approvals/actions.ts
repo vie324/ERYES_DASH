@@ -10,6 +10,7 @@ import { requireViewer } from "@/lib/viewer";
 import { InputError, attempt, resultUrl, str } from "@/lib/action-utils";
 import { decideLateDayoff } from "@/lib/shift/extras";
 import { decideCorrection } from "@/lib/attendance-corrections";
+import { decideRescue } from "@/lib/required-inputs/incentive";
 
 export async function decideApprovalAction(fd: FormData): Promise<void> {
   const v = await requireViewer();
@@ -25,7 +26,9 @@ export async function decideApprovalAction(fd: FormData): Promise<void> {
         ? await decideLateDayoff(db, v.me, id, decision, note)
         : kind === "correction"
           ? await decideCorrection(db, v.me, id, decision, note)
-          : { ok: false, message: "種類が正しくありません" };
+          : kind === "rescue"
+            ? await decideRescue(db, v.me, id, decision, note)
+            : { ok: false, message: "種類が正しくありません" };
     if (!res.ok) throw new InputError(res.message);
     // 自分あての「承認のお願い」のお知らせは、決めたら既読にする
     await db.markAppNotificationsRead(v.staffId, id);

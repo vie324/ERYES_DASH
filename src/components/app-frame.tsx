@@ -17,6 +17,8 @@ import { AppShell } from "@/components/app-shell";
 import { PushSetup } from "@/components/push-setup";
 import { DemoBanner } from "@/components/ui";
 import { env } from "@/lib/env";
+import { pendingGateItems } from "@/lib/confirm-gate";
+import { ConfirmGate } from "@/components/confirm-gate";
 import type { Session } from "@/lib/auth/session";
 
 export async function AppFrame({
@@ -117,6 +119,9 @@ export async function AppFrame({
     badges.exec = await countExecAttention(db, me, brand, today);
   }
 
+  // 依頼14：予定の確認（新しい予定・変更があると、確認するまでほかの画面に進めない）。読めないときは出さない
+  const gateItems = await pendingGateItems(db, session.staffId).catch(() => []);
+
   const navContext: NavContext = {
     role: session.role === "admin" ? "admin" : "staff",
     brand,
@@ -147,6 +152,7 @@ export async function AppFrame({
       inbox={{ href: "/staff/inbox", count: unreadInbox }}
       banner={<DemoBanner show={isDemoMode()} />}
     >
+      <ConfirmGate items={gateItems} />
       {/* 通知の案内（未許可のときだけ出る）と、アプリアイコンのバッジ（未読トーク＋今日のタスク） */}
       <PushSetup
         publicKey={env.vapidPublicKey}

@@ -17,6 +17,7 @@ import { ThemePicker } from "@/components/theme-picker";
 import { getSalonBoardUrl } from "@/lib/settings";
 import { EniHome } from "@/components/home/eni-home";
 import { InboxBanner } from "@/components/inbox-banner";
+import { RequiredInputsCard } from "@/components/required-inputs-card";
 import { countUncommentedReports, isReportReviewer } from "@/lib/eyes/report-comments";
 
 /** ホームのメニュー1項目。スマホ＝アイコングリッド／PC＝大きなボタンの両方で使う */
@@ -87,6 +88,9 @@ export default async function StaffHomePage() {
         </h1>
         <div className="mt-3 h-px bg-gradient-to-r from-brand-300 via-brand-200/70 to-transparent" />
       </div>
+
+      {/* 依頼14：まだの入力（入力するまで消えない。いちばん上） */}
+      <RequiredInputsCard staffId={session.staffId} />
 
       {/* 全体共有のアナウンス（トークルームでアナウンスにした投稿がここに出る） */}
       <AnnouncementBoard />

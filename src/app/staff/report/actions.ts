@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { getDataStore } from "@/lib/data";
 import { todayJst } from "@/lib/date";
+import { recordSubmission } from "@/lib/required-inputs/submissions";
 
 function intField(formData: FormData, name: string): number {
   const raw = String(formData.get(name) ?? "").trim();
@@ -41,5 +42,8 @@ export async function saveDailyReportAction(formData: FormData): Promise<void> {
     message: String(formData.get("message") ?? "").slice(0, 1000),
   });
 
+  // 入力した日時（依頼14：インセンティブは締め日までに入力したものだけ）
+  await recordSubmission(session.staffId, "daily_report", reportDate);
+  await recordSubmission(session.staffId, "sales", reportDate);
   redirect(`/staff/report?date=${reportDate}&saved=1`);
 }

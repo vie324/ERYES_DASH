@@ -3,6 +3,7 @@
 
 import { fx } from "@/lib/data/tables";
 import { canApproveFor } from "@/lib/shift/extras";
+import { INPUT_DEFS, type InputKey } from "@/lib/required-inputs";
 import type { DataStore, Staff } from "@/lib/data/types";
 
 export interface ApprovalItem {
@@ -50,7 +51,16 @@ export async function pendingApprovals(db: DataStore, approver: Staff | null): P
   return items.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
-/** ほかの機能の承認（依頼14の救済など）。あとから足す */
-async function extraApprovals(_db: DataStore, _approver: Staff, _can: (staffId: string) => boolean): Promise<ApprovalItem[]> {
-  return [];
+/** 依頼14：締め日後の入力の救済（決められるのは管理者だけ） */
+async function extraApprovals(_db: DataStore, approver: Staff, _can: (staffId: string) => boolean): Promise<ApprovalItem[]> {
+  if (approver.role !== "admin") return [];
+  const rows = await fx().incentiveRescues.list({ where: { status: "pending" }, order: [["createdAt", "asc"]] });
+  return rows.map((r) => ({
+    kind: "rescue" as const,
+    id: r.id,
+    staffId: r.staffId,
+    title: `締め日後の入力の救済：${r.date}（${INPUT_DEFS[r.inputKey as InputKey]?.label ?? r.inputKey}）`,
+    detail: r.reason,
+    createdAt: r.createdAt,
+  }));
 }
