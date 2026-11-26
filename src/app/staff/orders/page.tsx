@@ -14,6 +14,9 @@ import { EmptyState, MonthNav, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import type { OrderCategory, OrderStatus } from "@/lib/data/types";
 import { createOrderRequestAction, updateOrderStatusAction } from "./actions";
+import { TabLinks } from "@/components/feature-ui";
+import { canManageOrders } from "@/lib/orders";
+import { viewerOf } from "@/lib/viewer";
 
 const CATEGORY_LABEL: Record<OrderCategory, string> = {
   wig: "ウィッグ",
@@ -33,6 +36,7 @@ export default async function OrdersPage({
   const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : thisMonthJst();
   const { from, to } = monthRange(month);
   const isExec = await isExecutive(session);
+  const canOrder = await canManageOrders(await viewerOf(session));
 
   const db = getDataStore();
   const [orders, staffList] = await Promise.all([
@@ -57,6 +61,15 @@ export default async function OrdersPage({
   return (
     <div className="page-narrow">
       <PageHeader title="発注・購入申請" backHref="/staff" />
+      {/* 依頼15：発注（発注先のページを1タップで開く・入荷）／ウィッグ・社販の購入の記録 */}
+      <TabLinks
+        items={[
+          ...(canOrder ? [{ href: "/staff/orders/place", label: "発注", active: false }] : []),
+          { href: "/staff/purchases", label: "ウィッグ・社販の購入", active: false },
+          { href: "/staff/orders", label: "申請", active: true },
+          ...(canOrder ? [{ href: "/staff/inventory", label: "在庫・棚卸し", active: false }] : []),
+        ]}
+      />
 
       {params.saved && (
         <p className="rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold px-4 py-3 mb-4">

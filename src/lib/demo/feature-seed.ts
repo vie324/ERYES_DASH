@@ -154,7 +154,37 @@ async function seedCash(put: DemoPut, today: string) {
   ]);
 }
 
+async function seedOrders(put: DemoPut, today: string) {
+  const [beauty, wigShop] = put(t.suppliers, [
+    { name: "ビューティーサプライ（デモ）", orderUrl: "https://example.com/order", contact: "担当 佐々木・03-0000-0000", method: "Web", deadlineNote: "毎週火曜12時", leadDays: 3, sortOrder: 10 },
+    { name: "ウィッグ専門店（デモ）", orderUrl: "https://example.com/wig", contact: "", method: "電話", deadlineNote: "", leadDays: 7, sortOrder: 20 },
+  ]);
+  const products = put(t.products, [
+    { name: "ENi シャンプー 300ml", category: "retail", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 3300, staffPrice: 2310, costPrice: 1200, barcode: "4900000000011", reorderPoint: 5, reorderQty: 12, sortOrder: 10 },
+    { name: "ENi トリートメント 250g", category: "retail", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 3850, staffPrice: 2695, costPrice: 1400, barcode: "4900000000028", reorderPoint: 4, reorderQty: 10, sortOrder: 20 },
+    { name: "カラー剤 7レベル ブラウン", category: "material", brand: "デモカラー", supplierId: beauty.id, unit: "本", retailPrice: 0, staffPrice: 0, costPrice: 650, barcode: "", reorderPoint: 10, reorderQty: 24, sortOrder: 30 },
+    { name: "カットウィッグ（レディース）", category: "wig", brand: "", supplierId: wigShop.id, unit: "体", retailPrice: 0, staffPrice: 4400, costPrice: 3000, barcode: "", reorderPoint: 2, reorderQty: 5, sortOrder: 40 },
+    { name: "ヘアオイル 100ml", category: "staff_sale", brand: "ENi", supplierId: beauty.id, unit: "本", retailPrice: 2970, staffPrice: 2079, costPrice: 1000, barcode: "4900000000035", reorderPoint: 3, reorderQty: 6, sortOrder: 50 },
+  ]);
+  // はじめの在庫（入荷として入れる）と、減った分
+  put(
+    t.inventoryMovements,
+    products.flatMap((p, i) => [
+      { storeId: ENI, productId: p.id, kind: "receive" as const, quantity: [10, 8, 20, 3, 6][i], occurredOn: addDays(today, -20), refType: "demo", createdAt: at(addDays(today, -20), 10) },
+      { storeId: ENI, productId: p.id, kind: (i === 2 ? "use" : "sale") as "use" | "sale", quantity: [6, 2, 12, 2, 1][i], occurredOn: addDays(today, -5), refType: "demo", createdAt: at(addDays(today, -5), 15) },
+    ])
+  );
+  put(t.purchaseOrders, [
+    { storeId: ENI, productId: products[1].id, supplierId: beauty.id, quantity: 10, status: "ordered" as const, orderedBy: "staff-3", orderedAt: at(addDays(today, -1), 11), createdAt: at(addDays(today, -1), 11) },
+  ]);
+  put(t.staffPurchases, [
+    { staffId: "staff-5", storeId: ENI, productId: products[3].id, itemName: products[3].name, category: "wig" as const, quantity: 1, unitPrice: 4400, total: 4400, purchasedOn: addDays(today, -3), recordedBy: "staff-5" },
+    { staffId: "staff-4", storeId: ENI, productId: products[0].id, itemName: products[0].name, category: "staff_sale" as const, quantity: 2, unitPrice: 2310, total: 4620, purchasedOn: addDays(today, -2), recordedBy: "staff-3" },
+  ]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedOrders(put, todayJst());
   await seedCash(put, todayJst());
   const today = todayJst();
   await seedSns(put, today);

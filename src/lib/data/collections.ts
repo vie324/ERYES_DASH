@@ -15,7 +15,7 @@ import { env, isSupabaseConfigured } from "@/lib/env";
 
 /**
  * 列の型。
- *  text …… 文字（未指定は ""）／int・num …… 数（未指定は 0）／bool …… 真偽（未指定は false）
+ *  text …… 文字（未指定は ""）／int・num …… 数（未指定は 0）／bool …… 真偽（未指定は false。isActive だけ true）
  *  date …… "YYYY-MM-DD" の文字（未指定は ""）／ts …… 日時（Date。未指定は null。createdAt・updatedAt は今）
  *  json …… JSON（未指定は null）／jsonArr …… JSONの配列（未指定は []）／jsonObj …… JSONのオブジェクト（未指定は {}）
  *  arr …… 文字の配列（text[]。未指定は []）／ref …… ほかの行のID（uuid。未指定は null）
@@ -98,7 +98,8 @@ function defaultOf(col: string, type: ColType): unknown {
     case "num":
       return 0;
     case "bool":
-      return false;
+      // 「使う」の印（isActive）だけは、はじめから使う状態にする（schema.sql の初期値も true）
+      return col === "isActive";
     case "ts":
       return col === "createdAt" || col === "updatedAt" ? new Date() : null;
     case "jsonArr":
