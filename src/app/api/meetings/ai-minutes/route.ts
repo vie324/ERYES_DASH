@@ -58,7 +58,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     participants: participantNames.join("、"),
     agenda: meeting.agenda,
     rawNotes,
-  });
+  }, session.staffId);
 
   return NextResponse.json({ ok: true, markdown, tasks, ai });
 }
