@@ -5,6 +5,7 @@
 import { registerDemoSeeder, type DemoPut } from "@/lib/data/collections";
 import * as t from "@/lib/data/tables";
 import { addDays, addMonths, jstDayBoundsUtc, thisMonthJst, todayJst } from "@/lib/date";
+import { DEMO_CAPTIONS, demoDay, seeded } from "@/lib/instagram/demo";
 
 /** 日本時間のその日の h 時 */
 function at(date: string, h: number, m = 0): Date {
@@ -244,7 +245,42 @@ async function seedGrowth(put: DemoPut, today: string) {
   ]);
 }
 
+async function seedInstagram(put: DemoPut, today: string) {
+  const people: [string, string, number][] = [
+    ["staff-3", "daiki_eni_hair", 2400],
+    ["staff-4", "yuina_eni", 1300],
+    ["staff-1", "misaki_ereys_lash", 900],
+  ];
+  for (const [staffId, username, base] of people) {
+    const [acc] = put(t.instagramAccounts, [
+      { staffId, igUserId: `demo-${staffId}`, username, accountType: "MEDIA_CREATOR", status: "demo", connectedAt: at(addDays(today, -40), 12), lastFetchedAt: at(today, 5) },
+    ]);
+    put(
+      t.instagramDaily,
+      Array.from({ length: 30 }, (_, i) => addDays(today, i - 30)).map((date, i) => ({ staffId, accountId: acc.id, date, ...demoDay(staffId, date, base, i) }))
+    );
+    const rnd = seeded(staffId);
+    put(
+      t.instagramMedia,
+      DEMO_CAPTIONS.map((caption, i) => {
+        const views = Math.round(base * (1 + rnd() * 3));
+        return {
+          staffId,
+          accountId: acc.id,
+          mediaId: `demo-${staffId}-${i}`,
+          caption,
+          mediaType: i % 2 === 0 ? "REELS" : "CAROUSEL_ALBUM",
+          postedAt: at(addDays(today, -(i * 4 + 1)), 20),
+          metrics: { views, reach: Math.round(views * 0.6), likes: Math.round(views * 0.06), comments: Math.round(rnd() * 8), saved: Math.round(rnd() * 20), shares: Math.round(rnd() * 10) },
+          fetchedAt: at(today, 5),
+        };
+      })
+    );
+  }
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedInstagram(put, todayJst());
   await seedGrowth(put, todayJst());
   await seedGoals(put, todayJst());
   await seedOrders(put, todayJst());
