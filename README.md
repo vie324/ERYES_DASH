@@ -299,6 +299,18 @@ npm test
 `vitest` で `src/**/*.test.ts` を実行します（画面は起動せず、判定ロジックとデモ用データストアを直接確かめる）。
 Supabase の環境変数が入っていても、テストは必ずデモ用のメモリ内データで動きます（`vitest.config.mts`）。型チェックは `npm run typecheck`。
 
+## 2-6-2. 追加開発（依頼10〜23）
+
+社内SNS・サンクス／AIしもんの見守り・教育と ENi Wikipedia／シフトと出退勤／レジ締め・現金出納帳／必須入力・インセンティブ・予定の確認／
+発注・社販／業務の整理の表の取り込み／稼働率／在庫・棚卸し／目標／成長ロードマップと動画／中さんのClaudeから読むMCP／Instagram／面接。
+
+- 確かめ方・本番に出す手順・TODO は **[docs/追加開発の確認手順.md](docs/追加開発の確認手順.md)**。アプリの中では `/staff/review`（依頼ごとの確認とフィードバック）
+- 設定の入口は `/admin/features`（定時実行の「今すぐ実行」も）。人ごとの権限は `/admin/permissions`、AIの使った量は `/admin/ai-usage`
+- 新しいテーブルは `supabase/migrations/20261126_requests_10_23.sql`（追加だけ。`schema.sql` の最後にも同じもの）。
+  テーブルが無い間も画面はエラーにならず、その機能だけ「準備中」になる。共通の作りは `src/lib/data/collections.ts`・`src/lib/data/tables.ts`
+- Preview で本番のデータに触らずに試すときは、Preview の環境変数にだけ `DEMO_MODE=1`
+- 定時実行は `/api/cron/daily`（`src/lib/jobs/index.ts` の仕事を、時刻を過ぎた最初の回に1日1回）
+
 ## 2-7. イーリスの日報へのコメント（店舗の管理者）
 
 - **店舗の管理者**（ロール `manager`）：担当店舗（`staff.managed_store_ids`）を持つ管理者。例：イーリスを見る管理者。マスタ設定のスタッフ欄で「権限：店舗の管理者」と「担当店舗」を選びます（判定は名前ではなく、このロールと担当店舗で行う）。管理者画面（`/admin`）には入れません

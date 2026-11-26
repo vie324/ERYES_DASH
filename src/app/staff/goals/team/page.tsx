@@ -38,7 +38,7 @@ export default async function GoalsTeamPage({ searchParams }: { searchParams: Pr
       {settings.stamps.map((s, i) => (
         <label key={s}>
           <input type="radio" name="stamp" value={s} defaultChecked={i === 0} className="peer sr-only" />
-          <span className="chip !min-h-8 !py-0.5 !px-2 !text-base peer-checked:chip-active cursor-pointer">{s}</span>
+          <span className="chip !min-h-8 !py-0.5 !px-2 !text-base cursor-pointer">{s}</span>
         </label>
       ))}
       <input name="body" className="input !min-h-9 !py-1 !text-xs flex-1 min-w-32" placeholder="ひとこと（任意）" maxLength={500} />

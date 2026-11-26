@@ -21,7 +21,9 @@ export default async function StocktakePage({ searchParams }: { searchParams: Pr
   if (!(await canManageOrders(v))) redirect("/staff/inventory");
   const params = await searchParams;
   const f = fx();
-  const st = params.id ? await f.stocktakes.get(params.id) : null;
+  // 棚卸しの番号が無いとき（メニュー・ブックマークから来たとき）は、在庫の画面で始めてもらう
+  if (!params.id) redirect("/staff/inventory");
+  const st = await f.stocktakes.get(params.id);
   if (!st) notFound();
   if (!v.isAdmin && !(v.isStoreManager && v.me?.managedStoreIds.includes(st.storeId)) && v.me?.storeId !== st.storeId) redirect("/staff/inventory");
   const db = getDataStore();
@@ -73,7 +75,7 @@ export default async function StocktakePage({ searchParams }: { searchParams: Pr
                   step="any"
                   defaultValue={l.countedSet ? l.counted : ""}
                   disabled={!draft}
-                  className="input !min-h-10 !py-1.5 w-20 text-right font-bold"
+                  className="input !min-h-10 !py-1.5 !w-20 shrink-0 text-right font-bold"
                   aria-label={`${p!.name}の実際の数`}
                 />
                 <span className={`w-12 text-right text-sm font-bold tabular-nums ${warn ? "text-red-600" : "text-ink-500"}`}>

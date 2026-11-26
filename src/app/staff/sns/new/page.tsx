@@ -26,7 +26,7 @@ export default async function NewSnsPostPage({ searchParams }: { searchParams: P
             {settings.categories.map((c, i) => (
               <label key={c}>
                 <input type="radio" name="category" value={c} defaultChecked={i === 0} className="peer sr-only" />
-                <span className="chip peer-checked:chip-active cursor-pointer">{c}</span>
+                <span className="chip cursor-pointer">{c}</span>
               </label>
             ))}
           </div>

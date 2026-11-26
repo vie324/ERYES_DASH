@@ -55,12 +55,12 @@ export default async function NewThanksPage({ searchParams }: { searchParams: Pr
           <div className="flex flex-wrap gap-2">
             <label>
               <input type="radio" name="stamp" value="" defaultChecked className="peer sr-only" />
-              <span className="chip peer-checked:chip-active cursor-pointer">なし</span>
+              <span className="chip cursor-pointer">なし</span>
             </label>
             {settings.stamps.map((s) => (
               <label key={s}>
                 <input type="radio" name="stamp" value={s} className="peer sr-only" />
-                <span className="chip !text-lg peer-checked:chip-active cursor-pointer">{s}</span>
+                <span className="chip !text-lg cursor-pointer">{s}</span>
               </label>
             ))}
           </div>

@@ -135,7 +135,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
                               ).map(([val, label]) => (
                                 <label key={val}>
                                   <input type="radio" name="status" value={val} defaultChecked={val === (st ?? "passed")} className="peer sr-only" />
-                                  <span className="chip !min-h-8 !py-0.5 peer-checked:chip-active cursor-pointer">{label}</span>
+                                  <span className="chip !min-h-8 !py-0.5 cursor-pointer">{label}</span>
                                 </label>
                               ))}
                             </div>

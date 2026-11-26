@@ -59,7 +59,7 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
           {TRAINING_KINDS.map((k, i) => (
             <label key={k.key} title={k.hint}>
               <input type="radio" name="kind" value={k.key} defaultChecked={i === 0} className="peer sr-only" />
-              <span className="chip peer-checked:chip-active cursor-pointer">{k.label}</span>
+              <span className="chip cursor-pointer">{k.label}</span>
             </label>
           ))}
         </div>

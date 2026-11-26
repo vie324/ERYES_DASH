@@ -385,7 +385,9 @@ class SupabaseCollection<T extends { id: string }> implements Collection<T> {
     for (const [k, v] of Object.entries(row)) {
       if (v === undefined || !(k in this.def.cols)) continue;
       if (k === "id" && !v) continue;
-      out[snake(k)] = toDb(v);
+      // 日付（date）・ほかの行のID（uuid）の「未指定」は、アプリでは "" だが DB では NULL にする
+      const type = this.def.cols[k as keyof T];
+      out[snake(k)] = (type === "date" || type === "ref") && v === "" ? null : toDb(v);
     }
     return out;
   }
@@ -419,7 +421,8 @@ class SupabaseCollection<T extends { id: string }> implements Collection<T> {
         if ("gt" in cond && cond.gt !== undefined) q = q.gt(col, toDb(cond.gt));
         if ("lte" in cond && cond.lte !== undefined) q = q.lte(col, toDb(cond.lte));
         if ("lt" in cond && cond.lt !== undefined) q = q.lt(col, toDb(cond.lt));
-      } else if (cond === null) {
+      } else if (cond === null || (cond === "" && ["date", "ref"].includes(this.def.cols[key as keyof T]))) {
+        // 日付・IDの「未指定」（""）は DB では NULL
         q = q.is(col, null);
       } else {
         q = q.eq(col, toDb(cond));

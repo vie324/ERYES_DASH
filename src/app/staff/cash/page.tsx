@@ -170,7 +170,7 @@ export default async function CashPage({
               {settings.kinds.map((k, i) => (
                 <label key={k.key}>
                   <input type="radio" name="kind" value={k.key} defaultChecked={i === 0} className="peer sr-only" />
-                  <span className="chip peer-checked:chip-active cursor-pointer">
+                  <span className="chip cursor-pointer">
                     {k.label}
                     <span className="opacity-60">{k.direction === "in" ? "＋" : k.direction === "out" ? "−" : "±0"}</span>
                   </span>

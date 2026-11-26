@@ -71,16 +71,17 @@ export default async function PlaceOrderPage({ searchParams }: { searchParams: P
                     在庫 {n.stock} ／ 下回ったら {n.product.reorderPoint}
                   </span>
                 </p>
-                <form action={placeOrderAction} className="flex gap-2 mt-2">
+                {/* 幅375pxでもはみ出さないよう、発注先のページへのボタンは1行、数と「発注した」は次の行に */}
+                <form action={placeOrderAction} className="flex flex-wrap gap-2 mt-2">
                   <input type="hidden" name="store" value={store.id} />
                   <input type="hidden" name="product" value={n.product.id} />
                   {n.supplier && safeOrderUrl(n.supplier.orderUrl) && (
-                    <a href={safeOrderUrl(n.supplier.orderUrl)!} target="_blank" rel="noreferrer" className="btn-secondary btn-sm shrink-0">
+                    <a href={safeOrderUrl(n.supplier.orderUrl)!} target="_blank" rel="noreferrer" className="btn-secondary btn-sm basis-full truncate">
                       {n.supplier.name}を開く
                     </a>
                   )}
-                  <input name="quantity" type="number" min={1} defaultValue={n.suggestQty} className="input !min-h-10 !py-1.5 w-20 text-right" aria-label="発注する数" />
-                  <button type="submit" className="btn-primary btn-sm flex-1">
+                  <input name="quantity" type="number" min={1} defaultValue={n.suggestQty} className="input !min-h-10 !py-1.5 !w-20 shrink-0 text-right" aria-label="発注する数" />
+                  <button type="submit" className="btn-primary btn-sm flex-1 min-w-0">
                     発注した
                   </button>
                 </form>
@@ -103,10 +104,10 @@ export default async function PlaceOrderPage({ searchParams }: { searchParams: P
                   {nameOf(o.orderedBy)}・{o.orderedAt ? formatDateTimeJa(o.orderedAt) : ""}
                 </p>
                 <div className="flex gap-2 mt-2">
-                  <form action={receiveOrderAction} className="flex gap-2 flex-1">
+                  <form action={receiveOrderAction} className="flex gap-2 flex-1 min-w-0">
                     <input type="hidden" name="id" value={o.id} />
-                    <input name="received_qty" type="number" min={0} defaultValue={o.quantity} className="input !min-h-10 !py-1.5 w-20 text-right" aria-label="届いた数" />
-                    <button type="submit" className="btn-primary btn-sm flex-1">
+                    <input name="received_qty" type="number" min={0} defaultValue={o.quantity} className="input !min-h-10 !py-1.5 !w-20 shrink-0 text-right" aria-label="届いた数" />
+                    <button type="submit" className="btn-primary btn-sm flex-1 min-w-0">
                       入荷
                     </button>
                   </form>
@@ -155,7 +156,7 @@ export default async function PlaceOrderPage({ searchParams }: { searchParams: P
                         <span className="block text-sm font-bold truncate">{p.name}</span>
                         <span className="block text-[11px] text-ink-500">在庫 {stock.get(p.id) ?? 0}{p.unit}</span>
                       </span>
-                      <input name="quantity" type="number" min={1} defaultValue={p.reorderQty || 1} className="input !min-h-10 !py-1.5 w-16 text-right" aria-label={`${p.name}の発注する数`} />
+                      <input name="quantity" type="number" min={1} defaultValue={p.reorderQty || 1} className="input !min-h-10 !py-1.5 !w-16 shrink-0 text-right" aria-label={`${p.name}の発注する数`} />
                       <button type="submit" className="btn-secondary btn-sm shrink-0">
                         発注した
                       </button>

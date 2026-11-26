@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { downscale } from "@/components/photo-input";
+import { BodyPortal } from "@/components/body-portal";
 
 export function MultiPhotoInput({ name, max = 4 }: { name: string; max?: number }) {
   const [photos, setPhotos] = useState<string[]>([]);
@@ -78,18 +79,20 @@ export function PhotoGrid({ photos }: { photos: string[] }) {
         ))}
       </div>
       {open && (
-        <div
-          className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4"
-          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
-          onClick={() => setOpen(null)}
-          role="dialog"
-          aria-label="写真を大きく表示"
-        >
-          <img src={open} alt="写真" className="max-w-full max-h-full object-contain line-no-callout" />
-          <button type="button" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-lg" aria-label="閉じる">
-            ×
-          </button>
-        </div>
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+            onClick={() => setOpen(null)}
+            role="dialog"
+            aria-label="写真を大きく表示"
+          >
+            <img src={open} alt="写真" className="max-w-full max-h-full object-contain line-no-callout" />
+            <button type="button" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-lg" aria-label="閉じる">
+              ×
+            </button>
+          </div>
+        </BodyPortal>
       )}
     </>
   );

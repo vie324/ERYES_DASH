@@ -191,7 +191,7 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
                         {Array.from({ length: item.max }, (_, n) => n + 1).map((n) => (
                           <label key={n}>
                             <input type="radio" name={`score_${item.key}`} value={n} defaultChecked={st.mine?.scores?.[item.key] === n} required className="peer sr-only" />
-                            <span className="chip !min-h-9 !min-w-9 !px-2 justify-center peer-checked:chip-active cursor-pointer">{n}</span>
+                            <span className="chip !min-h-9 !min-w-9 !px-2 justify-center cursor-pointer">{n}</span>
                           </label>
                         ))}
                       </div>
@@ -277,7 +277,7 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
                 {(["pass", "hold", "fail"] as const).map((d) => (
                   <label key={d}>
                     <input type="radio" name="decision" value={d} defaultChecked={applicant.decision === d} className="peer sr-only" required />
-                    <span className="chip !min-h-9 peer-checked:chip-active cursor-pointer">{DECISION_LABEL[d]}</span>
+                    <span className="chip !min-h-9 cursor-pointer">{DECISION_LABEL[d]}</span>
                   </label>
                 ))}
               </div>
