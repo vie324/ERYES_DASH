@@ -33,6 +33,14 @@ export default async function CurriculumPage() {
           </Link>
         )}
       </div>
+      {/* 依頼20：アプリの中のカリキュラム（成長ロードマップ・動画） */}
+      <Link href="/staff/growth" className="card mt-4 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 text-brand-700 grid place-items-center">
+          <Icon name="trendingUp" className="w-5 h-5" />
+        </span>
+        <span className="flex-1 text-sm font-bold text-ink-900">アプリの中のカリキュラム（成長ロードマップ・動画）</span>
+        <Icon name="chevronRight" className="w-4 h-4 text-ink-300" />
+      </Link>
     </div>
   );
 }

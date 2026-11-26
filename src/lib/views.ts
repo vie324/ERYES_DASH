@@ -8,6 +8,8 @@ import type { DataStore, EniReport, ViewLog } from "@/lib/data/types";
 /** 記録する種類。足すときはここに1つ足す */
 export const VIEW_TARGETS = {
   weeklyReport: "weekly_report",
+  // 依頼20：カリキュラム動画を見た（どこまで見たかは video_progress に持つ）
+  curriculumVideo: "curriculum_video",
 } as const;
 
 /** 同じ人が同じものを見直したとき、この分数以内なら数えない（再読み込みで件数が増えないように） */

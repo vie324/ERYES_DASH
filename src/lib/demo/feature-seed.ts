@@ -199,7 +199,53 @@ async function seedGoals(put: DemoPut, today: string) {
   void g1;
 }
 
+async function seedGrowth(put: DemoPut, today: string) {
+  // 動画は試し用の公開サンプル（本番は Cloudflare Stream に上げる）
+  const [hls, mp4] = put(t.curriculumVideos, [
+    { title: "シャンプーの基本（見本の動画）", description: "試し用の公開サンプル動画です。本番ではENiのカリキュラム動画に差し替えます。", provider: "url", providerRef: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", durationSec: 596, status: "ready", createdBy: "staff-admin" },
+    { title: "ブローの手の動き（見本の動画）", description: "試し用の公開サンプル動画（短い動画）です。", provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", durationSec: 5, status: "ready", createdBy: "staff-admin" },
+  ]);
+  const stages = put(t.growthStages, [
+    { name: "入社オリエンテーション", jobType: "assistant", sortOrder: 1, targetMonth: 1, description: "ENiの考え方と、お店の1日の流れを覚える", competencies: "あいさつ・身だしなみ・時間を守る\nENiの理念を自分の言葉で話せる" },
+    { name: "シャンプーデビュー", jobType: "assistant", sortOrder: 2, targetMonth: 3, description: "お客様にシャンプーを任せてもらえる", competencies: "お客様に自分から声をかけられる\n施術中の会話で、お客様の好みを聞き出せる" },
+    { name: "カラーアシスト", jobType: "assistant", sortOrder: 3, targetMonth: 9, description: "カラーの塗布・流しを任せてもらえる", competencies: "薬剤の基本を説明できる\n時間を見ながら、自分から次の準備ができる" },
+    { name: "スタイリストデビュー", jobType: "assistant", sortOrder: 4, targetMonth: 30, description: "カット・カラーでお客様を担当する", competencies: "指名のお客様を月20名\n後輩の練習を見られる" },
+    { name: "まつげ施術デビュー", jobType: "eyes", sortOrder: 1, targetMonth: 3, description: "イーリスの基本の施術を任せてもらえる", competencies: "カウンセリングで希望を聞き取れる\n衛生の決まりを守れる" },
+  ]);
+  const [ori, sham, color] = stages;
+  const items = put(t.curriculumItems, [
+    { stageId: ori.id, title: "理念・ルールのテスト", description: "ENiの考え方と、お店の決まり", sortOrder: 1 },
+    { stageId: ori.id, title: "掃除・準備のチェック", description: "開店前・閉店後の流れ", sortOrder: 2 },
+    { stageId: sham.id, title: "シャンプー 合格", description: "店長にお客様役をしてもらい、10項目すべてできたら合格", videoId: hls.id, requiredPracticeMinutes: 1200, sortOrder: 1 },
+    { stageId: sham.id, title: "ブロー 合格", description: "根元から乾かし、まとまりを出す", videoId: mp4.id, requiredPracticeMinutes: 600, sortOrder: 2 },
+    { stageId: color.id, title: "カラー塗布 合格", description: "根元のリタッチを時間内に", requiredPracticeMinutes: 1800, sortOrder: 1 },
+    { stageId: stages[4].id, title: "まつげ 基本の装着 合格", sortOrder: 1 },
+  ]);
+  put(t.staffProfiles, [
+    { staffId: "staff-3", joinedOn: addMonths(today.slice(0, 7), -40) + "-01", note: "" },
+    { staffId: "staff-4", joinedOn: addMonths(today.slice(0, 7), -26) + "-01", note: "" },
+    { staffId: "staff-5", joinedOn: addMonths(today.slice(0, 7), -5) + "-10", note: "" },
+    { staffId: "staff-6", joinedOn: addMonths(today.slice(0, 7), -10) + "-01", note: "" },
+    { staffId: "staff-1", joinedOn: addMonths(today.slice(0, 7), -14) + "-01", note: "" },
+  ]);
+  const judged = { judgedBy: "staff-3", judgedAt: at(addDays(today, -10), 19) };
+  put(t.curriculumResults, [
+    { staffId: "staff-5", itemId: items[0].id, status: "passed", comment: "よく覚えています！", ...judged },
+    { staffId: "staff-5", itemId: items[1].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-5", itemId: items[2].id, status: "retry", comment: "流しのときの手の向きを、動画の4分あたりで確認しよう", ...judged },
+    { staffId: "staff-6", itemId: items[0].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-6", itemId: items[1].id, status: "passed", comment: "", ...judged },
+    { staffId: "staff-6", itemId: items[2].id, status: "passed", comment: "お客様からも好評でした", ...judged },
+    { staffId: "staff-6", itemId: items[3].id, status: "passed", comment: "", ...judged },
+  ]);
+  put(t.videoProgress, [
+    { staffId: "staff-5", videoId: hls.id, maxPositionSec: 240, durationSec: 596, completed: false, lastWatchedAt: at(addDays(today, -2), 21) },
+    { staffId: "staff-6", videoId: hls.id, maxPositionSec: 596, durationSec: 596, completed: true, lastWatchedAt: at(addDays(today, -30), 21) },
+  ]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedGrowth(put, todayJst());
   await seedGoals(put, todayJst());
   await seedOrders(put, todayJst());
   await seedCash(put, todayJst());

@@ -47,7 +47,7 @@ export const PUSH_KINDS: PushKindDef[] = [
   { key: "input", label: "まだの入力・締め日", note: "その日に必ず入力するもの（出退勤・日報など）が残っているとき、インセンティブの締め日が近いとき" },
   { key: "approval", label: "承認のお願い", note: "締切後の希望休・打刻の修正・締め日後の入力の救済が届いたとき", execOnly: true },
   { key: "order", label: "発注が必要な商品", note: "在庫が決めた数を下回った商品があるとき（発注の担当の人）" },
-  { key: "goal", label: "目標・振り返り", note: "幹部からのフィードバック・AIの今週やることができたとき" },
+  { key: "goal", label: "目標・振り返り・カリキュラム", note: "幹部からのフィードバック・カリキュラムの合格の判定・AIの今週やることができたとき" },
   { key: "recruit", label: "面接", note: "面接官に選ばれたとき・面接の評価がそろったとき" },
   { key: "instagram", label: "Instagram", note: "Instagramのつなぎ直しが必要になったとき" },
 ];
