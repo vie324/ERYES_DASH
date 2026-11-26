@@ -122,7 +122,40 @@ async function seedShift(put: DemoPut, today: string) {
   ]);
 }
 
+async function seedCash(put: DemoPut, today: string) {
+  // ENi 自由が丘店の、きのうまでの3日分のレジ締め（1日は差額あり・確認済み）
+  const days = [3, 2, 1].map((n) => addDays(today, -n));
+  put(
+    t.registerClosings,
+    days.map((date, i) => {
+      const cashSales = [42000, 38500, 51200][i];
+      const diff = i === 1 ? -100 : 0;
+      const counted = 30000 + cashSales + diff - (i === 2 ? 1200 : 0);
+      return {
+        storeId: ENI,
+        date,
+        changeFund: 30000,
+        cashSales,
+        denominations: { "10000": Math.floor(counted / 10000), "1000": Math.floor((counted % 10000) / 1000), "100": Math.floor((counted % 1000) / 100) },
+        countedTotal: counted,
+        expectedTotal: counted - diff,
+        diff,
+        diffReason: diff ? "お釣りの渡し間違い（100円多く渡した）" : "",
+        salesSource: "manual" as const,
+        closedBy: "staff-3",
+        closedAt: at(date, 19, 10),
+        confirmedBy: i < 2 ? "staff-admin" : null,
+        confirmedAt: i < 2 ? at(date, 20) : null,
+      };
+    })
+  );
+  put(t.cashMovements, [
+    { storeId: ENI, date: days[2], kind: "expense", direction: "out" as const, description: "タオルの洗剤", amount: 1200, createdBy: "staff-3" },
+  ]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedCash(put, todayJst());
   const today = todayJst();
   await seedSns(put, today);
   await seedAiAndWiki(put);
