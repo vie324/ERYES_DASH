@@ -224,7 +224,7 @@ export const REVIEW_ITEMS: ReviewItem[] = [
       { text: "管理者：Metaのアプリに登録するURL・集める数字の名前・今すぐ集める", href: "/admin/instagram" },
     ],
     checks: ["トークンは暗号化して保存", "使えない数字の名前は、その数字だけ飛ばして管理画面に出る"],
-    todo: ["Metaの開発者のアプリ（INSTAGRAM_APP_ID/SECRET）と審査の準備", "スタッフのプロアカウントへの切り替え"],
+    todo: ["Metaの開発者のアプリ（INSTAGRAM_APP_ID/SECRET）と審査の準備", "スタッフのプロアカウントへの切り替え（数字の名前は2026-11-26に公式のドキュメントで確認済み）"],
   },
   {
     no: "23",

@@ -30,10 +30,12 @@ export interface InstagramSettings {
 }
 
 export const INSTAGRAM_SETTINGS_KEY = "instagram_settings";
+// 数字の名前は Meta の公式のドキュメント（Instagram Account Insights／Instagram Media Insights。
+// 2026-11-26 に確認・最新の版は v27.0）にある Instagram ログインで使えるもの。impressions は廃止済みなので使わない。
 export const DEFAULT_INSTAGRAM_SETTINGS: InstagramSettings = {
-  graphVersion: "v24.0",
-  accountMetrics: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments", "shares", "saves", "profile_links_taps", "follows_and_unfollows"],
-  mediaMetrics: ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions"],
+  graphVersion: "v27.0",
+  accountMetrics: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments", "shares", "saves", "reposts", "profile_links_taps", "follows_and_unfollows"],
+  mediaMetrics: ["views", "reach", "likes", "comments", "saved", "shares", "reposts", "total_interactions"],
   mediaLimit: 10,
   labels: {
     followers: "フォロワー",
@@ -46,8 +48,9 @@ export const DEFAULT_INSTAGRAM_SETTINGS: InstagramSettings = {
     shares: "シェア",
     saves: "保存",
     saved: "保存",
+    reposts: "リポスト",
     profile_links_taps: "リンクのタップ",
-    follows_and_unfollows: "フォロー増減",
+    follows_and_unfollows: "フォロー・解除",
   },
 };
 
@@ -118,9 +121,11 @@ export function readState(state: string): string | null {
 }
 
 export function authorizeUrl(redirectUri: string, state: string): string {
+  // パラメータは Meta の「Business Login for Instagram」のとおり（2026-11-26 に公式のドキュメントで確認）。
+  // force_reauth=true：同じ端末でお店のアカウントにログインしていても、本人のアカウントで入り直してもらう
   const q = new URLSearchParams({
-    enable_fb_login: "0",
-    force_authentication: "1",
+    enable_fb_login: "false",
+    force_reauth: "true",
     client_id: env.instagramAppId,
     redirect_uri: redirectUri,
     response_type: "code",

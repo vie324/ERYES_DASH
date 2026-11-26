@@ -9,7 +9,7 @@ import { createHmac } from "node:crypto";
 import { getMockStore } from "@/lib/data/mock-store";
 import { fx } from "@/lib/data/tables";
 import { addDays, todayJst } from "@/lib/date";
-import { decryptToken, encryptToken, isProfessional, makeState, needsRefresh, readState, summarizeAccounts, syncAccount } from "@/lib/instagram";
+import { DEFAULT_INSTAGRAM_SETTINGS, authorizeUrl, decryptToken, encryptToken, isProfessional, makeState, needsRefresh, readState, summarizeAccounts, syncAccount } from "@/lib/instagram";
 import { parseSignedRequest } from "@/lib/instagram/signed-request";
 
 afterEach(() => {
@@ -37,6 +37,18 @@ describe("トークン・合言葉", () => {
     expect(needsRefresh({ tokenExpiresAt: new Date(now + 10 * 86400_000), tokenRefreshedAt: new Date(now - 3600_000) }, now)).toBe(false);
     expect(isProfessional("MEDIA_CREATOR")).toBe(true);
     expect(isProfessional("PERSONAL")).toBe(false);
+  });
+
+  it("許可の画面のURLは、Meta のドキュメントのパラメータのとおり（Facebookログインは出さない・本人のアカウントで入り直す）", () => {
+    const u = new URL(authorizeUrl("https://example.com/api/instagram/callback", "st"));
+    expect(u.origin + u.pathname).toBe("https://www.instagram.com/oauth/authorize");
+    expect(u.searchParams.get("response_type")).toBe("code");
+    expect(u.searchParams.get("scope")).toBe("instagram_business_basic,instagram_business_manage_insights");
+    expect(u.searchParams.get("enable_fb_login")).toBe("false");
+    expect(u.searchParams.get("force_reauth")).toBe("true");
+    expect(u.searchParams.get("state")).toBe("st");
+    // 廃止された数字（impressions）は初期値に入れない
+    expect([...DEFAULT_INSTAGRAM_SETTINGS.accountMetrics, ...DEFAULT_INSTAGRAM_SETTINGS.mediaMetrics]).not.toContain("impressions");
   });
 
   it("Meta からの signed_request は署名を確かめる", () => {
