@@ -31,6 +31,8 @@ import {
 } from "@/lib/eni/schedule-blocks";
 import type { CompanyEvent, DailyPlan, ScheduleBlock } from "@/lib/data/types";
 import { CompanyEventsPanel, EventFlash } from "@/components/company-events";
+import { PersonalEventsBanner } from "@/components/personal-events";
+import { fx } from "@/lib/data/tables";
 import { eventsOnDate } from "@/lib/company-events";
 import { DateStrip, type StripDay } from "./date-strip";
 import {
@@ -112,6 +114,11 @@ export default async function PlanPage({
       // その日にかかっている全体スケジュール（全体ミーティング・研修など）
       db.listCompanyEvents({ from: date, to: date }).then((events) => eventsOnDate(events, date)),
     ]);
+
+  // 依頼23：自分だけの予定（面接官に選ばれた面接など）。DBの準備前は空
+  const myPersonalEvents = await fx()
+    .personalEvents.list({ where: { staffId: session.staffId, date }, order: [["startTime", "asc"]] })
+    .catch(() => []);
 
   const members = staffList.filter((s) => s.isActive && s.jobType !== "");
   const staffMap = new Map(staffList.map((s) => [s.id, s.name]));
@@ -255,6 +262,7 @@ export default async function PlanPage({
             )}
           </p>
           <DayEventsBanner events={dayEvents} href={`/staff/plan?date=${date}&tab=all&month=${date.slice(0, 7)}`} />
+          {tab === "day" && <PersonalEventsBanner events={myPersonalEvents} />}
         </>
       )}
 

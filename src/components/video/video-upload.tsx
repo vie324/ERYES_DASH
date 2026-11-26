@@ -6,36 +6,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { finishVideoUploadAction, prepareVideoUploadAction } from "@/app/admin/growth/actions";
-
-function readDuration(file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const el = document.createElement("video");
-    el.preload = "metadata";
-    el.onloadedmetadata = () => {
-      URL.revokeObjectURL(url);
-      resolve(Number.isFinite(el.duration) ? Math.round(el.duration) : 0);
-    };
-    el.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(0);
-    };
-    el.src = url;
-  });
-}
-
-function send(method: "POST" | "PUT", url: string, body: FormData, onProgress: (pct: number) => void): Promise<boolean> {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
-    xhr.onerror = () => resolve(false);
-    xhr.send(body);
-  });
-}
+import { readDuration, sendFile as send } from "./upload-utils";
 
 export function VideoUpload({ providerLabel }: { providerLabel: string }) {
   const router = useRouter();

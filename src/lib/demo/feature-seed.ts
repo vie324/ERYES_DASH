@@ -279,7 +279,37 @@ async function seedInstagram(put: DemoPut, today: string) {
   }
 }
 
+async function seedRecruit(put: DemoPut, today: string) {
+  const [hanako, taro, jiro] = put(t.applicants, [
+    { name: "見本 花子", appliedOn: addDays(today, -10), source: "katibito", stage: "1次面接", storeId: ENI, status: "active", note: "スタイリスト志望（デモの応募者）", createdBy: "staff-admin" },
+    { name: "見本 太郎", appliedOn: addDays(today, -30), source: "Instagram", stage: "最終面接", storeId: ENI, status: "active", note: "アシスタント志望（デモの応募者）", createdBy: "staff-admin" },
+    { name: "見本 次郎", appliedOn: addDays(today, -260), source: "Indeed", stage: "1次面接", storeId: ENI, status: "rejected", selectionEndedOn: addDays(today, -200), note: "選考が終わった人（録画の自動削除の確かめ用）", createdBy: "staff-admin" },
+  ]);
+  const [i1, i2] = put(t.interviews, [
+    { applicantId: hanako.id, date: addDays(today, 1), startTime: "10:00", endTime: "11:00", place: "自由が丘店", interviewerIds: ["staff-3", "staff-4", "staff-admin"], status: "scheduled", createdBy: "staff-admin" },
+    { applicantId: taro.id, date: addDays(today, -7), startTime: "14:00", endTime: "15:00", place: "オンライン", interviewerIds: ["staff-3", "staff-admin"], status: "done", createdBy: "staff-admin" },
+    { applicantId: jiro.id, date: addDays(today, -230), startTime: "11:00", endTime: "12:00", place: "自由が丘店", interviewerIds: ["staff-3"], status: "done", createdBy: "staff-admin" },
+  ]);
+  put(
+    t.personalEvents,
+    i1.interviewerIds.map((staffId) => ({ staffId, date: i1.date, startTime: "10:00", endTime: "11:00", title: "面接：見本 花子さん（1次面接）・自由が丘店", sourceType: "interview", sourceId: i1.id }))
+  );
+  const sc = (a: number, b: number, c: number, d: number, e: number) => ({ impression: a, communication: b, values: c, motivation: d, skill: e });
+  put(t.interviewEvaluations, [
+    { interviewId: i1.id, applicantId: hanako.id, interviewerId: "staff-3", scores: sc(4, 4, 5, 5, 3), comment: "笑顔がよく、ENiの考え方に共感していた", submittedAt: at(today, 9) },
+    { interviewId: i1.id, applicantId: hanako.id, interviewerId: "staff-admin", scores: sc(4, 3, 4, 5, 3), comment: "意欲が高い", submittedAt: at(today, 9) },
+    { interviewId: i2.id, applicantId: taro.id, interviewerId: "staff-3", scores: sc(5, 4, 4, 4, 2), comment: "素直で、練習を続けられそう", submittedAt: at(addDays(today, -7), 16) },
+    { interviewId: i2.id, applicantId: taro.id, interviewerId: "staff-admin", scores: sc(4, 4, 5, 4, 2), comment: "", submittedAt: at(addDays(today, -7), 17) },
+  ]);
+  put(t.interviewRecordings, [
+    { applicantId: taro.id, interviewId: i2.id, provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", fileName: "面接の録画（見本）.mp4", consentChecked: true, consentNote: "面接の始めに口頭で確認", deleteAfter: "", uploadedBy: "staff-3" },
+    { applicantId: jiro.id, provider: "url", providerRef: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", fileName: "保存期間を過ぎた録画（見本）.mp4", consentChecked: true, deleteAfter: addDays(today, -20), uploadedBy: "staff-3" },
+  ]);
+  put(t.katibitoResults, [{ applicantId: taro.id, interviewId: i2.id, score: 78, summary: "表情が明るく、落ち着いて話せている（デモの結果）", createdBy: "staff-admin" }]);
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedRecruit(put, todayJst());
   await seedInstagram(put, todayJst());
   await seedGrowth(put, todayJst());
   await seedGoals(put, todayJst());

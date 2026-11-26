@@ -21,7 +21,21 @@ function fmt(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function ProtectedPlayer({ videoId, viewerName, startAt = 0 }: { videoId: string; viewerName: string; startAt?: number }) {
+export function ProtectedPlayer({
+  videoId,
+  viewerName,
+  startAt = 0,
+  playUrl,
+  trackProgress = true,
+}: {
+  videoId: string;
+  viewerName: string;
+  startAt?: number;
+  /** 再生のURLをもらう先（既定：カリキュラムの動画。面接の録画は別の入口） */
+  playUrl?: string;
+  /** どこまで見たかを記録するか（カリキュラムの動画だけ） */
+  trackProgress?: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
   const [source, setSource] = useState<Source | null>(null);
@@ -34,7 +48,7 @@ export function ProtectedPlayer({ videoId, viewerName, startAt = 0 }: { videoId:
 
   const load = useCallback(async () => {
     setError("");
-    const res = await fetch(`/api/curriculum/video/${videoId}/play`, { cache: "no-store" });
+    const res = await fetch(playUrl ?? `/api/curriculum/video/${videoId}/play`, { cache: "no-store" });
     const data = (await res.json().catch(() => ({}))) as Source & { error?: string };
     if (!res.ok || !data.src) {
       setError(data.error ?? "再生できませんでした");
@@ -42,7 +56,7 @@ export function ProtectedPlayer({ videoId, viewerName, startAt = 0 }: { videoId:
     }
     setSource(data);
     return data;
-  }, [videoId]);
+  }, [videoId, playUrl]);
 
   // 動画の読み込み（HLSは Safari ならそのまま、それ以外は hls.js）
   useEffect(() => {
@@ -87,7 +101,7 @@ export function ProtectedPlayer({ videoId, viewerName, startAt = 0 }: { videoId:
   const send = useCallback(
     (force = false) => {
       const v = videoRef.current;
-      if (!v) return;
+      if (!v || !trackProgress) return;
       const now = Date.now();
       if (!force && now - lastSent.current < 10000) return;
       lastSent.current = now;
@@ -98,7 +112,7 @@ export function ProtectedPlayer({ videoId, viewerName, startAt = 0 }: { videoId:
         keepalive: true,
       }).catch(() => undefined);
     },
-    [videoId]
+    [videoId, trackProgress]
   );
 
   const toggle = async () => {

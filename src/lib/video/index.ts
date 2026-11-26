@@ -58,7 +58,7 @@ function supabase() {
  *  ・Cloudflare：署名つきトークン（2時間）。動画は requireSignedURLs で上げてあるので、トークンが無いと再生できない
  *  ・Supabase：署名つきURL（動画の長さ＋10分。MP4は再生中にも何度も読みに来るため、短すぎると途中で止まる）
  */
-export async function playSourceFor(video: CurriculumVideo): Promise<PlaySource> {
+export async function playSourceFor(video: Pick<CurriculumVideo, "provider" | "providerRef" | "durationSec">): Promise<PlaySource> {
   const now = Date.now();
   if (video.provider === "cloudflare") {
     const exp = Math.floor(now / 1000) + 2 * 3600;
@@ -78,11 +78,14 @@ export async function playSourceFor(video: CurriculumVideo): Promise<PlaySource>
 }
 
 /** 動画を上げる準備（端末から直接送る先を作る。大きな動画をアプリのサーバーに通さないため） */
-export async function createUploadTarget(fileName: string): Promise<{ provider: VideoProvider; uploadUrl: string; providerRef: string; method: "POST" | "PUT" }> {
+export async function createUploadTarget(
+  fileName: string,
+  folder: "videos" | "interviews" = "videos"
+): Promise<{ provider: VideoProvider; uploadUrl: string; providerRef: string; method: "POST" | "PUT" }> {
   if (isCloudflareConfigured()) {
     const r = await cloudflare<{ uploadURL: string; uid: string }>("/direct_upload", {
       method: "POST",
-      body: JSON.stringify({ maxDurationSeconds: 3 * 3600, requireSignedURLs: true, meta: { name: fileName.slice(0, 100) } }),
+      body: JSON.stringify({ maxDurationSeconds: 3 * 3600, requireSignedURLs: true, meta: { name: fileName.slice(0, 100), kind: folder } }),
     });
     return { provider: "cloudflare", uploadUrl: r.uploadURL, providerRef: r.uid, method: "POST" };
   }
@@ -91,7 +94,7 @@ export async function createUploadTarget(fileName: string): Promise<{ provider: 
     // 非公開のバケットが無ければ作る（公開にはしない）
     const { data: bucket } = await sb.storage.getBucket(env.videoBucket);
     if (!bucket) await sb.storage.createBucket(env.videoBucket, { public: false });
-    const path = `videos/${Date.now().toString(36)}-${fileName.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80)}`;
+    const path = `${folder}/${Date.now().toString(36)}-${fileName.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80)}`;
     const { data, error } = await sb.storage.from(env.videoBucket).createSignedUploadUrl(path);
     if (error || !data) throw new Error(`Supabase Storage: ${error?.message ?? "アップロード先を作れませんでした"}`);
     return { provider: "supabase", uploadUrl: data.signedUrl, providerRef: path, method: "PUT" };
