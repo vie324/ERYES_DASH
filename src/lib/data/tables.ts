@@ -1263,6 +1263,10 @@ export interface OauthClient {
   clientId: string;
   clientName: string;
   redirectUris: string[];
+  /** none（公開クライアント・PKCEのみ）／client_secret_post／client_secret_basic */
+  authMethod: string;
+  /** クライアントの秘密（ハッシュだけ保存） */
+  secretHash: string;
   createdAt: Date;
 }
 export const oauthClients = defineTable<OauthClient>("oauth_clients", {
@@ -1270,6 +1274,8 @@ export const oauthClients = defineTable<OauthClient>("oauth_clients", {
   clientId: "text",
   clientName: "text",
   redirectUris: "arr",
+  authMethod: "text",
+  secretHash: "text",
   createdAt: "ts",
 });
 

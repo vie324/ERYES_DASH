@@ -20,6 +20,20 @@ const nextConfig: NextConfig = {
       { source: "/.well-known/oauth-authorization-server/:path*", destination: "/api/oauth/metadata" },
       { source: "/.well-known/oauth-protected-resource", destination: "/api/oauth/resource" },
       { source: "/.well-known/oauth-protected-resource/:path*", destination: "/api/oauth/resource" },
+      { source: "/.well-known/openid-configuration", destination: "/api/oauth/metadata" },
+    ];
+  },
+  // Claude からの接続の許可の画面（依頼21）は、ほかのサイトの中に埋め込ませない（クリックをだます攻撃を防ぐ）
+  async headers() {
+    return [
+      {
+        source: "/oauth/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
     ];
   },
   // 旧「シフト管理（早番・遅番）」の画面は、シフト（/staff/schedule・/admin/schedule）に一本化した。
