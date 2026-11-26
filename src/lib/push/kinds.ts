@@ -2,7 +2,24 @@
 // 通知を送るところ（sendPush / notifyQuietly）で kind を付けると、止めている人には送らない。
 // kind を付けない通知（テスト通知など）は設定に関係なく届く。
 
-export type PushKind = "chat" | "mention" | "announce" | "morning" | "task" | "thanks" | "shift" | "absence" | "report";
+export type PushKind =
+  | "chat"
+  | "mention"
+  | "announce"
+  | "morning"
+  | "task"
+  | "thanks"
+  | "shift"
+  | "absence"
+  | "report"
+  // 2026-11 依頼10〜23
+  | "sns"
+  | "input"
+  | "approval"
+  | "order"
+  | "goal"
+  | "recruit"
+  | "instagram";
 
 export interface PushKindDef {
   key: PushKind;
@@ -26,6 +43,13 @@ export const PUSH_KINDS: PushKindDef[] = [
   { key: "shift", label: "シフト・希望休", note: "シフトの公開・変更、希望休の募集・締切が近いとき" },
   { key: "absence", label: "欠勤・早退の報告", note: "欠勤・早退の報告が届いたとき", execOnly: true },
   { key: "report", label: "日報へのコメント", note: "日報にコメントがついたとき・自分のコメントに返信があったとき" },
+  { key: "sns", label: "社内SNS", note: "自分の投稿へのコメント・幹部からのお知らせ・月間サンクス表彰の発表" },
+  { key: "input", label: "まだの入力・締め日", note: "その日に必ず入力するもの（出退勤・日報など）が残っているとき、インセンティブの締め日が近いとき" },
+  { key: "approval", label: "承認のお願い", note: "締切後の希望休・打刻の修正・締め日後の入力の救済が届いたとき", execOnly: true },
+  { key: "order", label: "発注が必要な商品", note: "在庫が決めた数を下回った商品があるとき（発注の担当の人）" },
+  { key: "goal", label: "目標・振り返り", note: "幹部からのフィードバック・AIの今週やることができたとき" },
+  { key: "recruit", label: "面接", note: "面接官に選ばれたとき・面接の評価がそろったとき" },
+  { key: "instagram", label: "Instagram", note: "Instagramのつなぎ直しが必要になったとき" },
 ];
 
 export function isPushKind(v: unknown): v is PushKind {
