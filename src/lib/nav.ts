@@ -188,7 +188,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-          { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
           { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         ],
       },
@@ -244,7 +244,7 @@ function staffNav(ctx: NavContext): NavGroup[] {
       label: "チーム",
       items: [
         { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-        { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+        { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",
@@ -341,7 +341,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
         items: [
           { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
           { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-          { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+          { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
           { href: "/staff/events", label: "全体スケジュール", short: "全体", icon: "calendar" },
         ],
       },
@@ -374,7 +374,7 @@ function adminNav(ctx: NavContext): NavGroup[] {
       items: [
         { href: "/staff/tasks", label: "タスク", icon: "listTodo", badge: badge(b.tasks) },
         { href: "/staff/chat", label: "トークルーム", short: "トーク", icon: "chat", badge: badge(b.chat) },
-        { href: "/staff/thanks", label: "サンクスカード", short: "サンクス", icon: "heart" },
+        { href: "/staff/sns", label: "社内SNS（いい事例・サンクス）", short: "SNS", icon: "heart" },
         {
           href: "/staff/meetings",
           label: "ミーティング・議事録",

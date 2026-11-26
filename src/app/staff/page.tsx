@@ -279,12 +279,12 @@ async function eyesMenuItems(
       badge: flags.chatBadge,
     },
     {
-      href: "/staff/thanks",
+      href: "/staff/sns",
       accent: "plum",
       icon: "heart",
-      title: "サンクスカード",
-      short: "サンクス",
-      description: "ありがとうをカードで贈り合う",
+      title: "社内SNS（いい事例・サンクス）",
+      short: "SNS",
+      description: "いい事例の共有と、ありがとうを贈り合う",
     },
     {
       href: "/staff/cash",
