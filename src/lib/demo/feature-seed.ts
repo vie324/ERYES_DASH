@@ -183,7 +183,24 @@ async function seedOrders(put: DemoPut, today: string) {
   ]);
 }
 
+async function seedGoals(put: DemoPut, today: string) {
+  const month = today.slice(0, 7);
+  const [vision] = put(t.goals, [
+    { level: "company", periodType: "vision", periodKey: String(Number(today.slice(0, 4)) + 5), title: "5年で売上10億（仮。ENiから届き次第差し替え）", targetValue: 1000000000, unit: "円", createdBy: "staff-admin" },
+    { level: "store", storeId: ENI, periodType: "kgi", periodKey: today.slice(0, 4), title: "自由が丘店：今期の売上 1億2千万", targetValue: 120000000, unit: "円", createdBy: "staff-admin" },
+  ]);
+  const [g1] = put(t.goals, [
+    { level: "personal", staffId: "staff-5", storeId: ENI, periodType: "month", periodKey: month, title: "カットのテストに合格する", area: "技術", parentId: vision.id, createdBy: "staff-5" },
+    { level: "personal", staffId: "staff-5", storeId: ENI, periodType: "year", periodKey: today.slice(0, 4), title: "来年の春にデビューする", area: "技術", createdBy: "staff-5" },
+  ]);
+  put(t.reflections, [
+    { staffId: "staff-5", weekKey: addDays(today, -7 - ((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7)), done: "ワインディングを毎朝続けられた", notDone: "SNSの投稿ができなかった", next: "週2回は投稿する" },
+  ]);
+  void g1;
+}
+
 registerDemoSeeder(async (put: DemoPut) => {
+  await seedGoals(put, todayJst());
   await seedOrders(put, todayJst());
   await seedCash(put, todayJst());
   const today = todayJst();
